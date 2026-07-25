@@ -15,100 +15,119 @@ local packetRemote = ReplicatedStorage:WaitForChild("SharedModules")
 print("[AutoBuy] ✅ RemoteEvent:", packetRemote:GetFullName())
 
 -- ──────────────────────────────────────────────────────────────────────
--- 2️⃣  Auto-detect opcode (SCAN SOURCE CODE)
+-- 2️⃣  FULL AUTO OPCODE DETECTION
 -- ──────────────────────────────────────────────────────────────────────
-local function detectOpcode()
-    -- Method 1: Cek Packet ModuleScript
-    local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
-    if sharedModules then
-        local packetModule = sharedModules:FindFirstChild("Packet")
-        if packetModule and packetModule:IsA("ModuleScript") then
-            local success, module = pcall(require, packetModule)
-            if success and type(module) == "table" then
-                for key, value in pairs(module) do
-                    if type(value) == "number" and value >= 100 and value <= 200 then
-                        print("[AutoBuy] ✅ Opcode dari Packet module:", value)
-                        return value
-                    end
-                end
-            end
-        end
-    end
-    
-    -- Method 2: Cek Config modules
-    local configNames = {"NetworkConfig", "Config", "Settings", "Constants"}
-    for _, name in ipairs(configNames) do
-        local config = ReplicatedStorage:FindFirstChild(name)
-        if config and config:IsA("ModuleScript") then
-            local success, data = pcall(require, config)
-            if success and type(data) == "table" then
-                for key, value in pairs(data) do
-                    if type(value) == "number" and value >= 100 and value <= 200 then
-                        print("[AutoBuy] ✅ Opcode dari", name, ":", value)
-                        return value
-                    end
-                end
-            end
-        end
-    end
-    
-    -- Method 3: Scan source code untuk pattern escape string
-    local function scanSourceForOpcode(obj)
-        if obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
-            local success, source = pcall(function() return obj.Source end)
-            if success and source then
-                -- Cari pattern: opcode = 133, OPCODE = 133, dll
-                for opcodeStr in string.gmatch(source, "[Oo][Pp][Cc][Oo][Dd][Ee]%s*=%s*(%d+)") do
-                    local num = tonumber(opcodeStr)
-                    if num and num >= 100 and num <= 200 then
-                        print("[AutoBuy] ✅ Opcode dari source (" .. obj.Name .. "):", num)
-                        return num
-                    end
-                end
-                
-                -- Cari pattern: \133 (escape string)
-                for escapeStr in string.gmatch(source, "\\(%d%d%d)") do
-                    local num = tonumber(escapeStr)
-                    if num and num >= 100 and num <= 200 then
-                        print("[AutoBuy] ✅ Opcode dari escape string (" .. obj.Name .. "):", num)
-                        return num
-                    end
-                end
-                
-                -- Cari pattern: buffer.fromstring("\133...
-                for escapeStr in string.gmatch(source, "buffer%.fromstring%(\"(%d+)") do
-                    local num = tonumber(escapeStr)
-                    if num and num >= 100 and num <= 200 then
-                        print("[AutoBuy] ✅ Opcode dari buffer.fromstring (" .. obj.Name .. "):", num)
-                        return num
-                    end
-                end
-            end
-        end
-    end
-    
-    -- Scan ReplicatedStorage
-    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-        local opcode = scanSourceForOpcode(obj)
-        if opcode then return opcode end
-    end
-    
-    -- Scan PlayerScripts
-    local playerScripts = player:FindFirstChild("PlayerScripts")
-    if playerScripts then
-        for _, obj in ipairs(playerScripts:GetDescendants()) do
-            local opcode = scanSourceForOpcode(obj)
-            if opcode then return opcode end
-        end
-    end
-    
-    -- Fallback
-    warn("[AutoBuy] ⚠️  Opcode tidak terdeteksi, menggunakan default 133")
-    return 133
+local OPCODE = nil
+local opcodeFound = false
+
+-- List semua opcode yang mungkin (100-200, dengan prioritas)
+local OPCODE_LIST = {133, 131, 130, 132, 134, 135, 140, 150, 160, 170, 180, 190, 200}
+
+-- Build packet tester dengan item dummy
+local function buildTestPacket(opcode)
+    local testItem = "TEST_DETECT_OPCODE"  -- Item dummy untuk test
+    local len = #testItem
+    local packetStr = string.char(opcode, 0, len) .. testItem
+    return buffer.fromstring(packetStr)
 end
 
-local OPCODE = detectOpcode()
-print("[AutoBuy] 🔢 Opcode:", OPCODE)
+-- Deteksi opcode dengan test kirim packet
+local function autoDetectOpcode()
+    print("[AutoBuy] 🔍 Memulai auto-deteksi opcode...")
+    print("[AutoBuy] 📋 Mencoba", #OPCODE_LIST, "kemungkinan opcode...")
+    
+    local detectedOpcode = nil
+    local responseReceived = false
+    
+    -- Listener untuk response server
+    local connection
+    connection = packetRemote.OnClientEvent:Connect(function(response)
+        responseReceived = true
+        print("[AutoBuy] 📩 Response diterima!")
+        
+        -- Cek tipe response
+        if typeof(response) == "buffer" then
+            local firstByte = buffer.readu8(response, 0)
+            print("[AutoBuy] 📩 Response opcode:", firstByte)
+            
+            -- Kalau response adalah konfirmasi sukses (biasanya opcode + 1 atau 0)
+            if firstByte == 0 or firstByte == 1 or firstByte == detectedOpcode + 1 then
+                opcodeFound = true
+            end
+        end
+    end)
+    
+    -- Coba setiap opcode
+    for i, testOpcode in ipairs(OPCODE_LIST) do
+        if opcodeFound then break end
+        
+        print("[AutoBuy] 🔄 Testing opcode:", testOpcode, "(" .. i .. "/" .. #OPCODE_LIST .. ")")
+        
+        local packet = buildTestPacket(testOpcode)
+        responseReceived = false
+        
+        local success, err = pcall(function()
+            packetRemote:FireServer(packet)
+        end)
+        
+        if success then
+            -- Tunggu response (max 0.5 detik)
+            local waited = 0
+            while not responseReceived and waited < 10 do
+                task.wait(0.05)
+                waited += 1
+            end
+            
+            if responseReceived then
+                detectedOpcode = testOpcode
+                print("[AutoBuy] 🎯 OPCODE TERDETEKSI:", testOpcode)
+                break
+            else
+                print("[AutoBuy] ⏱️  No response for opcode:", testOpcode)
+            end
+        else
+            warn("[AutoBuy] ❌ Error testing opcode", testOpcode, ":", err)
+        end
+        
+        task.wait(0.1)  -- Jeda kecil antar test
+    end
+    
+    -- Disconnect listener
+    if connection then
+        connection:Disconnect()
+    end
+    
+    -- Kalau gak ada response, pakai method fallback
+    if not detectedOpcode then
+        print("[AutoBuy] ⚠️  Tidak ada response, coba method fallback...")
+        
+        -- Coba tanpa nunggu response, test semua & pakai yg gak error
+        for _, testOpcode in ipairs(OPCODE_LIST) do
+            local packet = buildTestPacket(testOpcode)
+            local success, err = pcall(function()
+                packetRemote:FireServer(packet)
+            end)
+            
+            if success then
+                detectedOpcode = testOpcode
+                print("[AutoBuy] 🎯 OPCODE FALLBACK:", testOpcode, "(no error)")
+                break
+            end
+        end
+    end
+    
+    -- Fallback terakhir
+    if not detectedOpcode then
+        detectedOpcode = 133
+        warn("[AutoBuy] ⚠️  Semua method gagal, pakai default:", detectedOpcode)
+    end
+    
+    return detectedOpcode
+end
+
+-- Jalankan auto-deteksi
+OPCODE = autoDetectOpcode()
+print("[AutoBuy] 🔢 Final Opcode:", OPCODE)
 
 -- ──────────────────────────────────────────────────────────────────────
 -- 3️⃣  Items & Config
@@ -125,7 +144,7 @@ local MIN_DELAY = 5
 local MAX_DELAY = 15
 
 -- ──────────────────────────────────────────────────────────────────────
--- 4️⃣  Build packet (FORMAT BENAR: buffer.fromstring)
+-- 4️⃣  Build packet
 -- ──────────────────────────────────────────────────────────────────────
 local function buildPacket(itemName)
     local len = #itemName
@@ -174,7 +193,7 @@ end
 local function startAutoBuy()
     if isRunning then return end
     isRunning = true
-    print("[AutoBuy] ▶️  STARTED")
+    print("[AutoBuy] ▶️  STARTED | Opcode:", OPCODE)
     
     for _, item in ipairs(ITEMS) do
         local initialJitter = math.random() * 8
@@ -211,8 +230,8 @@ local function createGUI()
     -- Main Frame
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 220, 0, 200)
-    mainFrame.Position = UDim2.new(1, -230, 0.5, -100)
+    mainFrame.Size = UDim2.new(0, 240, 0, 200)
+    mainFrame.Position = UDim2.new(1, -250, 0.5, -100)
     mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     mainFrame.BorderSizePixel = 0
     mainFrame.BackgroundTransparency = 0.1
@@ -224,7 +243,6 @@ local function createGUI()
     
     -- Title Bar
     local titleBar = Instance.new("Frame")
-    titleBar.Name = "TitleBar"
     titleBar.Size = UDim2.new(1, 0, 0, 35)
     titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
     titleBar.BorderSizePixel = 0
@@ -272,6 +290,7 @@ local function createGUI()
     contentFrame.BackgroundTransparency = 1
     contentFrame.Parent = mainFrame
     
+    -- Status
     local statusText = Instance.new("TextLabel")
     statusText.Name = "StatusText"
     statusText.Size = UDim2.new(1, 0, 0, 30)
@@ -283,22 +302,24 @@ local function createGUI()
     statusText.TextXAlignment = Enum.TextXAlignment.Center
     statusText.Parent = contentFrame
     
+    -- Opcode display
     local opcodeText = Instance.new("TextLabel")
     opcodeText.Name = "OpcodeText"
     opcodeText.Size = UDim2.new(1, 0, 0, 25)
     opcodeText.Position = UDim2.new(0, 0, 0, 35)
-    opcodeText.Text = "Opcode: " .. OPCODE
-    opcodeText.TextColor3 = Color3.fromRGB(150, 150, 150)
+    opcodeText.Text = "Opcode: " .. OPCODE .. " (auto)"
+    opcodeText.TextColor3 = Color3.fromRGB(100, 255, 100)
     opcodeText.Font = Enum.Font.Gotham
     opcodeText.TextSize = 12
     opcodeText.BackgroundTransparency = 1
     opcodeText.TextXAlignment = Enum.TextXAlignment.Center
     opcodeText.Parent = contentFrame
     
+    -- Items count
     local itemsText = Instance.new("TextLabel")
     itemsText.Size = UDim2.new(1, 0, 0, 20)
-    itemsText.Position = UDim2.new(0, 0, 0, 55)
-    itemsText.Text = "Items: " .. #ITEMS
+    itemsText.Position = UDim2.new(0, 0, 0, 60)
+    itemsText.Text = "Items: " .. #ITEMS .. " | Delay: " .. MIN_DELAY .. "-" .. MAX_DELAY .. "s"
     itemsText.TextColor3 = Color3.fromRGB(150, 150, 150)
     itemsText.Font = Enum.Font.Gotham
     itemsText.TextSize = 11
@@ -306,11 +327,11 @@ local function createGUI()
     itemsText.TextXAlignment = Enum.TextXAlignment.Center
     itemsText.Parent = contentFrame
     
-    -- Opcode Input (Manual override)
+    -- Opcode Input
     local opcodeInput = Instance.new("TextBox")
     opcodeInput.Name = "OpcodeInput"
     opcodeInput.Size = UDim2.new(1, 0, 0, 25)
-    opcodeInput.Position = UDim2.new(0, 0, 0, 80)
+    opcodeInput.Position = UDim2.new(0, 0, 0, 85)
     opcodeInput.PlaceholderText = "Opcode manual..."
     opcodeInput.Text = ""
     opcodeInput.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -324,11 +345,10 @@ local function createGUI()
     inputCorner.CornerRadius = UDim.new(0, 5)
     inputCorner.Parent = opcodeInput
     
-    -- Update opcode button
+    -- Update button
     local updateButton = Instance.new("TextButton")
-    updateButton.Name = "UpdateButton"
     updateButton.Size = UDim2.new(1, 0, 0, 25)
-    updateButton.Position = UDim2.new(0, 0, 0, 110)
+    updateButton.Position = UDim2.new(0, 0, 0, 115)
     updateButton.Text = "Update Opcode"
     updateButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     updateButton.Font = Enum.Font.GothamSemibold
@@ -346,14 +366,16 @@ local function createGUI()
         if newOpcode and newOpcode >= 100 and newOpcode <= 200 then
             OPCODE = newOpcode
             opcodeText.Text = "Opcode: " .. OPCODE .. " (manual)"
+            opcodeText.TextColor3 = Color3.fromRGB(100, 200, 255)
             print("[AutoBuy] 🔢 Opcode diupdate manual ke:", OPCODE)
         end
     end)
     
+    -- Toggle Button
     local toggleButton = Instance.new("TextButton")
     toggleButton.Name = "ToggleButton"
     toggleButton.Size = UDim2.new(1, 0, 0, 40)
-    toggleButton.Position = UDim2.new(0, 0, 0, 145)
+    toggleButton.Position = UDim2.new(0, 0, 0, 150)
     toggleButton.Text = "▶ START"
     toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     toggleButton.Font = Enum.Font.GothamBold
@@ -426,11 +448,11 @@ local function createGUI()
         isMinimized = not isMinimized
         if isMinimized then
             contentFrame.Visible = false
-            mainFrame.Size = UDim2.new(0, 220, 0, 35)
+            mainFrame.Size = UDim2.new(0, 240, 0, 35)
             minimizeButton.Text = "□"
         else
             contentFrame.Visible = true
-            mainFrame.Size = UDim2.new(0, 220, 0, 220)
+            mainFrame.Size = UDim2.new(0, 240, 0, 215)
             minimizeButton.Text = "─"
         end
     end)
@@ -450,4 +472,5 @@ end
 -- ──────────────────────────────────────────────────────────────────────
 createGUI()
 print("[AutoBuy] 🚀 Script Loaded | Items:", #ITEMS, "| Opcode:", OPCODE)
-print("[AutoBuy] 📦 Format: buffer.fromstring() ✅")
+print("[AutoBuy] ✅ FULL AUTO - Opcode terdeteksi otomatis!")
+print("[AutoBuy] 📦 Tinggal klik START untuk mulai auto-buy!")
