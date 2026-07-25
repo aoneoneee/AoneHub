@@ -18,7 +18,7 @@ local ITEMS = {
     "Star Fruit",
 }
 
-local isEnabled = true -- Default OFF
+local isEnabled = false -- Default OFF
 local buyThreads = {} -- Simpan thread reference
 
 local function buildPacket(name)
