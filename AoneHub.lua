@@ -2,39 +2,20 @@
 -- 1️⃣  Services & References
 -- ──────────────────────────────────────────────────────────────────────
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
 
-local packetRemote = ReplicatedStorage:FindFirstChild("SharedModules")
-if packetRemote then
-    packetRemote = packetRemote:FindFirstChild("Packet")
-    if packetRemote then
-        if packetRemote:IsA("Folder") or packetRemote:IsA("Model") then
-            packetRemote = packetRemote:FindFirstChild("RemoteEvent")
-        elseif not packetRemote:IsA("RemoteEvent") then
-            packetRemote = nil
-        end
-    end
-end
-
-if not packetRemote then
-    packetRemote = ReplicatedStorage:FindFirstChild("PacketRemote")
-        or ReplicatedStorage:FindFirstChild("PacketEvent")
-        or ReplicatedStorage:FindFirstChild("BuyRemote")
-end
-
-if not packetRemote then
-    error("[AutoBuy] RemoteEvent tidak ditemukan!")
-end
+local packetRemote = ReplicatedStorage:WaitForChild("SharedModules")
+    :WaitForChild("Packet")
+    :WaitForChild("RemoteEvent")
 
 print("[AutoBuy] RemoteEvent:", packetRemote:GetFullName())
 
 -- ──────────────────────────────────────────────────────────────────────
--- 2️⃣  Safe & fast opcode detection (RUN ONCE, READ ONLY)
+-- 2️⃣  Auto-detect opcode (RUN ONCE, READ ONLY)
 -- ──────────────────────────────────────────────────────────────────────
 local function detectOpcode()
     local connections = getconnections or debug.getconnections
     
-    -- Method 1: Scan OnServerEvent connections (targeted, fast)
+    -- Method 1: Scan OnServerEvent connections
     if connections and packetRemote.OnServerEvent then
         local conns = connections(packetRemote.OnServerEvent)
         for _, conn in ipairs(conns) do
@@ -53,7 +34,7 @@ local function detectOpcode()
         end
     end
     
-    -- Method 2: Cek Packet ModuleScript (targeted, fast)
+    -- Method 2: Cek Packet ModuleScript
     local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
     if sharedModules then
         local packetModule = sharedModules:FindFirstChild("Packet")
@@ -70,7 +51,7 @@ local function detectOpcode()
         end
     end
     
-    -- Method 3: Cek Network/Config modules (targeted, fast)
+    -- Method 3: Cek Config/Network modules
     local configNames = {"NetworkConfig", "Config", "Settings", "Constants"}
     for _, name in ipairs(configNames) do
         local config = ReplicatedStorage:FindFirstChild(name)
@@ -87,12 +68,11 @@ local function detectOpcode()
         end
     end
     
-    -- Fallback: coba 133 dulu
+    -- Fallback
     warn("[AutoBuy] ⚠️  Opcode tidak terdeteksi, menggunakan default 133")
     return 133
 end
 
--- RUN ONCE
 local OPCODE = detectOpcode()
 print("[AutoBuy] 🔢 Opcode:", OPCODE)
 
@@ -104,91 +84,58 @@ local ITEMS = {
     "Dragon's Breath",
     "Sun Bloom",
     "Star Fruit",
-    "Carrot"
 }
 
 local MIN_DELAY = 5
 local MAX_DELAY = 15
 
 -- ──────────────────────────────────────────────────────────────────────
--- 4️⃣  Build packet
+-- 4️⃣  Build packet dengan auto-detected opcode
 -- ──────────────────────────────────────────────────────────────────────
-local function buildPacket(name)
-    local len = #name
-    if len > 255 then return nil end
-    
-    local pkt = buffer.create(3 + len)
-    buffer.writeu8(pkt, 0, OPCODE)
-    buffer.writeu8(pkt, 1, 0)
-    buffer.writeu8(pkt, 2, len)
-    
-    for i = 1, len do
-        buffer.writeu8(pkt, 2 + i, string.byte(name, i))
-    end
-    
-    return pkt
+local function buildPacket(itemName)
+    local len = #itemName
+    -- Format: \opcode\000\{length}\{itemName}
+    return string.char(OPCODE, 0, len) .. itemName
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 5️⃣  Buy function
+-- 5️⃣  Auto-buy loop (recursive)
 -- ──────────────────────────────────────────────────────────────────────
-local buyStats = {}
-
-local function buyItem(itemName)
-    local packet = buildPacket(itemName)
-    if not packet then return false end
+local function buyLoop(itemName, count)
+    count = count or 1
     
+    -- Build & send packet
+    local packet = buildPacket(itemName)
     local success, err = pcall(function()
         packetRemote:FireServer(packet)
     end)
     
-    if not buyStats[itemName] then
-        buyStats[itemName] = {sent = 0, failed = 0}
-    end
-    buyStats[itemName].sent += 1
-    
-    if not success then
-        buyStats[itemName].failed += 1
-        if buyStats[itemName].failed <= 3 then  -- Cuma warn 3x pertama
-            warn("[AutoBuy] ❌", itemName, "-", err)
-        end
-        return false
+    if success then
+        print("[AutoBuy] ✅", itemName, "| #" .. count)
+    else
+        warn("[AutoBuy] ❌", itemName, "| #" .. count, "|", err)
     end
     
-    return true
+    -- Schedule next buy
+    local waitTime = MIN_DELAY + math.random() * (MAX_DELAY - MIN_DELAY)
+    print("[AutoBuy] ⏳ Next", itemName, "in", math.floor(waitTime), "s")
+    
+    task.delay(waitTime, function()
+        buyLoop(itemName, count + 1)
+    end)
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 6️⃣  Auto‑buy loop
+-- 6️⃣  Start dengan JITTER AWAL biar gak barengan
 -- ──────────────────────────────────────────────────────────────────────
-local function startAutoBuy()
-    local running = true
-    
-    local function stopAutoBuy()
-        running = false
-        print("\n[AutoBuy] 📊 Stats:")
-        for item, stats in pairs(buyStats) do
-            print(string.format("  %s: %d sent", item, stats.sent))
-        end
-    end
-    
-    for _, item in ipairs(ITEMS) do
-        task.spawn(function()
-            task.wait(math.random() * 5)  -- Spread out initial buys
-            
-            while running do
-                buyItem(item)
-                task.wait(MIN_DELAY + math.random() * (MAX_DELAY - MIN_DELAY))
-            end
-        end)
-    end
-    
-    return stopAutoBuy
-end
+print("[AutoBuy] 🚀 Starting | Items:", #ITEMS, "| Opcode:", OPCODE)
 
--- ──────────────────────────────────────────────────────────────────────
--- 7️⃣  Start
--- ──────────────────────────────────────────────────────────────────────
-print(string.format("[AutoBuy] 🚀 Started | Items: %d | Delay: %d-%ds", 
-    #ITEMS, MIN_DELAY, MAX_DELAY))
-local stopFunction = startAutoBuy()a
+for _, item in ipairs(ITEMS) do
+    -- JITTER AWAL: tiap item mulai di waktu acak 0-10 detik
+    local initialJitter = math.random() * 10
+    print("[AutoBuy] 🕐", item, "mulai dalam", string.format("%.1f", initialJitter), "s")
+    
+    task.delay(initialJitter, function()
+        buyLoop(item)
+    end)
+end
