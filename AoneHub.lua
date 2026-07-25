@@ -89,7 +89,7 @@ local function detectOpcode()
     
     -- Fallback: coba 133 dulu
     warn("[AutoBuy] ⚠️  Opcode tidak terdeteksi, menggunakan default 133")
-    return 131
+    return 133
 end
 
 -- RUN ONCE
