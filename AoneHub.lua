@@ -12,34 +12,13 @@ local packetRemote = ReplicatedStorage:WaitForChild("SharedModules")
     :WaitForChild("Packet")
     :WaitForChild("RemoteEvent")
 
-print("[AutoBuy] RemoteEvent:", packetRemote:GetFullName())
+print("[AutoBuy] ✅ RemoteEvent:", packetRemote:GetFullName())
 
 -- ──────────────────────────────────────────────────────────────────────
--- 2️⃣  Listen server response untuk debug
--- ──────────────────────────────────────────────────────────────────────
-packetRemote.OnClientEvent:Connect(function(response)
-    if typeof(response) == "buffer" then
-        local bytes = {}
-        for i = 1, buffer.len(response) do
-            bytes[i] = buffer.readu8(response, i - 1)
-        end
-        print("[AutoBuy] 📩 Server response bytes:", table.concat(bytes, ", "))
-        
-        -- Coba parse response
-        local opcode = bytes[1]
-        local status = bytes[2]
-        local message = string.char(table.unpack(bytes, 3))
-        print("[AutoBuy] 📩 Parsed - Opcode:", opcode, "| Status:", status, "| Message:", message)
-    else
-        print("[AutoBuy] 📩 Server response:", response, "| Type:", typeof(response))
-    end
-end)
-
--- ──────────────────────────────────────────────────────────────────────
--- 3️⃣  Auto-detect opcode (CLIENT-SAFE)
+-- 2️⃣  Auto-detect opcode (CLIENT-SAFE)
 -- ──────────────────────────────────────────────────────────────────────
 local function detectOpcode()
-    -- Cek Packet ModuleScript
+    -- Method 1: Cek Packet ModuleScript
     local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
     if sharedModules then
         local packetModule = sharedModules:FindFirstChild("Packet")
@@ -56,7 +35,7 @@ local function detectOpcode()
         end
     end
     
-    -- Cek Config/Network modules
+    -- Method 2: Cek Config modules
     local configNames = {"NetworkConfig", "Config", "Settings", "Constants"}
     for _, name in ipairs(configNames) do
         local config = ReplicatedStorage:FindFirstChild(name)
@@ -82,7 +61,7 @@ local OPCODE = detectOpcode()
 print("[AutoBuy] 🔢 Opcode:", OPCODE)
 
 -- ──────────────────────────────────────────────────────────────────────
--- 4️⃣  Items & Config
+-- 3️⃣  Items & Config
 -- ──────────────────────────────────────────────────────────────────────
 local ITEMS = {
     "Hypno Bloom",
@@ -96,46 +75,47 @@ local MIN_DELAY = 5
 local MAX_DELAY = 15
 
 -- ──────────────────────────────────────────────────────────────────────
--- 5️⃣  Build packet
+-- 4️⃣  Build packet (FORMAT YANG BENAR: buffer.fromstring)
 -- ──────────────────────────────────────────────────────────────────────
 local function buildPacket(itemName)
     local len = #itemName
-    return string.char(OPCODE, 0, len) .. itemName
+    -- Format: \opcode\000\length\nama_item
+    local packetStr = string.char(OPCODE, 0, len) .. itemName
+    return buffer.fromstring(packetStr)
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 6️⃣  State
+-- 5️⃣  State
 -- ──────────────────────────────────────────────────────────────────────
 local isRunning = false
 local buyTasks = {}
 
 -- ──────────────────────────────────────────────────────────────────────
--- 7️⃣  Auto-buy loop
+-- 6️⃣  Auto-buy loop
 -- ──────────────────────────────────────────────────────────────────────
 local function buyLoop(itemName, count)
     if not isRunning then return end
     
     count = count or 1
     
+    -- Build packet sebagai buffer
     local packet = buildPacket(itemName)
-    print("[AutoBuy] 📤 Sending:", itemName, "| #" .. count)
-    print("[AutoBuy] 📤 Packet bytes:", string.byte(packet, 1, -1))
     
+    -- Kirim SEPERTI CONTOH: FireServer(unpack(args))
     local success, err = pcall(function()
-        packetRemote:FireServer(packet)
+        packetRemote:FireServer(packet)  -- unpack otomaztis karena 1 arg
     end)
     
     if success then
-        print("[AutoBuy] ✅ Sent:", itemName, "| #" .. count)
+        print("[AutoBuy] ✅", itemName, "| #" .. count)
     else
-        warn("[AutoBuy] ❌ Error:", itemName, "| #" .. count, "|", err)
+        warn("[AutoBuy] ❌", itemName, "| #" .. count, "|", err)
     end
     
+    -- JITTER delay
     local baseDelay = MIN_DELAY + math.random() * (MAX_DELAY - MIN_DELAY)
     local jitter = (math.random() - 0.5) * 2
     local waitTime = math.max(MIN_DELAY, baseDelay + jitter)
-    
-    print("[AutoBuy] ⏳ Next", itemName, "in", math.floor(waitTime), "s")
     
     buyTasks[itemName] = task.delay(waitTime, function()
         buyLoop(itemName, count + 1)
@@ -143,7 +123,7 @@ local function buyLoop(itemName, count)
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 8️⃣  Start / Stop functions
+-- 7️⃣  Start / Stop functions
 -- ──────────────────────────────────────────────────────────────────────
 local function startAutoBuy()
     if isRunning then return end
@@ -173,7 +153,7 @@ local function stopAutoBuy()
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 9️⃣  GUI Creation
+-- 8️⃣  GUI Creation
 -- ──────────────────────────────────────────────────────────────────────
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
@@ -269,10 +249,22 @@ local function createGUI()
     opcodeText.TextXAlignment = Enum.TextXAlignment.Center
     opcodeText.Parent = contentFrame
     
+    -- Items Text
+    local itemsText = Instance.new("TextLabel")
+    itemsText.Size = UDim2.new(1, 0, 0, 20)
+    itemsText.Position = UDim2.new(0, 0, 0, 55)
+    itemsText.Text = "Items: " .. #ITEMS
+    itemsText.TextColor3 = Color3.fromRGB(150, 150, 150)
+    itemsText.Font = Enum.Font.Gotham
+    itemsText.TextSize = 11
+    itemsText.BackgroundTransparency = 1
+    itemsText.TextXAlignment = Enum.TextXAlignment.Center
+    itemsText.Parent = contentFrame
+    
     local toggleButton = Instance.new("TextButton")
     toggleButton.Name = "ToggleButton"
     toggleButton.Size = UDim2.new(1, 0, 0, 40)
-    toggleButton.Position = UDim2.new(0, 0, 0, 70)
+    toggleButton.Position = UDim2.new(0, 0, 0, 80)
     toggleButton.Text = "▶ START"
     toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     toggleButton.Font = Enum.Font.GothamBold
@@ -349,7 +341,7 @@ local function createGUI()
             minimizeButton.Text = "□"
         else
             contentFrame.Visible = true
-            mainFrame.Size = UDim2.new(0, 220, 0, 180)
+            mainFrame.Size = UDim2.new(0, 220, 0, 200)
             minimizeButton.Text = "─"
         end
     end)
@@ -365,8 +357,8 @@ local function createGUI()
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 🔟 Start GUI
+-- 9️⃣  Start GUI
 -- ──────────────────────────────────────────────────────────────────────
 createGUI()
 print("[AutoBuy] 🚀 Script Loaded | Items:", #ITEMS, "| Opcode:", OPCODE)
-print("[AutoBuy] 👂 Listening for server responses...")
+print("[AutoBuy] 📦 Format: buffer.fromstring() ✅")
