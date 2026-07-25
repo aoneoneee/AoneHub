@@ -4,7 +4,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -16,29 +15,10 @@ local packetRemote = ReplicatedStorage:WaitForChild("SharedModules")
 print("[AutoBuy] RemoteEvent:", packetRemote:GetFullName())
 
 -- ──────────────────────────────────────────────────────────────────────
--- 2️⃣  Auto-detect opcode (RUN ONCE, READ ONLY)
+-- 2️⃣  Auto-detect opcode (CLIENT-SAFE, READ ONLY)
 -- ──────────────────────────────────────────────────────────────────────
 local function detectOpcode()
-    local connections = getconnections or debug.getconnections
-    
-    if connections and packetRemote.OnServerEvent then
-        local conns = connections(packetRemote.OnServerEvent)
-        for _, conn in ipairs(conns) do
-            local func = conn.Function
-            if func then
-                local success, upvalues = pcall(debug.getupvalues, func)
-                if success then
-                    for _, upval in ipairs(upvalues) do
-                        if type(upval) == "number" and upval >= 100 and upval <= 200 then
-                            print("[AutoBuy] ✅ Opcode dari OnServerEvent:", upval)
-                            return upval
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
+    -- Method 1: Cek Packet ModuleScript
     local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
     if sharedModules then
         local packetModule = sharedModules:FindFirstChild("Packet")
@@ -55,6 +35,7 @@ local function detectOpcode()
         end
     end
     
+    -- Method 2: Cek Config/Network modules
     local configNames = {"NetworkConfig", "Config", "Settings", "Constants"}
     for _, name in ipairs(configNames) do
         local config = ReplicatedStorage:FindFirstChild(name)
@@ -71,6 +52,55 @@ local function detectOpcode()
         end
     end
     
+    -- Method 3: Scan LocalScript source code (client-side scripts)
+    local function scanSource(obj)
+        if obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
+            local success, source = pcall(function() return obj.Source end)
+            if success and source then
+                -- Cari pattern: opcode = 133, local opcode = 131, dll
+                for opcodeStr in string.gmatch(source, "[Oo][Pp][Cc][Oo][Dd][Ee]%s*=%s*(%d+)") do
+                    local num = tonumber(opcodeStr)
+                    if num and num >= 100 and num <= 200 then
+                        print("[AutoBuy] ✅ Opcode dari source code:", num)
+                        return num
+                    end
+                end
+                -- Cari string.char(133, ...) pattern
+                for byteStr in string.gmatch(source, "string%.char%((%d+)") do
+                    local num = tonumber(byteStr)
+                    if num and num >= 100 and num <= 200 then
+                        print("[AutoBuy] ✅ Opcode dari string.char():", num)
+                        return num
+                    end
+                end
+                -- Cari \133 escape pattern
+                for escapeStr in string.gmatch(source, "\\(%d%d%d)") do
+                    local num = tonumber(escapeStr)
+                    if num and num >= 100 and num <= 200 then
+                        print("[AutoBuy] ✅ Opcode dari escape string:", num)
+                        return num
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Scan PlayerScripts (client-side)
+    local playerScripts = player:FindFirstChild("PlayerScripts")
+    if playerScripts then
+        for _, obj in ipairs(playerScripts:GetDescendants()) do
+            local opcode = scanSource(obj)
+            if opcode then return opcode end
+        end
+    end
+    
+    -- Scan ReplicatedStorage (client-accessible parts)
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        local opcode = scanSource(obj)
+        if opcode then return opcode end
+    end
+    
+    -- Fallback
     warn("[AutoBuy] ⚠️  Opcode tidak terdeteksi, menggunakan default 133")
     return 133
 end
@@ -86,7 +116,7 @@ local ITEMS = {
     "Dragon's Breath",
     "Sun Bloom",
     "Star Fruit",
-    "Carrot",
+    "Carrot"
 }
 
 local MIN_DELAY = 5
@@ -104,17 +134,16 @@ end
 -- 5️⃣  State
 -- ──────────────────────────────────────────────────────────────────────
 local isRunning = false
-local buyTasks = {}  -- Simpan task.delay yang aktif
+local buyTasks = {}
 
 -- ──────────────────────────────────────────────────────────────────────
 -- 6️⃣  Auto-buy loop
 -- ──────────────────────────────────────────────────────────────────────
 local function buyLoop(itemName, count)
-    if not isRunning then return end  -- Stop kalau toggle off
+    if not isRunning then return end
     
     count = count or 1
     
-    -- Kirim packet
     local packet = buildPacket(itemName)
     local success, err = pcall(function()
         packetRemote:FireServer(packet)
@@ -126,12 +155,10 @@ local function buyLoop(itemName, count)
         warn("[AutoBuy] ❌", itemName, "| #" .. count, "|", err)
     end
     
-    -- JITTER delay
     local baseDelay = MIN_DELAY + math.random() * (MAX_DELAY - MIN_DELAY)
     local jitter = (math.random() - 0.5) * 2
     local waitTime = math.max(MIN_DELAY, baseDelay + jitter)
     
-    -- Schedule next buy & simpan reference
     buyTasks[itemName] = task.delay(waitTime, function()
         buyLoop(itemName, count + 1)
     end)
@@ -159,7 +186,6 @@ local function stopAutoBuy()
     if not isRunning then return end
     isRunning = false
     
-    -- Cancel semua task yang pending
     for itemName, taskRef in pairs(buyTasks) do
         task.cancel(taskRef)
     end
@@ -172,7 +198,6 @@ end
 -- 8️⃣  GUI Creation
 -- ──────────────────────────────────────────────────────────────────────
 local function createGUI()
-    -- ScreenGui
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "AutoBuyGUI"
     screenGui.Parent = playerGui
@@ -189,25 +214,9 @@ local function createGUI()
     mainFrame.BackgroundTransparency = 0.1
     mainFrame.Parent = screenGui
     
-    -- Corner
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 10)
     corner.Parent = mainFrame
-    
-    -- Shadow
-    local shadow = Instance.new("Frame")
-    shadow.Name = "Shadow"
-    shadow.Size = UDim2.new(1, 4, 1, 4)
-    shadow.Position = UDim2.new(0, -2, 0, -2)
-    shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    shadow.BackgroundTransparency = 0.5
-    shadow.BorderSizePixel = 0
-    shadow.ZIndex = 0
-    shadow.Parent = mainFrame
-    
-    local shadowCorner = Instance.new("UICorner")
-    shadowCorner.CornerRadius = UDim.new(0, 10)
-    shadowCorner.Parent = shadow
     
     -- Title Bar
     local titleBar = Instance.new("Frame")
@@ -221,9 +230,8 @@ local function createGUI()
     titleCorner.CornerRadius = UDim.new(0, 10)
     titleCorner.Parent = titleBar
     
-    -- Title Text
     local titleText = Instance.new("TextLabel")
-    titleText.Size = UDim2.new(1, -40, 1, 0)
+    titleText.Size = UDim2.new(1, -70, 1, 0)
     titleText.Position = UDim2.new(0, 15, 0, 0)
     titleText.Text = "🌿 AutoBuy Farm"
     titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -233,7 +241,6 @@ local function createGUI()
     titleText.BackgroundTransparency = 1
     titleText.Parent = titleBar
     
-    -- Close Button
     local closeButton = Instance.new("TextButton")
     closeButton.Size = UDim2.new(0, 30, 0, 30)
     closeButton.Position = UDim2.new(1, -35, 0, 2)
@@ -244,7 +251,6 @@ local function createGUI()
     closeButton.BackgroundTransparency = 1
     closeButton.Parent = titleBar
     
-    -- Minimize Button
     local minimizeButton = Instance.new("TextButton")
     minimizeButton.Size = UDim2.new(0, 30, 0, 30)
     minimizeButton.Position = UDim2.new(1, -65, 0, 2)
@@ -262,7 +268,6 @@ local function createGUI()
     contentFrame.BackgroundTransparency = 1
     contentFrame.Parent = mainFrame
     
-    -- Status Text
     local statusText = Instance.new("TextLabel")
     statusText.Name = "StatusText"
     statusText.Size = UDim2.new(1, 0, 0, 30)
@@ -274,7 +279,6 @@ local function createGUI()
     statusText.TextXAlignment = Enum.TextXAlignment.Center
     statusText.Parent = contentFrame
     
-    -- Opcode Text
     local opcodeText = Instance.new("TextLabel")
     opcodeText.Name = "OpcodeText"
     opcodeText.Size = UDim2.new(1, 0, 0, 25)
@@ -287,7 +291,6 @@ local function createGUI()
     opcodeText.TextXAlignment = Enum.TextXAlignment.Center
     opcodeText.Parent = contentFrame
     
-    -- Toggle Button
     local toggleButton = Instance.new("TextButton")
     toggleButton.Name = "ToggleButton"
     toggleButton.Size = UDim2.new(1, 0, 0, 40)
@@ -304,7 +307,6 @@ local function createGUI()
     buttonCorner.CornerRadius = UDim.new(0, 8)
     buttonCorner.Parent = toggleButton
     
-    -- Toggle Button Function
     local function updateUI()
         if isRunning then
             statusText.Text = "Status: ▶️ RUNNING"
@@ -359,7 +361,7 @@ local function createGUI()
         end
     end)
     
-    -- Minimize function
+    -- Minimize
     local isMinimized = false
     minimizeButton.MouseButton1Click:Connect(function()
         isMinimized = not isMinimized
@@ -374,15 +376,13 @@ local function createGUI()
         end
     end)
     
-    -- Close button
+    -- Close
     closeButton.MouseButton1Click:Connect(function()
         stopAutoBuy()
         screenGui:Destroy()
     end)
     
-    -- Initial update
     updateUI()
-    
     print("[AutoBuy] 🖥️  GUI Loaded")
 end
 
