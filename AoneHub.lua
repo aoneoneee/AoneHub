@@ -15,7 +15,7 @@ local packetRemote = ReplicatedStorage:WaitForChild("SharedModules")
 print("[AutoBuy] ✅ RemoteEvent:", packetRemote:GetFullName())
 
 -- ──────────────────────────────────────────────────────────────────────
--- 2️⃣  Auto-detect opcode (CLIENT-SAFE)
+-- 2️⃣  Auto-detect opcode (SCAN SOURCE CODE)
 -- ──────────────────────────────────────────────────────────────────────
 local function detectOpcode()
     -- Method 1: Cek Packet ModuleScript
@@ -52,6 +52,56 @@ local function detectOpcode()
         end
     end
     
+    -- Method 3: Scan source code untuk pattern escape string
+    local function scanSourceForOpcode(obj)
+        if obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
+            local success, source = pcall(function() return obj.Source end)
+            if success and source then
+                -- Cari pattern: opcode = 133, OPCODE = 133, dll
+                for opcodeStr in string.gmatch(source, "[Oo][Pp][Cc][Oo][Dd][Ee]%s*=%s*(%d+)") do
+                    local num = tonumber(opcodeStr)
+                    if num and num >= 100 and num <= 200 then
+                        print("[AutoBuy] ✅ Opcode dari source (" .. obj.Name .. "):", num)
+                        return num
+                    end
+                end
+                
+                -- Cari pattern: \133 (escape string)
+                for escapeStr in string.gmatch(source, "\\(%d%d%d)") do
+                    local num = tonumber(escapeStr)
+                    if num and num >= 100 and num <= 200 then
+                        print("[AutoBuy] ✅ Opcode dari escape string (" .. obj.Name .. "):", num)
+                        return num
+                    end
+                end
+                
+                -- Cari pattern: buffer.fromstring("\133...
+                for escapeStr in string.gmatch(source, "buffer%.fromstring%(\"(%d+)") do
+                    local num = tonumber(escapeStr)
+                    if num and num >= 100 and num <= 200 then
+                        print("[AutoBuy] ✅ Opcode dari buffer.fromstring (" .. obj.Name .. "):", num)
+                        return num
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Scan ReplicatedStorage
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        local opcode = scanSourceForOpcode(obj)
+        if opcode then return opcode end
+    end
+    
+    -- Scan PlayerScripts
+    local playerScripts = player:FindFirstChild("PlayerScripts")
+    if playerScripts then
+        for _, obj in ipairs(playerScripts:GetDescendants()) do
+            local opcode = scanSourceForOpcode(obj)
+            if opcode then return opcode end
+        end
+    end
+    
     -- Fallback
     warn("[AutoBuy] ⚠️  Opcode tidak terdeteksi, menggunakan default 133")
     return 133
@@ -75,11 +125,10 @@ local MIN_DELAY = 5
 local MAX_DELAY = 15
 
 -- ──────────────────────────────────────────────────────────────────────
--- 4️⃣  Build packet (FORMAT YANG BENAR: buffer.fromstring)
+-- 4️⃣  Build packet (FORMAT BENAR: buffer.fromstring)
 -- ──────────────────────────────────────────────────────────────────────
 local function buildPacket(itemName)
     local len = #itemName
-    -- Format: \opcode\000\length\nama_item
     local packetStr = string.char(OPCODE, 0, len) .. itemName
     return buffer.fromstring(packetStr)
 end
@@ -98,12 +147,10 @@ local function buyLoop(itemName, count)
     
     count = count or 1
     
-    -- Build packet sebagai buffer
     local packet = buildPacket(itemName)
     
-    -- Kirim SEPERTI CONTOH: FireServer(unpack(args))
     local success, err = pcall(function()
-        packetRemote:FireServer(packet)  -- unpack otomaztis karena 1 arg
+        packetRemote:FireServer(packet)
     end)
     
     if success then
@@ -112,7 +159,6 @@ local function buyLoop(itemName, count)
         warn("[AutoBuy] ❌", itemName, "| #" .. count, "|", err)
     end
     
-    -- JITTER delay
     local baseDelay = MIN_DELAY + math.random() * (MAX_DELAY - MIN_DELAY)
     local jitter = (math.random() - 0.5) * 2
     local waitTime = math.max(MIN_DELAY, baseDelay + jitter)
@@ -165,8 +211,8 @@ local function createGUI()
     -- Main Frame
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 220, 0, 180)
-    mainFrame.Position = UDim2.new(1, -230, 0.5, -90)
+    mainFrame.Size = UDim2.new(0, 220, 0, 200)
+    mainFrame.Position = UDim2.new(1, -230, 0.5, -100)
     mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     mainFrame.BorderSizePixel = 0
     mainFrame.BackgroundTransparency = 0.1
@@ -249,7 +295,6 @@ local function createGUI()
     opcodeText.TextXAlignment = Enum.TextXAlignment.Center
     opcodeText.Parent = contentFrame
     
-    -- Items Text
     local itemsText = Instance.new("TextLabel")
     itemsText.Size = UDim2.new(1, 0, 0, 20)
     itemsText.Position = UDim2.new(0, 0, 0, 55)
@@ -261,10 +306,54 @@ local function createGUI()
     itemsText.TextXAlignment = Enum.TextXAlignment.Center
     itemsText.Parent = contentFrame
     
+    -- Opcode Input (Manual override)
+    local opcodeInput = Instance.new("TextBox")
+    opcodeInput.Name = "OpcodeInput"
+    opcodeInput.Size = UDim2.new(1, 0, 0, 25)
+    opcodeInput.Position = UDim2.new(0, 0, 0, 80)
+    opcodeInput.PlaceholderText = "Opcode manual..."
+    opcodeInput.Text = ""
+    opcodeInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+    opcodeInput.Font = Enum.Font.Gotham
+    opcodeInput.TextSize = 12
+    opcodeInput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    opcodeInput.BorderSizePixel = 0
+    opcodeInput.Parent = contentFrame
+    
+    local inputCorner = Instance.new("UICorner")
+    inputCorner.CornerRadius = UDim.new(0, 5)
+    inputCorner.Parent = opcodeInput
+    
+    -- Update opcode button
+    local updateButton = Instance.new("TextButton")
+    updateButton.Name = "UpdateButton"
+    updateButton.Size = UDim2.new(1, 0, 0, 25)
+    updateButton.Position = UDim2.new(0, 0, 0, 110)
+    updateButton.Text = "Update Opcode"
+    updateButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    updateButton.Font = Enum.Font.GothamSemibold
+    updateButton.TextSize = 12
+    updateButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    updateButton.BorderSizePixel = 0
+    updateButton.Parent = contentFrame
+    
+    local updateCorner = Instance.new("UICorner")
+    updateCorner.CornerRadius = UDim.new(0, 5)
+    updateCorner.Parent = updateButton
+    
+    updateButton.MouseButton1Click:Connect(function()
+        local newOpcode = tonumber(opcodeInput.Text)
+        if newOpcode and newOpcode >= 100 and newOpcode <= 200 then
+            OPCODE = newOpcode
+            opcodeText.Text = "Opcode: " .. OPCODE .. " (manual)"
+            print("[AutoBuy] 🔢 Opcode diupdate manual ke:", OPCODE)
+        end
+    end)
+    
     local toggleButton = Instance.new("TextButton")
     toggleButton.Name = "ToggleButton"
     toggleButton.Size = UDim2.new(1, 0, 0, 40)
-    toggleButton.Position = UDim2.new(0, 0, 0, 80)
+    toggleButton.Position = UDim2.new(0, 0, 0, 145)
     toggleButton.Text = "▶ START"
     toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     toggleButton.Font = Enum.Font.GothamBold
@@ -341,7 +430,7 @@ local function createGUI()
             minimizeButton.Text = "□"
         else
             contentFrame.Visible = true
-            mainFrame.Size = UDim2.new(0, 220, 0, 200)
+            mainFrame.Size = UDim2.new(0, 220, 0, 220)
             minimizeButton.Text = "─"
         end
     end)
