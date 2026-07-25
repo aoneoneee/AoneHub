@@ -84,6 +84,7 @@ local ITEMS = {
     "Dragon's Breath",
     "Sun Bloom",
     "Star Fruit",
+    "Carrot"
 }
 
 local MIN_DELAY = 5
