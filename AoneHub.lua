@@ -15,10 +15,31 @@ local packetRemote = ReplicatedStorage:WaitForChild("SharedModules")
 print("[AutoBuy] RemoteEvent:", packetRemote:GetFullName())
 
 -- ──────────────────────────────────────────────────────────────────────
--- 2️⃣  Auto-detect opcode (CLIENT-SAFE, READ ONLY)
+-- 2️⃣  Listen server response untuk debug
+-- ──────────────────────────────────────────────────────────────────────
+packetRemote.OnClientEvent:Connect(function(response)
+    if typeof(response) == "buffer" then
+        local bytes = {}
+        for i = 1, buffer.len(response) do
+            bytes[i] = buffer.readu8(response, i - 1)
+        end
+        print("[AutoBuy] 📩 Server response bytes:", table.concat(bytes, ", "))
+        
+        -- Coba parse response
+        local opcode = bytes[1]
+        local status = bytes[2]
+        local message = string.char(table.unpack(bytes, 3))
+        print("[AutoBuy] 📩 Parsed - Opcode:", opcode, "| Status:", status, "| Message:", message)
+    else
+        print("[AutoBuy] 📩 Server response:", response, "| Type:", typeof(response))
+    end
+end)
+
+-- ──────────────────────────────────────────────────────────────────────
+-- 3️⃣  Auto-detect opcode (CLIENT-SAFE)
 -- ──────────────────────────────────────────────────────────────────────
 local function detectOpcode()
-    -- Method 1: Cek Packet ModuleScript
+    -- Cek Packet ModuleScript
     local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
     if sharedModules then
         local packetModule = sharedModules:FindFirstChild("Packet")
@@ -35,7 +56,7 @@ local function detectOpcode()
         end
     end
     
-    -- Method 2: Cek Config/Network modules
+    -- Cek Config/Network modules
     local configNames = {"NetworkConfig", "Config", "Settings", "Constants"}
     for _, name in ipairs(configNames) do
         local config = ReplicatedStorage:FindFirstChild(name)
@@ -52,54 +73,6 @@ local function detectOpcode()
         end
     end
     
-    -- Method 3: Scan LocalScript source code (client-side scripts)
-    local function scanSource(obj)
-        if obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
-            local success, source = pcall(function() return obj.Source end)
-            if success and source then
-                -- Cari pattern: opcode = 133, local opcode = 131, dll
-                for opcodeStr in string.gmatch(source, "[Oo][Pp][Cc][Oo][Dd][Ee]%s*=%s*(%d+)") do
-                    local num = tonumber(opcodeStr)
-                    if num and num >= 100 and num <= 200 then
-                        print("[AutoBuy] ✅ Opcode dari source code:", num)
-                        return num
-                    end
-                end
-                -- Cari string.char(133, ...) pattern
-                for byteStr in string.gmatch(source, "string%.char%((%d+)") do
-                    local num = tonumber(byteStr)
-                    if num and num >= 100 and num <= 200 then
-                        print("[AutoBuy] ✅ Opcode dari string.char():", num)
-                        return num
-                    end
-                end
-                -- Cari \133 escape pattern
-                for escapeStr in string.gmatch(source, "\\(%d%d%d)") do
-                    local num = tonumber(escapeStr)
-                    if num and num >= 100 and num <= 200 then
-                        print("[AutoBuy] ✅ Opcode dari escape string:", num)
-                        return num
-                    end
-                end
-            end
-        end
-    end
-    
-    -- Scan PlayerScripts (client-side)
-    local playerScripts = player:FindFirstChild("PlayerScripts")
-    if playerScripts then
-        for _, obj in ipairs(playerScripts:GetDescendants()) do
-            local opcode = scanSource(obj)
-            if opcode then return opcode end
-        end
-    end
-    
-    -- Scan ReplicatedStorage (client-accessible parts)
-    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-        local opcode = scanSource(obj)
-        if opcode then return opcode end
-    end
-    
     -- Fallback
     warn("[AutoBuy] ⚠️  Opcode tidak terdeteksi, menggunakan default 133")
     return 133
@@ -109,7 +82,7 @@ local OPCODE = detectOpcode()
 print("[AutoBuy] 🔢 Opcode:", OPCODE)
 
 -- ──────────────────────────────────────────────────────────────────────
--- 3️⃣  Items & Config
+-- 4️⃣  Items & Config
 -- ──────────────────────────────────────────────────────────────────────
 local ITEMS = {
     "Hypno Bloom",
@@ -123,7 +96,7 @@ local MIN_DELAY = 5
 local MAX_DELAY = 15
 
 -- ──────────────────────────────────────────────────────────────────────
--- 4️⃣  Build packet
+-- 5️⃣  Build packet
 -- ──────────────────────────────────────────────────────────────────────
 local function buildPacket(itemName)
     local len = #itemName
@@ -131,13 +104,13 @@ local function buildPacket(itemName)
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 5️⃣  State
+-- 6️⃣  State
 -- ──────────────────────────────────────────────────────────────────────
 local isRunning = false
 local buyTasks = {}
 
 -- ──────────────────────────────────────────────────────────────────────
--- 6️⃣  Auto-buy loop
+-- 7️⃣  Auto-buy loop
 -- ──────────────────────────────────────────────────────────────────────
 local function buyLoop(itemName, count)
     if not isRunning then return end
@@ -145,19 +118,24 @@ local function buyLoop(itemName, count)
     count = count or 1
     
     local packet = buildPacket(itemName)
+    print("[AutoBuy] 📤 Sending:", itemName, "| #" .. count)
+    print("[AutoBuy] 📤 Packet bytes:", string.byte(packet, 1, -1))
+    
     local success, err = pcall(function()
         packetRemote:FireServer(packet)
     end)
     
     if success then
-        print("[AutoBuy] ✅", itemName, "| #" .. count)
+        print("[AutoBuy] ✅ Sent:", itemName, "| #" .. count)
     else
-        warn("[AutoBuy] ❌", itemName, "| #" .. count, "|", err)
+        warn("[AutoBuy] ❌ Error:", itemName, "| #" .. count, "|", err)
     end
     
     local baseDelay = MIN_DELAY + math.random() * (MAX_DELAY - MIN_DELAY)
     local jitter = (math.random() - 0.5) * 2
     local waitTime = math.max(MIN_DELAY, baseDelay + jitter)
+    
+    print("[AutoBuy] ⏳ Next", itemName, "in", math.floor(waitTime), "s")
     
     buyTasks[itemName] = task.delay(waitTime, function()
         buyLoop(itemName, count + 1)
@@ -165,7 +143,7 @@ local function buyLoop(itemName, count)
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 7️⃣  Start / Stop functions
+-- 8️⃣  Start / Stop functions
 -- ──────────────────────────────────────────────────────────────────────
 local function startAutoBuy()
     if isRunning then return end
@@ -195,7 +173,7 @@ local function stopAutoBuy()
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 8️⃣  GUI Creation
+-- 9️⃣  GUI Creation
 -- ──────────────────────────────────────────────────────────────────────
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
@@ -387,7 +365,8 @@ local function createGUI()
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 9️⃣  Start GUI
+-- 🔟 Start GUI
 -- ──────────────────────────────────────────────────────────────────────
 createGUI()
 print("[AutoBuy] 🚀 Script Loaded | Items:", #ITEMS, "| Opcode:", OPCODE)
+print("[AutoBuy] 👂 Listening for server responses...")
