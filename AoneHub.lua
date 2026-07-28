@@ -163,7 +163,7 @@ local function sellAllWithJitter()
         task.wait(math.random() * 0.3)
     end
     
-    local args = {buffer.fromstring("\190\000 ")}
+    local args = {buffer.fromstring("\189\000!")}
     local remote = replicatedStorage:FindFirstChild("SharedModules")
     if remote then
         remote = remote:FindFirstChild("Packet")
