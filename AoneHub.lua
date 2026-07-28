@@ -1,6 +1,5 @@
 --[[
-    Auto Sell All GUI - Clean Version
-    No jitter UI + Fixed dropdown z-index
+    Auto Sell All GUI - Fixed Dropdown
 --]]
 
 -- Services
@@ -21,7 +20,7 @@ local cycleSeconds = 600
 local lastRefreshTime = 0
 local lastTimeLeft = nil
 
--- Fixed jitter settings (not shown in UI)
+-- Fixed jitter settings
 local JITTER_MIN = 0.5
 local JITTER_MAX = 3.0
 local COOLDOWN = 30
@@ -53,7 +52,6 @@ local function getCycleTime()
     if success and result then
         cycleSeconds = result
     end
-    
     return cycleSeconds
 end
 
@@ -142,422 +140,7 @@ local function getMultiplier(forceUpdate)
     return currentMultiplier
 end
 
--- Create GUI
-local function createGUI()
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "AutoSellGUI"
-    gui.Parent = coreGui
-    gui.ResetOnSpawn = false
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.DisplayOrder = 999 -- Selalu di depan
-    
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 300, 0, 420)
-    mainFrame.Position = UDim2.new(0.5, -150, 0.5, -210)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    mainFrame.BorderSizePixel = 0
-    mainFrame.BackgroundTransparency = 0.1
-    mainFrame.Active = true
-    mainFrame.Parent = gui
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = mainFrame
-    
-    -- Title Bar
-    local titleBar = Instance.new("Frame")
-    titleBar.Name = "TitleBar"
-    titleBar.Size = UDim2.new(1, 0, 0, 40)
-    titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-    titleBar.BorderSizePixel = 0
-    titleBar.Active = true
-    titleBar.Parent = mainFrame
-    
-    local titleCorner = Instance.new("UICorner")
-    titleCorner.CornerRadius = UDim.new(0, 12)
-    titleCorner.Parent = titleBar
-    
-    local titleText = Instance.new("TextLabel")
-    titleText.Size = UDim2.new(0.7, 0, 1, 0)
-    titleText.Position = UDim2.new(0.05, 0, 0, 0)
-    titleText.BackgroundTransparency = 1
-    titleText.Text = "🍎 Auto Sell All"
-    titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    titleText.Font = Enum.Font.GothamBold
-    titleText.TextSize = 18
-    titleText.TextXAlignment = Enum.TextXAlignment.Left
-    titleText.Parent = titleBar
-    
-    local minimizeBtn = Instance.new("TextButton")
-    minimizeBtn.Size = UDim2.new(0, 30, 0, 30)
-    minimizeBtn.Position = UDim2.new(0.85, 0, 0, 5)
-    minimizeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-    minimizeBtn.Text = "_"
-    minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    minimizeBtn.Font = Enum.Font.GothamBold
-    minimizeBtn.TextSize = 20
-    minimizeBtn.Parent = titleBar
-    
-    local minimizeCorner = Instance.new("UICorner")
-    minimizeCorner.CornerRadius = UDim.new(0, 6)
-    minimizeCorner.Parent = minimizeBtn
-    
-    -- DRAG SYSTEM
-    local isDragging = false
-    local dragStart = nil
-    local startPos = nil
-    
-    titleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or 
-           input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
-        end
-    end)
-    
-    userInputService.InputChanged:Connect(function(input)
-        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or 
-                          input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            local newX = math.clamp(startPos.X.Offset + delta.X, -mainFrame.Size.X.Offset + 50, 
-                                   workspace.CurrentCamera.ViewportSize.X - 50)
-            local newY = math.clamp(startPos.Y.Offset + delta.Y, 0, 
-                                   workspace.CurrentCamera.ViewportSize.Y - 50)
-            mainFrame.Position = UDim2.new(0, newX, 0, newY)
-        end
-    end)
-    
-    userInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or 
-           input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = false
-        end
-    end)
-    
-    -- Content Frame
-    local contentFrame = Instance.new("Frame")
-    contentFrame.Name = "ContentFrame"
-    contentFrame.Size = UDim2.new(1, -20, 1, -50)
-    contentFrame.Position = UDim2.new(0, 10, 0, 45)
-    contentFrame.BackgroundTransparency = 1
-    contentFrame.Parent = mainFrame
-    
-    local contentLayout = Instance.new("UIListLayout")
-    contentLayout.Padding = UDim.new(0, 8)
-    contentLayout.Parent = contentFrame
-    
-    -- === FRUIT SELECTION ===
-    local fruitSection = Instance.new("Frame")
-    fruitSection.Size = UDim2.new(1, 0, 0, 50)
-    fruitSection.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-    fruitSection.BackgroundTransparency = 0.3
-    fruitSection.Parent = contentFrame
-    
-    local fruitCorner = Instance.new("UICorner")
-    fruitCorner.CornerRadius = UDim.new(0, 8)
-    fruitCorner.Parent = fruitSection
-    
-    local fruitLabel = Instance.new("TextLabel")
-    fruitLabel.Size = UDim2.new(1, -10, 0, 20)
-    fruitLabel.Position = UDim2.new(0, 10, 0, 3)
-    fruitLabel.BackgroundTransparency = 1
-    fruitLabel.Text = "🍇 Pilih Buah"
-    fruitLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
-    fruitLabel.Font = Enum.Font.GothamBold
-    fruitLabel.TextSize = 13
-    fruitLabel.TextXAlignment = Enum.TextXAlignment.Left
-    fruitLabel.Parent = fruitSection
-    
-    -- Dropdown Container (untuk z-index)
-    local dropdownContainer = Instance.new("Frame")
-    dropdownContainer.Name = "DropdownContainer"
-    dropdownContainer.Size = UDim2.new(1, 0, 0, 25)
-    dropdownContainer.Position = UDim2.new(0, 0, 0, 23)
-    dropdownContainer.BackgroundTransparency = 1
-    dropdownContainer.ZIndex = 100 -- HIGH Z-INDEX
-    dropdownContainer.Parent = fruitSection
-    
-    local fruitDropdown = Instance.new("TextButton")
-    fruitDropdown.Name = "FruitDropdown"
-    fruitDropdown.Size = UDim2.new(1, 0, 0, 25)
-    fruitDropdown.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-    fruitDropdown.Text = selectedFruit
-    fruitDropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
-    fruitDropdown.Font = Enum.Font.Gotham
-    fruitDropdown.TextSize = 12
-    fruitDropdown.ZIndex = 100
-    fruitDropdown.Parent = dropdownContainer
-    
-    local dropdownCorner = Instance.new("UICorner")
-    dropdownCorner.CornerRadius = UDim.new(0, 4)
-    dropdownCorner.Parent = fruitDropdown
-    
-    -- Dropdown List (SEPARATE dari content, langsung di gui untuk z-index tertinggi)
-    local dropdownList = Instance.new("ScrollingFrame")
-    dropdownList.Name = "DropdownList"
-    dropdownList.Size = UDim2.new(0, 280, 0, 200)
-    dropdownList.Position = UDim2.new(0, 0, 0, 0)
-    dropdownList.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    dropdownList.BorderSizePixel = 0
-    dropdownList.ScrollBarThickness = 4
-    dropdownList.Visible = false
-    dropdownList.ZIndex = 999 -- SUPER HIGH Z-INDEX
-    dropdownList.Parent = gui -- Langsung di ScreenGui
-    
-    local dropdownListCorner = Instance.new("UICorner")
-    dropdownListCorner.CornerRadius = UDim.new(0, 6)
-    dropdownListCorner.Parent = dropdownList
-    
-    -- Shadow untuk dropdown
-    local dropdownShadow = Instance.new("ImageLabel")
-    dropdownShadow.Size = UDim2.new(1, 20, 1, 20)
-    dropdownShadow.Position = UDim2.new(0, -10, 0, -10)
-    dropdownShadow.BackgroundTransparency = 1
-    dropdownShadow.Image = "rbxassetid://6014261993"
-    dropdownShadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    dropdownShadow.ImageTransparency = 0.6
-    dropdownShadow.ScaleType = Enum.ScaleType.Slice
-    dropdownShadow.SliceCenter = Rect.new(49, 49, 450, 450)
-    dropdownShadow.ZIndex = 998
-    dropdownShadow.Parent = dropdownList
-    
-    local dropdownLayout = Instance.new("UIListLayout")
-    dropdownLayout.Padding = UDim.new(0, 2)
-    dropdownLayout.Parent = dropdownList
-    
-    -- Populate dropdown
-    for _, fruitName in ipairs(FRUIT_LIST) do
-        local option = Instance.new("TextButton")
-        option.Size = UDim2.new(1, -10, 0, 30)
-        option.Position = UDim2.new(0, 5, 0, 0)
-        option.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-        option.Text = fruitName
-        option.TextColor3 = Color3.fromRGB(255, 255, 255)
-        option.Font = Enum.Font.Gotham
-        option.TextSize = 13
-        option.ZIndex = 1000
-        option.Parent = dropdownList
-        
-        local optionCorner = Instance.new("UICorner")
-        optionCorner.CornerRadius = UDim.new(0, 4)
-        optionCorner.Parent = option
-        
-        -- Hover effect
-        option.MouseEnter:Connect(function()
-            option.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
-        end)
-        
-        option.MouseLeave:Connect(function()
-            option.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-        end)
-        
-        option.MouseButton1Click:Connect(function()
-            selectedFruit = fruitName
-            fruitDropdown.Text = fruitName
-            dropdownList.Visible = false
-            hasSold = false
-            currentMultiplier = 0
-            print("🍎 Selected: " .. fruitName)
-        end)
-    end
-    
-    dropdownList.CanvasSize = UDim2.new(0, 0, 0, #FRUIT_LIST * 32)
-    
-    -- Update dropdown position before showing
-    local function updateDropdownPosition()
-        local absolutePos = fruitDropdown.AbsolutePosition
-        local absoluteSize = fruitDropdown.AbsoluteSize
-        dropdownList.Position = UDim2.new(0, absolutePos.X, 0, absolutePos.Y + absoluteSize.Y + 5)
-    end
-    
-    fruitDropdown.MouseButton1Click:Connect(function()
-        if dropdownList.Visible then
-            dropdownList.Visible = false
-        else
-            updateDropdownPosition()
-            dropdownList.Visible = true
-        end
-    end)
-    
-    -- Close dropdown when clicking outside
-    gui.MouseEnter:Connect(function() end) -- Dummy untuk tracking
-    
-    userInputService.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 and dropdownList.Visible then
-            -- Cek apakah klik di luar dropdown
-            local mousePos = userInputService:GetMouseLocation()
-            local dropAbsPos = dropdownList.AbsolutePosition
-            local dropAbsSize = dropdownList.AbsoluteSize
-            local fruitAbsPos = fruitDropdown.AbsolutePosition
-            local fruitAbsSize = fruitDropdown.AbsoluteSize
-            
-            local inDropdown = mousePos.X >= dropAbsPos.X and mousePos.X <= dropAbsPos.X + dropAbsSize.X
-                and mousePos.Y >= dropAbsPos.Y and mousePos.Y <= dropAbsPos.Y + dropAbsSize.Y
-            
-            local inButton = mousePos.X >= fruitAbsPos.X and mousePos.X <= fruitAbsPos.X + fruitAbsSize.X
-                and mousePos.Y >= fruitAbsPos.Y and mousePos.Y <= fruitAbsPos.Y + fruitAbsSize.Y
-            
-            if not inDropdown and not inButton then
-                dropdownList.Visible = false
-            end
-        end
-    end)
-    
-    -- === MULTIPLIER SECTION ===
-    local multSection = Instance.new("Frame")
-    multSection.Size = UDim2.new(1, 0, 0, 50)
-    multSection.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-    multSection.BackgroundTransparency = 0.3
-    multSection.Parent = contentFrame
-    
-    local multSectionCorner = Instance.new("UICorner")
-    multSectionCorner.CornerRadius = UDim.new(0, 8)
-    multSectionCorner.Parent = multSection
-    
-    local multLabel = Instance.new("TextLabel")
-    multLabel.Size = UDim2.new(1, -10, 0, 20)
-    multLabel.Position = UDim2.new(0, 10, 0, 3)
-    multLabel.BackgroundTransparency = 1
-    multLabel.Text = "📊 Minimal Multiplier (X)"
-    multLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
-    multLabel.Font = Enum.Font.GothamBold
-    multLabel.TextSize = 13
-    multLabel.TextXAlignment = Enum.TextXAlignment.Left
-    multLabel.Parent = multSection
-    
-    local multInput = Instance.new("TextBox")
-    multInput.Size = UDim2.new(1, 0, 0, 25)
-    multInput.Position = UDim2.new(0, 0, 0, 23)
-    multInput.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-    multInput.Text = "4.0"
-    multInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-    multInput.Font = Enum.Font.Gotham
-    multInput.TextSize = 12
-    multInput.PlaceholderText = "e.g. 4.0"
-    multInput.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
-    multInput.Parent = multSection
-    
-    local multInputCorner = Instance.new("UICorner")
-    multInputCorner.CornerRadius = UDim.new(0, 4)
-    multInputCorner.Parent = multInput
-    
-    multInput.FocusLost:Connect(function()
-        local num = tonumber(multInput.Text)
-        if num and num > 0 then
-            minMultiplier = num
-            hasSold = false
-        else
-            multInput.Text = tostring(minMultiplier)
-        end
-    end)
-    
-    -- === CYCLE INFO ===
-    local cycleSection = Instance.new("Frame")
-    cycleSection.Size = UDim2.new(1, 0, 0, 55)
-    cycleSection.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-    cycleSection.BackgroundTransparency = 0.3
-    cycleSection.Parent = contentFrame
-    
-    local cycleCorner = Instance.new("UICorner")
-    cycleCorner.CornerRadius = UDim.new(0, 8)
-    cycleCorner.Parent = cycleSection
-    
-    local cycleLabel = Instance.new("TextLabel")
-    cycleLabel.Size = UDim2.new(1, -10, 0, 50)
-    cycleLabel.Position = UDim2.new(0, 5, 0, 3)
-    cycleLabel.BackgroundTransparency = 1
-    cycleLabel.Text = "⏰ Cycle: 10 menit\nNext refresh: --:--"
-    cycleLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    cycleLabel.Font = Enum.Font.Gotham
-    cycleLabel.TextSize = 11
-    cycleLabel.TextWrapped = true
-    cycleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    cycleLabel.Parent = cycleSection
-    
-    -- === STATUS SECTION ===
-    local statusSection = Instance.new("Frame")
-    statusSection.Size = UDim2.new(1, 0, 0, 90)
-    statusSection.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-    statusSection.BackgroundTransparency = 0.3
-    statusSection.Parent = contentFrame
-    
-    local statusCorner = Instance.new("UICorner")
-    statusCorner.CornerRadius = UDim.new(0, 8)
-    statusCorner.Parent = statusSection
-    
-    local statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(1, -10, 0, 85)
-    statusLabel.Position = UDim2.new(0, 5, 0, 3)
-    statusLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-    statusLabel.Text = "🔴 Not monitoring\nSelect fruit and press START"
-    statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    statusLabel.Font = Enum.Font.Gotham
-    statusLabel.TextSize = 11
-    statusLabel.TextWrapped = true
-    statusLabel.Parent = statusSection
-    
-    local statusInnerCorner = Instance.new("UICorner")
-    statusInnerCorner.CornerRadius = UDim.new(0, 4)
-    statusInnerCorner.Parent = statusLabel
-    
-    -- === CONTROL BUTTONS ===
-    local controlSection = Instance.new("Frame")
-    controlSection.Size = UDim2.new(1, 0, 0, 90)
-    controlSection.BackgroundTransparency = 1
-    controlSection.Parent = contentFrame
-    
-    local startBtn = Instance.new("TextButton")
-    startBtn.Size = UDim2.new(1, 0, 0, 40)
-    startBtn.BackgroundColor3 = Color3.fromRGB(50, 180, 80)
-    startBtn.Text = "▶ START MONITORING"
-    startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    startBtn.Font = Enum.Font.GothamBold
-    startBtn.TextSize = 15
-    startBtn.Parent = controlSection
-    
-    local startCorner = Instance.new("UICorner")
-    startCorner.CornerRadius = UDim.new(0, 8)
-    startCorner.Parent = startBtn
-    
-    -- Info jitter (tersembunyi)
-    local jitterInfo = Instance.new("TextLabel")
-    jitterInfo.Size = UDim2.new(1, 0, 0, 20)
-    jitterInfo.Position = UDim2.new(0, 0, 0, 45)
-    jitterInfo.BackgroundTransparency = 1
-    jitterInfo.Text = "⚙️ Jitter: " .. JITTER_MIN .. "-" .. JITTER_MAX .. "s | CD: " .. COOLDOWN .. "s"
-    jitterInfo.TextColor3 = Color3.fromRGB(150, 150, 150)
-    jitterInfo.Font = Enum.Font.Gotham
-    jitterInfo.TextSize = 10
-    jitterInfo.Parent = controlSection
-    
-    local stopBtn = Instance.new("TextButton")
-    stopBtn.Size = UDim2.new(1, 0, 0, 40)
-    stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    stopBtn.Text = "⏹ STOP MONITORING"
-    stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    stopBtn.Font = Enum.Font.GothamBold
-    stopBtn.TextSize = 15
-    stopBtn.Visible = false
-    stopBtn.Parent = controlSection
-    
-    local stopCorner = Instance.new("UICorner")
-    stopCorner.CornerRadius = UDim.new(0, 8)
-    stopCorner.Parent = stopBtn
-    
-    -- Minimize
-    local minimized = false
-    minimizeBtn.MouseButton1Click:Connect(function()
-        minimized = not minimized
-        contentFrame.Visible = not minimized
-        mainFrame.Size = minimized and UDim2.new(0, 300, 0, 40) or UDim2.new(0, 300, 0, 420)
-    end)
-    
-    return gui, statusLabel, startBtn, stopBtn, cycleLabel
-end
-
--- Jitter Functions (hidden from UI)
+-- Jitter Functions
 local function getJitter()
     local min = JITTER_MIN
     local max = JITTER_MAX
@@ -600,8 +183,278 @@ local function sellAllWithJitter()
     end
 end
 
+-- ============================================
+-- CREATE GUI (SIMPLIFIED & FIXED)
+-- ============================================
+local function createGUI()
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "AutoSellGUI"
+    gui.Parent = coreGui
+    gui.ResetOnSpawn = false
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    -- Main Frame
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 300, 0, 350)
+    mainFrame.Position = UDim2.new(0.5, -150, 0.5, -175)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Active = true
+    mainFrame.Parent = gui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = mainFrame
+    
+    -- Title Bar
+    local titleBar = Instance.new("Frame")
+    titleBar.Size = UDim2.new(1, 0, 0, 40)
+    titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+    titleBar.BorderSizePixel = 0
+    titleBar.Active = true
+    titleBar.Parent = mainFrame
+    
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 12)
+    titleCorner.Parent = titleBar
+    
+    local titleText = Instance.new("TextLabel")
+    titleText.Size = UDim2.new(0.7, 0, 1, 0)
+    titleText.Position = UDim2.new(0.05, 0, 0, 0)
+    titleText.BackgroundTransparency = 1
+    titleText.Text = "🍎 Auto Sell All"
+    titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleText.Font = Enum.Font.GothamBold
+    titleText.TextSize = 18
+    titleText.TextXAlignment = Enum.TextXAlignment.Left
+    titleText.Parent = titleBar
+    
+    -- DRAG SYSTEM
+    local isDragging = false
+    local dragStart = nil
+    local startPos = nil
+    
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+           input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+        end
+    end)
+    
+    userInputService.InputChanged:Connect(function(input)
+        if isDragging then
+            local delta = input.Position - dragStart
+            local newX = math.clamp(startPos.X.Offset + delta.X, -250, workspace.CurrentCamera.ViewportSize.X - 50)
+            local newY = math.clamp(startPos.Y.Offset + delta.Y, 0, workspace.CurrentCamera.ViewportSize.Y - 50)
+            mainFrame.Position = UDim2.new(0, newX, 0, newY)
+        end
+    end)
+    
+    userInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+           input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = false
+        end
+    end)
+    
+    -- Content Frame
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Size = UDim2.new(1, -20, 1, -50)
+    contentFrame.Position = UDim2.new(0, 10, 0, 45)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = mainFrame
+    
+    local contentLayout = Instance.new("UIListLayout")
+    contentLayout.Padding = UDim.new(0, 10)
+    contentLayout.Parent = contentFrame
+    
+    -- === FRUIT SELECTION (SIMPLE DROPDOWN) ===
+    local fruitLabel = Instance.new("TextLabel")
+    fruitLabel.Size = UDim2.new(1, 0, 0, 25)
+    fruitLabel.BackgroundTransparency = 1
+    fruitLabel.Text = "🍇 Pilih Buah:"
+    fruitLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    fruitLabel.Font = Enum.Font.GothamBold
+    fruitLabel.TextSize = 14
+    fruitLabel.TextXAlignment = Enum.TextXAlignment.Left
+    fruitLabel.Parent = contentFrame
+    
+    -- Dropdown button
+    local dropdownBtn = Instance.new("TextButton")
+    dropdownBtn.Size = UDim2.new(1, 0, 0, 35)
+    dropdownBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    dropdownBtn.Text = "▼ " .. selectedFruit
+    dropdownBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    dropdownBtn.Font = Enum.Font.Gotham
+    dropdownBtn.TextSize = 14
+    dropdownBtn.ZIndex = 10
+    dropdownBtn.Parent = contentFrame
+    
+    local dropdownBtnCorner = Instance.new("UICorner")
+    dropdownBtnCorner.CornerRadius = UDim.new(0, 6)
+    dropdownBtnCorner.Parent = dropdownBtn
+    
+    -- Dropdown list (separate frame di parent yang sama)
+    local dropdownList = Instance.new("Frame")
+    dropdownList.Size = UDim2.new(1, 0, 0, 0)
+    dropdownList.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+    dropdownList.BorderSizePixel = 0
+    dropdownList.Visible = false
+    dropdownList.ZIndex = 100
+    dropdownList.Parent = contentFrame
+    
+    local dropdownListCorner = Instance.new("UICorner")
+    dropdownListCorner.CornerRadius = UDim.new(0, 6)
+    dropdownListCorner.Parent = dropdownList
+    
+    local dropdownListLayout = Instance.new("UIListLayout")
+    dropdownListLayout.Padding = UDim.new(0, 0)
+    dropdownListLayout.Parent = dropdownList
+    
+    -- Buat opsi dropdown
+    for i, fruitName in ipairs(FRUIT_LIST) do
+        local option = Instance.new("TextButton")
+        option.Size = UDim2.new(1, 0, 0, 35)
+        option.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+        option.Text = fruitName
+        option.TextColor3 = Color3.fromRGB(255, 255, 255)
+        option.Font = Enum.Font.Gotham
+        option.TextSize = 13
+        option.ZIndex = 101
+        option.Parent = dropdownList
+        
+        local optionCorner = Instance.new("UICorner")
+        optionCorner.CornerRadius = UDim.new(0, 0)
+        optionCorner.Parent = option
+        
+        option.MouseButton1Click:Connect(function()
+            selectedFruit = fruitName
+            dropdownBtn.Text = "▼ " .. fruitName
+            dropdownList.Visible = false
+            dropdownList.Size = UDim2.new(1, 0, 0, 0)
+            hasSold = false
+            currentMultiplier = 0
+            print("✅ Selected: " .. fruitName)
+        end)
+        
+        -- Hover effect
+        option.MouseEnter:Connect(function()
+            option.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
+        end)
+        option.MouseLeave:Connect(function()
+            option.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+        end)
+    end
+    
+    -- Toggle dropdown
+    dropdownBtn.MouseButton1Click:Connect(function()
+        if dropdownList.Visible then
+            dropdownList.Visible = false
+            dropdownList.Size = UDim2.new(1, 0, 0, 0)
+        else
+            dropdownList.Visible = true
+            dropdownList.Size = UDim2.new(1, 0, 0, #FRUIT_LIST * 35)
+        end
+    end)
+    
+    -- === MULTIPLIER INPUT ===
+    local multLabel = Instance.new("TextLabel")
+    multLabel.Size = UDim2.new(1, 0, 0, 25)
+    multLabel.BackgroundTransparency = 1
+    multLabel.Text = "📊 Minimal Multiplier (X):"
+    multLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    multLabel.Font = Enum.Font.GothamBold
+    multLabel.TextSize = 14
+    multLabel.TextXAlignment = Enum.TextXAlignment.Left
+    multLabel.Parent = contentFrame
+    
+    local multInput = Instance.new("TextBox")
+    multInput.Size = UDim2.new(1, 0, 0, 35)
+    multInput.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+    multInput.Text = "4.0"
+    multInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+    multInput.Font = Enum.Font.Gotham
+    multInput.TextSize = 14
+    multInput.PlaceholderText = "Masukkan angka (e.g. 4.0)"
+    multInput.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
+    multInput.Parent = contentFrame
+    
+    local multInputCorner = Instance.new("UICorner")
+    multInputCorner.CornerRadius = UDim.new(0, 6)
+    multInputCorner.Parent = multInput
+    
+    multInput.FocusLost:Connect(function()
+        local num = tonumber(multInput.Text)
+        if num and num > 0 then
+            minMultiplier = num
+            hasSold = false
+            print("📊 Target multiplier: X" .. num)
+        else
+            multInput.Text = tostring(minMultiplier)
+        end
+    end)
+    
+    -- === STATUS DISPLAY ===
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(1, 0, 0, 70)
+    statusLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+    statusLabel.Text = "🔴 Siap!\nPilih buah & tekan START"
+    statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    statusLabel.Font = Enum.Font.Gotham
+    statusLabel.TextSize = 11
+    statusLabel.TextWrapped = true
+    statusLabel.Parent = contentFrame
+    
+    local statusCorner = Instance.new("UICorner")
+    statusCorner.CornerRadius = UDim.new(0, 6)
+    statusCorner.Parent = statusLabel
+    
+    -- === JITTER INFO (KECIL) ===
+    local jitterInfo = Instance.new("TextLabel")
+    jitterInfo.Size = UDim2.new(1, 0, 0, 15)
+    jitterInfo.BackgroundTransparency = 1
+    jitterInfo.Text = "⚙️ Jitter: " .. JITTER_MIN .. "-" .. JITTER_MAX .. "s | Cooldown: " .. COOLDOWN .. "s"
+    jitterInfo.TextColor3 = Color3.fromRGB(120, 120, 120)
+    jitterInfo.Font = Enum.Font.Gotham
+    jitterInfo.TextSize = 9
+    jitterInfo.Parent = contentFrame
+    
+    -- === BUTTONS ===
+    local startBtn = Instance.new("TextButton")
+    startBtn.Size = UDim2.new(1, 0, 0, 40)
+    startBtn.BackgroundColor3 = Color3.fromRGB(50, 180, 80)
+    startBtn.Text = "▶ START"
+    startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    startBtn.Font = Enum.Font.GothamBold
+    startBtn.TextSize = 16
+    startBtn.Parent = contentFrame
+    
+    local startCorner = Instance.new("UICorner")
+    startCorner.CornerRadius = UDim.new(0, 8)
+    startCorner.Parent = startBtn
+    
+    local stopBtn = Instance.new("TextButton")
+    stopBtn.Size = UDim2.new(1, 0, 0, 40)
+    stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    stopBtn.Text = "⏹ STOP"
+    stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    stopBtn.Font = Enum.Font.GothamBold
+    stopBtn.TextSize = 16
+    stopBtn.Visible = false
+    stopBtn.Parent = contentFrame
+    
+    local stopCorner = Instance.new("UICorner")
+    stopCorner.CornerRadius = UDim.new(0, 8)
+    stopCorner.Parent = stopBtn
+    
+    return gui, statusLabel, startBtn, stopBtn, dropdownBtn, dropdownList
+end
+
 -- Create GUI
-local gui, statusLabel, startBtn, stopBtn, cycleLabel = createGUI()
+local gui, statusLabel, startBtn, stopBtn, dropdownBtn, dropdownList = createGUI()
 
 -- Update status
 local function updateStatus(message)
@@ -612,15 +465,11 @@ local function updateStatus(message)
     if timeLeft then
         local min = math.floor(timeLeft / 60)
         local sec = math.floor(timeLeft % 60)
-        countdown = string.format("\nNext refresh: %dm %02ds", min, sec)
+        countdown = " | Next: " .. min .. "m " .. sec .. "s"
     end
     
-    statusLabel.Text = string.format("[%s] %s\n🍎 %s | X%.1f (target: X%.1f)%s",
+    statusLabel.Text = string.format("[%s] %s\n🍎 %s | X%.1f → X%.1f%s",
         timeStr, message, selectedFruit, currentMultiplier, minMultiplier, countdown)
-    
-    cycleLabel.Text = string.format("⏰ Cycle: %d detik (%d menit)\nNext refresh: %s", 
-        cycleSeconds, cycleSeconds/60,
-        timeLeft and string.format("%dm %02ds", math.floor(timeLeft/60), math.floor(timeLeft%60)) or "--:--")
 end
 
 -- Main monitoring loop
@@ -633,24 +482,22 @@ local function monitoringLoop()
     local lastTimerCheck = 0
     
     while isRunning do
-        -- Update countdown setiap detik
         if tick() - lastTimerCheck > 1 then
             lastTimerCheck = tick()
             updateStatus("🟢 Monitoring...")
         end
         
-        -- Deteksi cycle refresh
         local currentTimeLeft = getTimeUntilRefresh()
         if currentTimeLeft and lastTimeLeft then
             if currentTimeLeft > lastTimeLeft + 30 then
-                print("🔄 Cycle refresh detected!")
+                print("🔄 Cycle refreshed!")
                 local newMult = getMultiplier(true)
                 if newMult ~= currentMultiplier then
                     currentMultiplier = newMult
-                    updateStatus("📊 Updated to X" .. newMult)
+                    updateStatus("📊 X" .. newMult)
                     
                     if currentMultiplier >= minMultiplier and not hasSold then
-                        updateStatus("🔥 Target reached! Selling...")
+                        updateStatus("🔥 SELLING!")
                         sellAllWithJitter()
                         updateStatus("✅ SOLD at X" .. currentMultiplier)
                     end
@@ -659,16 +506,15 @@ local function monitoringLoop()
         end
         lastTimeLeft = currentTimeLeft
         
-        -- Backup check setiap 30 detik
         if tick() - lastRefreshTime > 30 then
             local newMult = getMultiplier(true)
             if newMult ~= lastMult then
                 lastMult = newMult
                 currentMultiplier = newMult
-                updateStatus("📊 Multiplier: X" .. newMult)
+                updateStatus("📊 X" .. newMult)
                 
                 if currentMultiplier >= minMultiplier and not hasSold and (tick() - lastSellTime > COOLDOWN) then
-                    updateStatus("🔥 Selling at X" .. currentMultiplier)
+                    updateStatus("🔥 SELLING!")
                     sellAllWithJitter()
                     updateStatus("✅ SOLD!")
                 end
@@ -676,7 +522,6 @@ local function monitoringLoop()
             lastRefreshTime = tick()
         end
         
-        -- Reset hasSold
         if currentMultiplier < minMultiplier and hasSold and (tick() - lastSellTime > 5) then
             hasSold = false
         end
@@ -714,6 +559,7 @@ stopBtn.MouseButton1Click:Connect(function()
     stopMonitoring()
 end)
 
-updateStatus("Ready! Select fruit & press START")
-print("✅ Auto Sell GUI Loaded!")
-print("🍎 " .. #FRUIT_LIST .. " fruits available")
+-- Debug
+print("✅ Auto Sell GUI v4 Loaded!")
+print("🍎 Buah tersedia: " .. #FRUIT_LIST)
+print("📋 " .. table.concat(FRUIT_LIST, ", "))
