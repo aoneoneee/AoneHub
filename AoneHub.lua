@@ -36,7 +36,8 @@ local FRUIT_LIST = {
     "Star Fruit",
     "Briar Rose",
     "Amber Cranberry",
-    "Atlantic Giant Pumpkin"
+    "Atlantic Giant Pumpkin",
+    "Carrot"
 }
 
 -- Dapatkan cycle time
