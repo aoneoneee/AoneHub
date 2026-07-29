@@ -435,4 +435,4 @@ end
 -- ──────────────────────────────────────────────────────────────────────
 createGUI()
 print("[AutoBuy] 🚀 Passive AutoBuy Loaded | Opcode:", OPCODE)
-print("[AutoBuy] 🛡️  Safe mode: No active scanning, only event hooks")
+print("[AutoBuy] 🛡️  Safe mode: No active scanning, only event hook")
