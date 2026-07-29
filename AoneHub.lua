@@ -1,565 +1,438 @@
---[[
-    Auto Sell All GUI - Fixed Dropdown
---]]
+-- ──────────────────────────────────────────────────────────────────────
+-- 1️⃣  Services & References
+-- ──────────────────────────────────────────────────────────────────────
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 
--- Services
-local replicatedStorage = game:GetService("ReplicatedStorage")
-local players = game:GetService("Players")
-local runService = game:GetService("RunService")
-local userInputService = game:GetService("UserInputService")
-local coreGui = game:GetService("CoreGui")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
--- Variables
-local currentMultiplier = 0
-local hasSold = false
-local lastSellTime = 0
-local isRunning = false
-local selectedFruit = "Dragon's Breath"
-local minMultiplier = 4.0
-local cycleSeconds = 600
-local lastRefreshTime = 0
-local lastTimeLeft = nil
+local packetRemote = ReplicatedStorage:WaitForChild("SharedModules")
+    :WaitForChild("Packet")
+    :WaitForChild("RemoteEvent")
 
--- Fixed jitter settings
-local JITTER_MIN = 0.5
-local JITTER_MAX = 3.0
-local COOLDOWN = 30
-local HUMANIZE = true
+print("[AutoBuy] ✅ RemoteEvent:", packetRemote:GetFullName())
 
--- Data buah
-local FRUIT_LIST = {
-    "Dragon's Breath",
-    "Hypno Bloom", 
-    "Moon Bloom",
-    "Sun Bloom",
-    "Star Fruit",
-    "Briar Rose",
-    "Amber Cranberry",
-    "Atlantic Giant Pumpkin",
-    "Carrot"
-}
-
--- Dapatkan cycle time
-local function getCycleTime()
-    local success, result = pcall(function()
-        local networking = require(replicatedStorage.SharedModules.Networking)
-        local data = networking.FruitStock.Request:Fire()
-        if data and data.cycleSeconds then
-            return data.cycleSeconds
+-- ──────────────────────────────────────────────────────────────────────
+-- 2️⃣  Auto-detect opcode
+-- ──────────────────────────────────────────────────────────────────────
+local function countItem(itemName)
+    local count = 0
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item.Name == itemName then count += 1 end
         end
-    end)
-    
-    if success and result then
-        cycleSeconds = result
     end
-    return cycleSeconds
+    return count
 end
 
--- Baca multiplier dari GUI
-local function readMultiplier()
-    local playerGui = players.LocalPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return nil end
-    
-    local stockGui = playerGui:FindFirstChild("FruitStockPrice")
-    if not stockGui or not stockGui.Enabled then return nil end
-    
-    local scrollFrame = stockGui:FindFirstChild("Frame")
-    if scrollFrame then
-        scrollFrame = scrollFrame:FindFirstChild("ScrollingFrame")
+local function autoDetectOpcode()
+    local countBefore = countItem("Carrot")
+    for _, testOpcode in ipairs({133, 131, 130, 132, 134}) do
+        local packetStr = string.char(testOpcode, 0, 6) .. "Carrot"
+        pcall(function() packetRemote:FireServer(buffer.fromstring(packetStr)) end)
+        task.wait(1)
+        if countItem("Carrot") > countBefore then
+            print("[AutoBuy] ✅ Opcode:", testOpcode)
+            return testOpcode
+        end
     end
-    
-    if not scrollFrame then return nil end
-    
-    for _, card in pairs(scrollFrame:GetChildren()) do
-        if card:IsA("Frame") and card.Name == "FruitCard" then
-            local attr = card:GetAttribute("SeedToolTip")
-            if attr == selectedFruit then
-                local frame = card:FindFirstChild("Frame")
-                if frame then
-                    local multLabel = frame:FindFirstChild("Multiplier")
-                    if multLabel and multLabel:IsA("TextLabel") then
-                        local num = multLabel.Text:match("X([%d.]+)")
-                        if num then
-                            return tonumber(num)
+    warn("[AutoBuy] ⚠️  Fallback 133")
+    return 133
+end
+
+local OPCODE = autoDetectOpcode()
+
+-- ──────────────────────────────────────────────────────────────────────
+-- 3️⃣  Target items
+-- ──────────────────────────────────────────────────────────────────────
+local TARGET_ITEMS = {
+    "Hypno Bloom",
+    "Dragon's Breath",
+    "Sun Bloom",
+    "Star Fruit",
+}
+
+-- ──────────────────────────────────────────────────────────────────────
+-- 4️⃣  Build packet
+-- ──────────────────────────────────────────────────────────────────────
+local function buildPacket(itemName)
+    return buffer.fromstring(string.char(OPCODE, 0, #itemName) .. itemName)
+end
+
+-- ──────────────────────────────────────────────────────────────────────
+-- 5️⃣  Buy function
+-- ──────────────────────────────────────────────────────────────────────
+local function buyItem(itemName)
+    local packet = buildPacket(itemName)
+    local success, err = pcall(function()
+        packetRemote:FireServer(packet)
+    end)
+    return success, err
+end
+
+-- ──────────────────────────────────────────────────────────────────────
+-- 6️⃣  AMAN: Hook OnClientEvent untuk deteksi restock
+-- ──────────────────────────────────────────────────────────────────────
+local shopItems = {}
+local buyHistory = {}
+local BUY_COOLDOWN = 2
+
+-- Cara 1: Listen server response (PALING AMAN - gak scan GUI)
+packetRemote.OnClientEvent:Connect(function(response)
+    -- Coba parse response sebagai data shop/restock
+    if typeof(response) == "buffer" then
+        -- Coba baca sebagai string
+        local str = ""
+        for i = 0, buffer.len(response) - 1 do
+            local byte = buffer.readu8(response, i)
+            if byte >= 32 and byte <= 126 then
+                str = str .. string.char(byte)
+            end
+        end
+        
+        -- Cek apakah response mengandung nama item target
+        for _, itemName in ipairs(TARGET_ITEMS) do
+            if str:find(itemName) then
+                print("[AutoBuy] 🛒 Restock terdeteksi via server:", itemName)
+                onItemAvailable(itemName)
+                break
+            end
+        end
+    elseif typeof(response) == "table" then
+        -- Response table (mungkin data shop)
+        for _, itemName in ipairs(TARGET_ITEMS) do
+            if response[itemName] or (response.Name and response.Name == itemName) then
+                print("[AutoBuy] 🛒 Restock terdeteksi via table:", itemName)
+                onItemAvailable(itemName)
+                break
+            end
+        end
+    end
+end)
+
+-- Cara 2: Hook GUI updates (lebih aman daripada scan)
+local guiConnections = {}
+
+local function hookShopGUI()
+    -- Cari TextLabel yang mungkin menampilkan nama item
+    for _, gui in ipairs(playerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") then
+            for _, element in ipairs(gui:GetDescendants()) do
+                if element:IsA("TextLabel") or element:IsA("TextButton") then
+                    local text = element.Text
+                    
+                    -- Cek apakah mengandung nama item target
+                    for _, itemName in ipairs(TARGET_ITEMS) do
+                        if text:find(itemName) and not guiConnections[element] then
+                            -- Hook perubahan text
+                            local conn = element:GetPropertyChangedSignal("Text"):Connect(function()
+                                local newText = element.Text
+                                if newText:find(itemName) then
+                                    -- Cek apakah text berubah jadi available
+                                    local oldText = shopItems[itemName] and shopItems[itemName].text or ""
+                                    if newText ~= oldText and not newText:lower():find("sold") then
+                                        print("[AutoBuy] 🛒 GUI update:", itemName)
+                                        shopItems[itemName] = {text = newText, time = tick()}
+                                        onItemAvailable(itemName)
+                                    end
+                                end
+                            end)
+                            guiConnections[element] = conn
                         end
                     end
                 end
             end
         end
     end
-    
-    return nil
 end
 
--- Baca timer countdown
-local function getTimeUntilRefresh()
-    local playerGui = players.LocalPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return nil end
+-- Cara 3: Hook backpack changes (deteksi item baru)
+local backpackConnection
+local function hookBackpack()
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return end
     
-    local stockGui = playerGui:FindFirstChild("FruitStockPrice")
-    if not stockGui or not stockGui.Enabled then return nil end
-    
-    local timer = stockGui:FindFirstChild("Timer", true)
-    if timer and timer:IsA("TextLabel") then
-        local text = timer.Text
-        local minutes, seconds = text:match("(%d+)m (%d+)s")
-        if minutes and seconds then
-            return tonumber(minutes) * 60 + tonumber(seconds)
-        end
-    end
-    
-    return nil
-end
-
--- Get multiplier
-local function getMultiplier(forceUpdate)
-    if forceUpdate or currentMultiplier == 0 then
-        local mult = readMultiplier()
-        if mult then
-            currentMultiplier = mult
-            return mult
-        end
-        
-        local success, result = pcall(function()
-            local networking = require(replicatedStorage.SharedModules.Networking)
-            local data = networking.FruitStock.Request:Fire()
-            if data and data.entries then
-                local fruitData = data.entries[selectedFruit]
-                if fruitData then
-                    return fruitData.multiplier or 1
-                end
-            end
-        end)
-        
-        if success and result then
-            currentMultiplier = result
-            return result
-        end
-    end
-    
-    return currentMultiplier
-end
-
--- Jitter Functions
-local function getJitter()
-    local min = JITTER_MIN
-    local max = JITTER_MAX
-    if HUMANIZE then
-        local r1 = math.random()
-        local r2 = math.random()
-        return min + (((r1 + r2) / 2) * (max - min))
-    end
-    return min + (math.random() * (max - min))
-end
-
--- Sell Function
-local function sellAllWithJitter()
-    local delay = getJitter()
-    print("⏳ Jitter delay: " .. string.format("%.2f", delay) .. "s")
-    
-    task.wait(delay)
-    
-    if HUMANIZE then
-        task.wait(math.random() * 0.3)
-    end
-    
-    local args = {buffer.fromstring("\189\000!")}
-    local remote = replicatedStorage:FindFirstChild("SharedModules")
-    if remote then
-        remote = remote:FindFirstChild("Packet")
-        if remote then
-            remote = remote:FindFirstChild("RemoteEvent")
-            if remote then
-                local success, err = pcall(function()
-                    remote:FireServer(unpack(args))
-                end)
-                if success then
-                    print("✅ SOLD at X" .. currentMultiplier)
-                    lastSellTime = tick()
-                    hasSold = true
-                end
+    backpackConnection = backpack.ChildAdded:Connect(function(child)
+        -- Kalau item target masuk backpack, berarti berhasil beli
+        for _, itemName in ipairs(TARGET_ITEMS) do
+            if child.Name == itemName then
+                print("[AutoBuy] ✅", itemName, "masuk backpack!")
+                buyHistory[itemName] = tick()
             end
         end
-    end
+    end)
 end
 
--- ============================================
--- CREATE GUI (SIMPLIFIED & FIXED)
--- ============================================
-local function createGUI()
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "AutoSellGUI"
-    gui.Parent = coreGui
-    gui.ResetOnSpawn = false
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+-- ──────────────────────────────────────────────────────────────────────
+-- 7️⃣  Logic: Beli saat item tersedia
+-- ──────────────────────────────────────────────────────────────────────
+local function onItemAvailable(itemName)
+    local now = tick()
+    local lastBuy = buyHistory[itemName] or 0
     
-    -- Main Frame
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 300, 0, 350)
-    mainFrame.Position = UDim2.new(0.5, -150, 0.5, -175)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    mainFrame.BorderSizePixel = 0
-    mainFrame.Active = true
-    mainFrame.Parent = gui
+    -- Cek cooldown
+    if now - lastBuy < BUY_COOLDOWN then return end
     
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = mainFrame
+    -- Cek apakah masih di cooldown global (hindari burst)
+    if onItemAvailable._globalCooldown and now - onItemAvailable._globalCooldown < 0.5 then return end
+    onItemAvailable._globalCooldown = now
     
-    -- Title Bar
-    local titleBar = Instance.new("Frame")
-    titleBar.Size = UDim2.new(1, 0, 0, 40)
-    titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-    titleBar.BorderSizePixel = 0
-    titleBar.Active = true
-    titleBar.Parent = mainFrame
+    print("[AutoBuy] 🎯 Beli:", itemName)
     
-    local titleCorner = Instance.new("UICorner")
-    titleCorner.CornerRadius = UDim.new(0, 12)
-    titleCorner.Parent = titleBar
-    
-    local titleText = Instance.new("TextLabel")
-    titleText.Size = UDim2.new(0.7, 0, 1, 0)
-    titleText.Position = UDim2.new(0.05, 0, 0, 0)
-    titleText.BackgroundTransparency = 1
-    titleText.Text = "🍎 Auto Sell All"
-    titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    titleText.Font = Enum.Font.GothamBold
-    titleText.TextSize = 18
-    titleText.TextXAlignment = Enum.TextXAlignment.Left
-    titleText.Parent = titleBar
-    
-    -- DRAG SYSTEM
-    local isDragging = false
-    local dragStart = nil
-    local startPos = nil
-    
-    titleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or 
-           input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
-        end
-    end)
-    
-    userInputService.InputChanged:Connect(function(input)
-        if isDragging then
-            local delta = input.Position - dragStart
-            local newX = math.clamp(startPos.X.Offset + delta.X, -250, workspace.CurrentCamera.ViewportSize.X - 50)
-            local newY = math.clamp(startPos.Y.Offset + delta.Y, 0, workspace.CurrentCamera.ViewportSize.Y - 50)
-            mainFrame.Position = UDim2.new(0, newX, 0, newY)
-        end
-    end)
-    
-    userInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or 
-           input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = false
-        end
-    end)
-    
-    -- Content Frame
-    local contentFrame = Instance.new("Frame")
-    contentFrame.Size = UDim2.new(1, -20, 1, -50)
-    contentFrame.Position = UDim2.new(0, 10, 0, 45)
-    contentFrame.BackgroundTransparency = 1
-    contentFrame.Parent = mainFrame
-    
-    local contentLayout = Instance.new("UIListLayout")
-    contentLayout.Padding = UDim.new(0, 10)
-    contentLayout.Parent = contentFrame
-    
-    -- === FRUIT SELECTION (SIMPLE DROPDOWN) ===
-    local fruitLabel = Instance.new("TextLabel")
-    fruitLabel.Size = UDim2.new(1, 0, 0, 25)
-    fruitLabel.BackgroundTransparency = 1
-    fruitLabel.Text = "🍇 Pilih Buah:"
-    fruitLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    fruitLabel.Font = Enum.Font.GothamBold
-    fruitLabel.TextSize = 14
-    fruitLabel.TextXAlignment = Enum.TextXAlignment.Left
-    fruitLabel.Parent = contentFrame
-    
-    -- Dropdown button
-    local dropdownBtn = Instance.new("TextButton")
-    dropdownBtn.Size = UDim2.new(1, 0, 0, 35)
-    dropdownBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-    dropdownBtn.Text = "▼ " .. selectedFruit
-    dropdownBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    dropdownBtn.Font = Enum.Font.Gotham
-    dropdownBtn.TextSize = 14
-    dropdownBtn.ZIndex = 10
-    dropdownBtn.Parent = contentFrame
-    
-    local dropdownBtnCorner = Instance.new("UICorner")
-    dropdownBtnCorner.CornerRadius = UDim.new(0, 6)
-    dropdownBtnCorner.Parent = dropdownBtn
-    
-    -- Dropdown list (separate frame di parent yang sama)
-    local dropdownList = Instance.new("Frame")
-    dropdownList.Size = UDim2.new(1, 0, 0, 0)
-    dropdownList.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    dropdownList.BorderSizePixel = 0
-    dropdownList.Visible = false
-    dropdownList.ZIndex = 100
-    dropdownList.Parent = contentFrame
-    
-    local dropdownListCorner = Instance.new("UICorner")
-    dropdownListCorner.CornerRadius = UDim.new(0, 6)
-    dropdownListCorner.Parent = dropdownList
-    
-    local dropdownListLayout = Instance.new("UIListLayout")
-    dropdownListLayout.Padding = UDim.new(0, 0)
-    dropdownListLayout.Parent = dropdownList
-    
-    -- Buat opsi dropdown
-    for i, fruitName in ipairs(FRUIT_LIST) do
-        local option = Instance.new("TextButton")
-        option.Size = UDim2.new(1, 0, 0, 35)
-        option.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-        option.Text = fruitName
-        option.TextColor3 = Color3.fromRGB(255, 255, 255)
-        option.Font = Enum.Font.Gotham
-        option.TextSize = 13
-        option.ZIndex = 101
-        option.Parent = dropdownList
-        
-        local optionCorner = Instance.new("UICorner")
-        optionCorner.CornerRadius = UDim.new(0, 0)
-        optionCorner.Parent = option
-        
-        option.MouseButton1Click:Connect(function()
-            selectedFruit = fruitName
-            dropdownBtn.Text = "▼ " .. fruitName
-            dropdownList.Visible = false
-            dropdownList.Size = UDim2.new(1, 0, 0, 0)
-            hasSold = false
-            currentMultiplier = 0
-            print("✅ Selected: " .. fruitName)
-        end)
-        
-        -- Hover effect
-        option.MouseEnter:Connect(function()
-            option.BackgroundColor3 = Color3.fromRGB(70, 70, 90)
-        end)
-        option.MouseLeave:Connect(function()
-            option.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-        end)
-    end
-    
-    -- Toggle dropdown
-    dropdownBtn.MouseButton1Click:Connect(function()
-        if dropdownList.Visible then
-            dropdownList.Visible = false
-            dropdownList.Size = UDim2.new(1, 0, 0, 0)
+    task.delay(math.random() * 0.5, function()  -- Jitter kecil
+        local success, err = buyItem(itemName)
+        if success then
+            buyHistory[itemName] = now
+            print("[AutoBuy] ✅ Berhasil:", itemName)
         else
-            dropdownList.Visible = true
-            dropdownList.Size = UDim2.new(1, 0, 0, #FRUIT_LIST * 35)
+            warn("[AutoBuy] ❌ Gagal:", itemName, err)
         end
     end)
-    
-    -- === MULTIPLIER INPUT ===
-    local multLabel = Instance.new("TextLabel")
-    multLabel.Size = UDim2.new(1, 0, 0, 25)
-    multLabel.BackgroundTransparency = 1
-    multLabel.Text = "📊 Minimal Multiplier (X):"
-    multLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    multLabel.Font = Enum.Font.GothamBold
-    multLabel.TextSize = 14
-    multLabel.TextXAlignment = Enum.TextXAlignment.Left
-    multLabel.Parent = contentFrame
-    
-    local multInput = Instance.new("TextBox")
-    multInput.Size = UDim2.new(1, 0, 0, 35)
-    multInput.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
-    multInput.Text = "4.0"
-    multInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-    multInput.Font = Enum.Font.Gotham
-    multInput.TextSize = 14
-    multInput.PlaceholderText = "Masukkan angka (e.g. 4.0)"
-    multInput.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
-    multInput.Parent = contentFrame
-    
-    local multInputCorner = Instance.new("UICorner")
-    multInputCorner.CornerRadius = UDim.new(0, 6)
-    multInputCorner.Parent = multInput
-    
-    multInput.FocusLost:Connect(function()
-        local num = tonumber(multInput.Text)
-        if num and num > 0 then
-            minMultiplier = num
-            hasSold = false
-            print("📊 Target multiplier: X" .. num)
-        else
-            multInput.Text = tostring(minMultiplier)
-        end
-    end)
-    
-    -- === STATUS DISPLAY ===
-    local statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(1, 0, 0, 70)
-    statusLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
-    statusLabel.Text = "🔴 Siap!\nPilih buah & tekan START"
-    statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    statusLabel.Font = Enum.Font.Gotham
-    statusLabel.TextSize = 11
-    statusLabel.TextWrapped = true
-    statusLabel.Parent = contentFrame
-    
-    local statusCorner = Instance.new("UICorner")
-    statusCorner.CornerRadius = UDim.new(0, 6)
-    statusCorner.Parent = statusLabel
-    
-    -- === JITTER INFO (KECIL) ===
-    local jitterInfo = Instance.new("TextLabel")
-    jitterInfo.Size = UDim2.new(1, 0, 0, 15)
-    jitterInfo.BackgroundTransparency = 1
-    jitterInfo.Text = "⚙️ Jitter: " .. JITTER_MIN .. "-" .. JITTER_MAX .. "s | Cooldown: " .. COOLDOWN .. "s"
-    jitterInfo.TextColor3 = Color3.fromRGB(120, 120, 120)
-    jitterInfo.Font = Enum.Font.Gotham
-    jitterInfo.TextSize = 9
-    jitterInfo.Parent = contentFrame
-    
-    -- === BUTTONS ===
-    local startBtn = Instance.new("TextButton")
-    startBtn.Size = UDim2.new(1, 0, 0, 40)
-    startBtn.BackgroundColor3 = Color3.fromRGB(50, 180, 80)
-    startBtn.Text = "▶ START"
-    startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    startBtn.Font = Enum.Font.GothamBold
-    startBtn.TextSize = 16
-    startBtn.Parent = contentFrame
-    
-    local startCorner = Instance.new("UICorner")
-    startCorner.CornerRadius = UDim.new(0, 8)
-    startCorner.Parent = startBtn
-    
-    local stopBtn = Instance.new("TextButton")
-    stopBtn.Size = UDim2.new(1, 0, 0, 40)
-    stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    stopBtn.Text = "⏹ STOP"
-    stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    stopBtn.Font = Enum.Font.GothamBold
-    stopBtn.TextSize = 16
-    stopBtn.Visible = false
-    stopBtn.Parent = contentFrame
-    
-    local stopCorner = Instance.new("UICorner")
-    stopCorner.CornerRadius = UDim.new(0, 8)
-    stopCorner.Parent = stopBtn
-    
-    return gui, statusLabel, startBtn, stopBtn, dropdownBtn, dropdownList
 end
 
--- Create GUI
-local gui, statusLabel, startBtn, stopBtn, dropdownBtn, dropdownList = createGUI()
+-- ──────────────────────────────────────────────────────────────────────
+-- 8️⃣  State
+-- ──────────────────────────────────────────────────────────────────────
+local isRunning = false
 
--- Update status
-local function updateStatus(message)
-    local timeLeft = getTimeUntilRefresh()
-    local timeStr = os.date("%H:%M:%S")
-    local countdown = ""
-    
-    if timeLeft then
-        local min = math.floor(timeLeft / 60)
-        local sec = math.floor(timeLeft % 60)
-        countdown = " | Next: " .. min .. "m " .. sec .. "s"
-    end
-    
-    statusLabel.Text = string.format("[%s] %s\n🍎 %s | X%.1f → X%.1f%s",
-        timeStr, message, selectedFruit, currentMultiplier, minMultiplier, countdown)
-end
-
--- Main monitoring loop
-local function monitoringLoop()
-    getCycleTime()
-    local mult = getMultiplier(true)
-    updateStatus("🟢 Monitoring...")
-    
-    local lastMult = mult
-    local lastTimerCheck = 0
-    
-    while isRunning do
-        if tick() - lastTimerCheck > 1 then
-            lastTimerCheck = tick()
-            updateStatus("🟢 Monitoring...")
-        end
-        
-        local currentTimeLeft = getTimeUntilRefresh()
-        if currentTimeLeft and lastTimeLeft then
-            if currentTimeLeft > lastTimeLeft + 30 then
-                print("🔄 Cycle refreshed!")
-                local newMult = getMultiplier(true)
-                if newMult ~= currentMultiplier then
-                    currentMultiplier = newMult
-                    updateStatus("📊 X" .. newMult)
-                    
-                    if currentMultiplier >= minMultiplier and not hasSold then
-                        updateStatus("🔥 SELLING!")
-                        sellAllWithJitter()
-                        updateStatus("✅ SOLD at X" .. currentMultiplier)
-                    end
-                end
-            end
-        end
-        lastTimeLeft = currentTimeLeft
-        
-        if tick() - lastRefreshTime > 30 then
-            local newMult = getMultiplier(true)
-            if newMult ~= lastMult then
-                lastMult = newMult
-                currentMultiplier = newMult
-                updateStatus("📊 X" .. newMult)
-                
-                if currentMultiplier >= minMultiplier and not hasSold and (tick() - lastSellTime > COOLDOWN) then
-                    updateStatus("🔥 SELLING!")
-                    sellAllWithJitter()
-                    updateStatus("✅ SOLD!")
-                end
-            end
-            lastRefreshTime = tick()
-        end
-        
-        if currentMultiplier < minMultiplier and hasSold and (tick() - lastSellTime > 5) then
-            hasSold = false
-        end
-        
-        task.wait(1)
-    end
-end
-
--- Start/Stop
 local function startMonitoring()
+    if isRunning then return end
     isRunning = true
-    hasSold = false
-    lastSellTime = 0
-    currentMultiplier = 0
-    lastRefreshTime = 0
     
-    updateStatus("🟢 Starting...")
-    task.spawn(monitoringLoop)
+    print("[AutoBuy] 👀 Passive monitoring aktif...")
+    
+    -- Hook GUI (sekali aja)
+    hookShopGUI()
+    
+    -- Hook backpack
+    hookBackpack()
+    
+    print("[AutoBuy] ✅ Menunggu notifikasi restock...")
 end
 
 local function stopMonitoring()
     isRunning = false
-    updateStatus("🔴 Stopped")
+    
+    -- Cleanup GUI hooks
+    for element, conn in pairs(guiConnections) do
+        conn:Disconnect()
+    end
+    guiConnections = {}
+    
+    -- Cleanup backpack hook
+    if backpackConnection then
+        backpackConnection:Disconnect()
+        backpackConnection = nil
+    end
+    
+    shopItems = {}
+    print("[AutoBuy] ⏹️  Stopped")
 end
 
-startBtn.MouseButton1Click:Connect(function()
-    startBtn.Visible = false
-    stopBtn.Visible = true
-    startMonitoring()
-end)
+-- ──────────────────────────────────────────────────────────────────────
+-- 9️⃣  GUI
+-- ──────────────────────────────────────────────────────────────────────
+local function createGUI()
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "AutoBuyGUI"
+    screenGui.Parent = playerGui
+    screenGui.ResetOnSpawn = false
+    
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 240, 0, 200)
+    mainFrame.Position = UDim2.new(1, -250, 0.5, -100)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.BackgroundTransparency = 0.1
+    mainFrame.Parent = screenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = mainFrame
+    
+    local titleBar = Instance.new("Frame")
+    titleBar.Size = UDim2.new(1, 0, 0, 35)
+    titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = mainFrame
+    
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 10)
+    titleCorner.Parent = titleBar
+    
+    local titleText = Instance.new("TextLabel")
+    titleText.Size = UDim2.new(1, -70, 1, 0)
+    titleText.Position = UDim2.new(0, 15, 0, 0)
+    titleText.Text = "🌿 AutoBuy Passive"
+    titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleText.Font = Enum.Font.GothamBold
+    titleText.TextSize = 14
+    titleText.TextXAlignment = Enum.TextXAlignment.Left
+    titleText.BackgroundTransparency = 1
+    titleText.Parent = titleBar
+    
+    local closeButton = Instance.new("TextButton")
+    closeButton.Size = UDim2.new(0, 30, 0, 30)
+    closeButton.Position = UDim2.new(1, -35, 0, 2)
+    closeButton.Text = "✕"
+    closeButton.TextColor3 = Color3.fromRGB(255, 100, 100)
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.TextSize = 18
+    closeButton.BackgroundTransparency = 1
+    closeButton.Parent = titleBar
+    
+    local minimizeButton = Instance.new("TextButton")
+    minimizeButton.Size = UDim2.new(0, 30, 0, 30)
+    minimizeButton.Position = UDim2.new(1, -65, 0, 2)
+    minimizeButton.Text = "─"
+    minimizeButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+    minimizeButton.Font = Enum.Font.GothamBold
+    minimizeButton.TextSize = 18
+    minimizeButton.BackgroundTransparency = 1
+    minimizeButton.Parent = titleBar
+    
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Size = UDim2.new(1, -20, 1, -80)
+    contentFrame.Position = UDim2.new(0, 10, 0, 45)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = mainFrame
+    
+    local statusText = Instance.new("TextLabel")
+    statusText.Name = "StatusText"
+    statusText.Size = UDim2.new(1, 0, 0, 25)
+    statusText.Text = "Status: ⏹️ OFF"
+    statusText.TextColor3 = Color3.fromRGB(255, 100, 100)
+    statusText.Font = Enum.Font.GothamSemibold
+    statusText.TextSize = 13
+    statusText.BackgroundTransparency = 1
+    statusText.TextXAlignment = Enum.TextXAlignment.Center
+    statusText.Parent = contentFrame
+    
+    local methodText = Instance.new("TextLabel")
+    methodText.Size = UDim2.new(1, 0, 0, 30)
+    methodText.Position = UDim2.new(0, 0, 0, 30)
+    methodText.Text = "Method: Event Hook (Safe)"
+    methodText.TextColor3 = Color3.fromRGB(100, 255, 100)
+    methodText.Font = Enum.Font.Gotham
+    methodText.TextSize = 11
+    methodText.BackgroundTransparency = 1
+    methodText.TextXAlignment = Enum.TextXAlignment.Center
+    methodText.Parent = contentFrame
+    
+    local infoText = Instance.new("TextLabel")
+    infoText.Size = UDim2.new(1, 0, 0, 40)
+    infoText.Position = UDim2.new(0, 0, 0, 60)
+    infoText.Text = "No scanning\nPassive detection via events"
+    infoText.TextColor3 = Color3.fromRGB(150, 150, 150)
+    infoText.Font = Enum.Font.Gotham
+    infoText.TextSize = 10
+    infoText.BackgroundTransparency = 1
+    infoText.TextXAlignment = Enum.TextXAlignment.Center
+    infoText.Parent = contentFrame
+    
+    local itemsText = Instance.new("TextLabel")
+    itemsText.Size = UDim2.new(1, 0, 0, 20)
+    itemsText.Position = UDim2.new(0, 0, 0, 105)
+    itemsText.Text = "Target: " .. #TARGET_ITEMS .. " items"
+    itemsText.TextColor3 = Color3.fromRGB(150, 150, 150)
+    itemsText.Font = Enum.Font.Gotham
+    itemsText.TextSize = 11
+    itemsText.BackgroundTransparency = 1
+    itemsText.TextXAlignment = Enum.TextXAlignment.Center
+    itemsText.Parent = contentFrame
+    
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Size = UDim2.new(1, 0, 0, 40)
+    toggleButton.Position = UDim2.new(0, 0, 0, 135)
+    toggleButton.Text = "▶ START"
+    toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleButton.Font = Enum.Font.GothamBold
+    toggleButton.TextSize = 14
+    toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+    toggleButton.BorderSizePixel = 0
+    toggleButton.Parent = contentFrame
+    
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 8)
+    buttonCorner.Parent = toggleButton
+    
+    local function updateUI()
+        if isRunning then
+            statusText.Text = "Status: 👀 LISTENING"
+            statusText.TextColor3 = Color3.fromRGB(100, 200, 255)
+            toggleButton.Text = "⏹ STOP"
+            toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        else
+            statusText.Text = "Status: ⏹️ OFF"
+            statusText.TextColor3 = Color3.fromRGB(255, 100, 100)
+            toggleButton.Text = "▶ START"
+            toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+        end
+    end
+    
+    toggleButton.MouseButton1Click:Connect(function()
+        if isRunning then
+            stopMonitoring()
+        else
+            startMonitoring()
+        end
+        updateUI()
+    end)
+    
+    -- Draggable
+    local dragging = false
+    local dragStart = nil
+    local frameStart = nil
+    
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            frameStart = mainFrame.Position
+        end
+    end)
+    
+    titleBar.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(
+                frameStart.X.Scale,
+                frameStart.X.Offset + delta.X,
+                frameStart.Y.Scale,
+                frameStart.Y.Offset + delta.Y
+            )
+        end
+    end)
+    
+    local isMinimized = false
+    minimizeButton.MouseButton1Click:Connect(function()
+        isMinimized = not isMinimized
+        contentFrame.Visible = not isMinimized
+        mainFrame.Size = isMinimized and UDim2.new(0, 240, 0, 35) or UDim2.new(0, 240, 0, 215)
+        minimizeButton.Text = isMinimized and "□" or "─"
+    end)
+    
+    closeButton.MouseButton1Click:Connect(function()
+        stopMonitoring()
+        screenGui:Destroy()
+    end)
+    
+    updateUI()
+    print("[AutoBuy] 🖥️  GUI Loaded")
+end
 
-stopBtn.MouseButton1Click:Connect(function()
-    stopBtn.Visible = false
-    startBtn.Visible = true
-    stopMonitoring()
-end)
-
--- Debug
-print("✅ Auto Sell GUI v4 Loaded!")
-print("🍎 Buah tersedia: " .. #FRUIT_LIST)
-print("📋 " .. table.concat(FRUIT_LIST, ", "))
+-- ──────────────────────────────────────────────────────────────────────
+-- 🔟 Start
+-- ──────────────────────────────────────────────────────────────────────
+createGUI()
+print("[AutoBuy] 🚀 Passive AutoBuy Loaded | Opcode:", OPCODE)
+print("[AutoBuy] 🛡️  Safe mode: No active scanning, only event hooks")
