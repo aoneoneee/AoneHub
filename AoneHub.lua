@@ -53,6 +53,7 @@ local TARGET_ITEMS = {
     "Dragon's Breath",
     "Sun Bloom",
     "Star Fruit",
+    "Carrot"
 }
 
 -- ──────────────────────────────────────────────────────────────────────
