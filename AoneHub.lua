@@ -4,6 +4,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -29,16 +30,22 @@ local function countItem(itemName)
 end
 
 local function autoDetectOpcode()
+    print("[AutoBuy] 🔍 Deteksi opcode...")
     local countBefore = countItem("Carrot")
-    for _, testOpcode in ipairs({133, 131, 130, 132, 134}) do
+    
+    for _, testOpcode in ipairs({133, 131, 130, 132, 134, 135}) do
         local packetStr = string.char(testOpcode, 0, 6) .. "Carrot"
-        pcall(function() packetRemote:FireServer(buffer.fromstring(packetStr)) end)
-        task.wait(1)
+        pcall(function() 
+            packetRemote:FireServer(buffer.fromstring(packetStr)) 
+        end)
+        task.wait(1.5)
+        
         if countItem("Carrot") > countBefore then
             print("[AutoBuy] ✅ Opcode:", testOpcode)
             return testOpcode
         end
     end
+    
     warn("[AutoBuy] ⚠️  Fallback 133")
     return 133
 end
@@ -46,7 +53,7 @@ end
 local OPCODE = autoDetectOpcode()
 
 -- ──────────────────────────────────────────────────────────────────────
--- 3️⃣  Target items
+-- 3️⃣  Config
 -- ──────────────────────────────────────────────────────────────────────
 local TARGET_ITEMS = {
     "Hypno Bloom",
@@ -55,6 +62,10 @@ local TARGET_ITEMS = {
     "Star Fruit",
     "Bamboo"
 }
+
+local SCAN_INTERVAL = 3        -- Scan tiap 3 detik (lebih aman dari 0.5s)
+local BUY_COOLDOWN = 5         -- Jeda minimal beli item sama
+local RANDOM_OFFSET = 1.5      -- Tambahan acak biar natural
 
 -- ──────────────────────────────────────────────────────────────────────
 -- 4️⃣  Build packet
@@ -66,171 +77,197 @@ end
 -- ──────────────────────────────────────────────────────────────────────
 -- 5️⃣  Buy function
 -- ──────────────────────────────────────────────────────────────────────
+local buyStats = {total = 0, success = 0, failed = 0}
+
 local function buyItem(itemName)
     local packet = buildPacket(itemName)
     local success, err = pcall(function()
         packetRemote:FireServer(packet)
     end)
+    
+    buyStats.total += 1
+    if success then
+        buyStats.success += 1
+        print("[AutoBuy] ✅", itemName, "| Total:", buyStats.success)
+    else
+        buyStats.failed += 1
+        warn("[AutoBuy] ❌", itemName, "|", err)
+    end
+    
     return success, err
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 6️⃣  AMAN: Hook OnClientEvent untuk deteksi restock
+-- 6️⃣  Shop detection - Cari item di GUI (NATURAL SCAN)
 -- ──────────────────────────────────────────────────────────────────────
 local shopItems = {}
 local buyHistory = {}
-local BUY_COOLDOWN = 2
+local shopElements = {}  -- Cache GUI elements
 
--- Cara 1: Listen server response (PALING AMAN - gak scan GUI)
-packetRemote.OnClientEvent:Connect(function(response)
-    -- Coba parse response sebagai data shop/restock
-    if typeof(response) == "buffer" then
-        -- Coba baca sebagai string
-        local str = ""
-        for i = 0, buffer.len(response) - 1 do
-            local byte = buffer.readu8(response, i)
-            if byte >= 32 and byte <= 126 then
-                str = str .. string.char(byte)
-            end
-        end
-        
-        -- Cek apakah response mengandung nama item target
-        for _, itemName in ipairs(TARGET_ITEMS) do
-            if str:find(itemName) then
-                print("[AutoBuy] 🛒 Restock terdeteksi via server:", itemName)
-                onItemAvailable(itemName)
-                break
-            end
-        end
-    elseif typeof(response) == "table" then
-        -- Response table (mungkin data shop)
-        for _, itemName in ipairs(TARGET_ITEMS) do
-            if response[itemName] or (response.Name and response.Name == itemName) then
-                print("[AutoBuy] 🛒 Restock terdeteksi via table:", itemName)
-                onItemAvailable(itemName)
-                break
-            end
-        end
-    end
-end)
-
--- Cara 2: Hook GUI updates (lebih aman daripada scan)
-local guiConnections = {}
-
-local function hookShopGUI()
-    -- Cari TextLabel yang mungkin menampilkan nama item
+-- Deteksi & cache shop elements (sekali aja, gak loop)
+local function cacheShopElements()
+    if next(shopElements) then return end  -- Udah di-cache
+    
+    print("[AutoBuy] 🔍 Mencari shop elements...")
+    
     for _, gui in ipairs(playerGui:GetChildren()) do
         if gui:IsA("ScreenGui") then
             for _, element in ipairs(gui:GetDescendants()) do
                 if element:IsA("TextLabel") or element:IsA("TextButton") then
-                    local text = element.Text
-                    
-                    -- Cek apakah mengandung nama item target
                     for _, itemName in ipairs(TARGET_ITEMS) do
-                        if text:find(itemName) and not guiConnections[element] then
-                            -- Hook perubahan text
-                            local conn = element:GetPropertyChangedSignal("Text"):Connect(function()
-                                local newText = element.Text
-                                if newText:find(itemName) then
-                                    -- Cek apakah text berubah jadi available
-                                    local oldText = shopItems[itemName] and shopItems[itemName].text or ""
-                                    if newText ~= oldText and not newText:lower():find("sold") then
-                                        print("[AutoBuy] 🛒 GUI update:", itemName)
-                                        shopItems[itemName] = {text = newText, time = tick()}
-                                        onItemAvailable(itemName)
-                                    end
-                                end
-                            end)
-                            guiConnections[element] = conn
+                        if element.Text:find(itemName) and not shopElements[itemName] then
+                            shopElements[itemName] = element
+                            print("[AutoBuy] 📍 Ditemukan:", itemName, "di", element:GetFullName())
                         end
                     end
                 end
             end
         end
     end
+    
+    print("[AutoBuy] 📋 Cached:", #table.getn or #table.keys(shopElements), "elements")
 end
 
--- Cara 3: Hook backpack changes (deteksi item baru)
-local backpackConnection
-local function hookBackpack()
-    local backpack = player:FindFirstChild("Backpack")
-    if not backpack then return end
+-- Scan item availability (ringan - cuma baca text dari cached elements)
+local function checkItemAvailability(itemName)
+    local element = shopElements[itemName]
+    if not element then return false end
     
-    backpackConnection = backpack.ChildAdded:Connect(function(child)
-        -- Kalau item target masuk backpack, berarti berhasil beli
-        for _, itemName in ipairs(TARGET_ITEMS) do
-            if child.Name == itemName then
-                print("[AutoBuy] ✅", itemName, "masuk backpack!")
-                buyHistory[itemName] = tick()
+    -- Baca text element
+    local text = ""
+    pcall(function() text = element.Text end)
+    
+    if not text or text == "" then return false end
+    
+    -- Cek indikator sold out
+    local lowerText = text:lower()
+    if lowerText:find("sold") or lowerText:find("out") or lowerText:find("empty") then
+        return false
+    end
+    
+    -- Cek warna text (kalau abu-abu biasanya sold out)
+    local color = nil
+    pcall(function() color = element.TextColor3 end)
+    if color and color.r < 0.4 and color.g < 0.4 and color.b < 0.4 then
+        return false
+    end
+    
+    -- Cek parent visible
+    local parent = element.Parent
+    while parent do
+        if parent:IsA("GuiObject") and not parent.Visible then
+            return false
+        end
+        parent = parent.Parent
+    end
+    
+    return true
+end
+
+-- Scan semua item (dipanggil tiap SCAN_INTERVAL)
+local function scanAllItems()
+    -- Update cache kalau belum
+    cacheShopElements()
+    
+    local availableItems = {}
+    
+    for _, itemName in ipairs(TARGET_ITEMS) do
+        local isAvailable = checkItemAvailability(itemName)
+        
+        if isAvailable then
+            table.insert(availableItems, itemName)
+            
+            if not shopItems[itemName] then
+                -- Baru tersedia = RESTOCK!
+                print("[AutoBuy] 🛒 RESTOCK:", itemName)
             end
-        end
-    end)
-end
-
--- ──────────────────────────────────────────────────────────────────────
--- 7️⃣  Logic: Beli saat item tersedia
--- ──────────────────────────────────────────────────────────────────────
-local function onItemAvailable(itemName)
-    local now = tick()
-    local lastBuy = buyHistory[itemName] or 0
-    
-    -- Cek cooldown
-    if now - lastBuy < BUY_COOLDOWN then return end
-    
-    -- Cek apakah masih di cooldown global (hindari burst)
-    if onItemAvailable._globalCooldown and now - onItemAvailable._globalCooldown < 0.5 then return end
-    onItemAvailable._globalCooldown = now
-    
-    print("[AutoBuy] 🎯 Beli:", itemName)
-    
-    task.delay(math.random() * 0.5, function()  -- Jitter kecil
-        local success, err = buyItem(itemName)
-        if success then
-            buyHistory[itemName] = now
-            print("[AutoBuy] ✅ Berhasil:", itemName)
+            
+            shopItems[itemName] = tick()
         else
-            warn("[AutoBuy] ❌ Gagal:", itemName, err)
+            if shopItems[itemName] then
+                print("[AutoBuy] 🚫 SOLD OUT:", itemName)
+            end
+            shopItems[itemName] = nil
         end
-    end)
+    end
+    
+    return availableItems
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 8️⃣  State
+-- 7️⃣  Smart buy - Beli item yang tersedia dengan cooldown
+-- ──────────────────────────────────────────────────────────────────────
+local function processAvailableItems()
+    local available = scanAllItems()
+    
+    if #available == 0 then return end
+    
+    -- Pilih item yang belum di-cooldown
+    local now = tick()
+    local buyTargets = {}
+    
+    for _, itemName in ipairs(available) do
+        local lastBuy = buyHistory[itemName] or 0
+        if now - lastBuy >= BUY_COOLDOWN then
+            table.insert(buyTargets, itemName)
+        end
+    end
+    
+    -- Beli item (max 1 per scan biar gak spam)
+    if #buyTargets > 0 then
+        -- Pilih random biar natural
+        local target = buyTargets[math.random(1, #buyTargets)]
+        
+        print("[AutoBuy] 🎯 Membeli:", target)
+        local success = buyItem(target)
+        
+        if success then
+            buyHistory[target] = now
+            print("[AutoBuy] ✅ Berhasil:", target)
+        end
+    end
+end
+
+-- ──────────────────────────────────────────────────────────────────────
+-- 8️⃣  State & Loop
 -- ──────────────────────────────────────────────────────────────────────
 local isRunning = false
+local scanTask = nil
+
+local function scanLoop()
+    while isRunning do
+        pcall(processAvailableItems)
+        
+        -- Jitter biar gak ketahuan pattern
+        local delay = SCAN_INTERVAL + (math.random() - 0.5) * RANDOM_OFFSET
+        task.wait(delay)
+    end
+end
 
 local function startMonitoring()
     if isRunning then return end
     isRunning = true
     
-    print("[AutoBuy] 👀 Passive monitoring aktif...")
+    print("[AutoBuy] ▶️  Monitoring dimulai | Interval:", SCAN_INTERVAL, "s")
     
-    -- Hook GUI (sekali aja)
-    hookShopGUI()
+    -- Cache shop elements dulu
+    cacheShopElements()
     
-    -- Hook backpack
-    hookBackpack()
-    
-    print("[AutoBuy] ✅ Menunggu notifikasi restock...")
+    -- Mulai scan loop
+    scanTask = task.spawn(scanLoop)
 end
 
 local function stopMonitoring()
+    if not isRunning then return end
     isRunning = false
     
-    -- Cleanup GUI hooks
-    for element, conn in pairs(guiConnections) do
-        conn:Disconnect()
-    end
-    guiConnections = {}
-    
-    -- Cleanup backpack hook
-    if backpackConnection then
-        backpackConnection:Disconnect()
-        backpackConnection = nil
+    if scanTask then
+        task.cancel(scanTask)
+        scanTask = nil
     end
     
     shopItems = {}
-    print("[AutoBuy] ⏹️  Stopped")
+    print("[AutoBuy] ⏹️  Stopped | Stats:", buyStats)
 end
 
 -- ──────────────────────────────────────────────────────────────────────
@@ -243,8 +280,8 @@ local function createGUI()
     screenGui.ResetOnSpawn = false
     
     local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 240, 0, 200)
-    mainFrame.Position = UDim2.new(1, -250, 0.5, -100)
+    mainFrame.Size = UDim2.new(0, 240, 0, 260)
+    mainFrame.Position = UDim2.new(1, -250, 0.5, -130)
     mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     mainFrame.BorderSizePixel = 0
     mainFrame.BackgroundTransparency = 0.1
@@ -254,6 +291,7 @@ local function createGUI()
     corner.CornerRadius = UDim.new(0, 10)
     corner.Parent = mainFrame
     
+    -- Title Bar
     local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1, 0, 0, 35)
     titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
@@ -267,7 +305,7 @@ local function createGUI()
     local titleText = Instance.new("TextLabel")
     titleText.Size = UDim2.new(1, -70, 1, 0)
     titleText.Position = UDim2.new(0, 15, 0, 0)
-    titleText.Text = "🌿 AutoBuy Passive"
+    titleText.Text = "🌿 AutoBuy Restock"
     titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
     titleText.Font = Enum.Font.GothamBold
     titleText.TextSize = 14
@@ -295,6 +333,7 @@ local function createGUI()
     minimizeButton.BackgroundTransparency = 1
     minimizeButton.Parent = titleBar
     
+    -- Content
     local contentFrame = Instance.new("Frame")
     contentFrame.Size = UDim2.new(1, -20, 1, -80)
     contentFrame.Position = UDim2.new(0, 10, 0, 45)
@@ -312,42 +351,74 @@ local function createGUI()
     statusText.TextXAlignment = Enum.TextXAlignment.Center
     statusText.Parent = contentFrame
     
-    local methodText = Instance.new("TextLabel")
-    methodText.Size = UDim2.new(1, 0, 0, 30)
-    methodText.Position = UDim2.new(0, 0, 0, 30)
-    methodText.Text = "Method: Event Hook (Safe)"
-    methodText.TextColor3 = Color3.fromRGB(100, 255, 100)
-    methodText.Font = Enum.Font.Gotham
-    methodText.TextSize = 11
-    methodText.BackgroundTransparency = 1
-    methodText.TextXAlignment = Enum.TextXAlignment.Center
-    methodText.Parent = contentFrame
+    local opcodeText = Instance.new("TextLabel")
+    opcodeText.Size = UDim2.new(1, 0, 0, 20)
+    opcodeText.Position = UDim2.new(0, 0, 0, 28)
+    opcodeText.Text = "Opcode: " .. OPCODE .. " | Scan: " .. SCAN_INTERVAL .. "s"
+    opcodeText.TextColor3 = Color3.fromRGB(150, 150, 150)
+    opcodeText.Font = Enum.Font.Gotham
+    opcodeText.TextSize = 10
+    opcodeText.BackgroundTransparency = 1
+    opcodeText.TextXAlignment = Enum.TextXAlignment.Center
+    opcodeText.Parent = contentFrame
     
-    local infoText = Instance.new("TextLabel")
-    infoText.Size = UDim2.new(1, 0, 0, 40)
-    infoText.Position = UDim2.new(0, 0, 0, 60)
-    infoText.Text = "No scanning\nPassive detection via events"
-    infoText.TextColor3 = Color3.fromRGB(150, 150, 150)
-    infoText.Font = Enum.Font.Gotham
-    infoText.TextSize = 10
-    infoText.BackgroundTransparency = 1
-    infoText.TextXAlignment = Enum.TextXAlignment.Center
-    infoText.Parent = contentFrame
+    -- Item List
+    local itemListLabel = Instance.new("TextLabel")
+    itemListLabel.Size = UDim2.new(1, 0, 0, 20)
+    itemListLabel.Position = UDim2.new(0, 0, 0, 50)
+    itemListLabel.Text = "📋 Items:"
+    itemListLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    itemListLabel.Font = Enum.Font.GothamSemibold
+    itemListLabel.TextSize = 11
+    itemListLabel.BackgroundTransparency = 1
+    itemListLabel.TextXAlignment = Enum.TextXAlignment.Left
+    itemListLabel.Parent = contentFrame
     
-    local itemsText = Instance.new("TextLabel")
-    itemsText.Size = UDim2.new(1, 0, 0, 20)
-    itemsText.Position = UDim2.new(0, 0, 0, 105)
-    itemsText.Text = "Target: " .. #TARGET_ITEMS .. " items"
-    itemsText.TextColor3 = Color3.fromRGB(150, 150, 150)
-    itemsText.Font = Enum.Font.Gotham
-    itemsText.TextSize = 11
-    itemsText.BackgroundTransparency = 1
-    itemsText.TextXAlignment = Enum.TextXAlignment.Center
-    itemsText.Parent = contentFrame
+    local itemList = Instance.new("ScrollingFrame")
+    itemList.Size = UDim2.new(1, 0, 0, 90)
+    itemList.Position = UDim2.new(0, 0, 0, 70)
+    itemList.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    itemList.BorderSizePixel = 0
+    itemList.CanvasSize = UDim2.new(0, 0, 0, #TARGET_ITEMS * 22)
+    itemList.ScrollBarThickness = 4
+    itemList.Parent = contentFrame
     
+    local listCorner = Instance.new("UICorner")
+    listCorner.CornerRadius = UDim.new(0, 5)
+    listCorner.Parent = itemList
+    
+    local itemLabels = {}
+    for i, itemName in ipairs(TARGET_ITEMS) do
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, -10, 0, 20)
+        label.Position = UDim2.new(0, 5, 0, (i-1) * 22)
+        label.Text = "⏳ " .. itemName
+        label.TextColor3 = Color3.fromRGB(200, 200, 200)
+        label.Font = Enum.Font.Gotham
+        label.TextSize = 11
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.BackgroundTransparency = 1
+        label.Parent = itemList
+        itemLabels[itemName] = label
+    end
+    
+    -- Stats
+    local statsText = Instance.new("TextLabel")
+    statsText.Name = "StatsText"
+    statsText.Size = UDim2.new(1, 0, 0, 25)
+    statsText.Position = UDim2.new(0, 0, 0, 165)
+    statsText.Text = "✅ 0 | ❌ 0 | 🔄 0"
+    statsText.TextColor3 = Color3.fromRGB(150, 150, 150)
+    statsText.Font = Enum.Font.Gotham
+    statsText.TextSize = 11
+    statsText.BackgroundTransparency = 1
+    statsText.TextXAlignment = Enum.TextXAlignment.Center
+    statsText.Parent = contentFrame
+    
+    -- Toggle Button
     local toggleButton = Instance.new("TextButton")
     toggleButton.Size = UDim2.new(1, 0, 0, 40)
-    toggleButton.Position = UDim2.new(0, 0, 0, 135)
+    toggleButton.Position = UDim2.new(0, 0, 0, 195)
     toggleButton.Text = "▶ START"
     toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     toggleButton.Font = Enum.Font.GothamBold
@@ -360,9 +431,10 @@ local function createGUI()
     buttonCorner.CornerRadius = UDim.new(0, 8)
     buttonCorner.Parent = toggleButton
     
+    -- Update UI
     local function updateUI()
         if isRunning then
-            statusText.Text = "Status: 👀 LISTENING"
+            statusText.Text = "Status: 👀 MONITORING"
             statusText.TextColor3 = Color3.fromRGB(100, 200, 255)
             toggleButton.Text = "⏹ STOP"
             toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
@@ -372,7 +444,29 @@ local function createGUI()
             toggleButton.Text = "▶ START"
             toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
         end
+        
+        -- Update item status
+        for itemName, label in pairs(itemLabels) do
+            if shopItems[itemName] then
+                label.Text = "🟢 " .. itemName
+                label.TextColor3 = Color3.fromRGB(100, 255, 100)
+            else
+                label.Text = "🔴 " .. itemName
+                label.TextColor3 = Color3.fromRGB(255, 100, 100)
+            end
+        end
+        
+        statsText.Text = string.format("✅ %d | ❌ %d | 🔄 %d", 
+            buyStats.success, buyStats.failed, buyStats.total)
     end
+    
+    -- Periodic UI refresh
+    task.spawn(function()
+        while screenGui.Parent do
+            task.wait(1)
+            pcall(updateUI)
+        end
+    end)
     
     toggleButton.MouseButton1Click:Connect(function()
         if isRunning then
@@ -418,7 +512,7 @@ local function createGUI()
     minimizeButton.MouseButton1Click:Connect(function()
         isMinimized = not isMinimized
         contentFrame.Visible = not isMinimized
-        mainFrame.Size = isMinimized and UDim2.new(0, 240, 0, 35) or UDim2.new(0, 240, 0, 215)
+        mainFrame.Size = isMinimized and UDim2.new(0, 240, 0, 35) or UDim2.new(0, 240, 0, 270)
         minimizeButton.Text = isMinimized and "□" or "─"
     end)
     
@@ -435,5 +529,5 @@ end
 -- 🔟 Start
 -- ──────────────────────────────────────────────────────────────────────
 createGUI()
-print("[AutoBuy] 🚀 Passive AutoBuy Loaded | Opcode:", OPCODE)
-print("[AutoBuy] 🛡️  Safe mode: No active scanning, only event hook")
+print("[AutoBuy] 🚀 Ready | Opcode:", OPCODE, "| Scan:", SCAN_INTERVAL, "s")
+print("[AutoBuy] 💡 Scan interval", SCAN_INTERVAL, "detik - aman & efektif")
