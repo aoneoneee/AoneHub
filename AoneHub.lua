@@ -64,11 +64,11 @@ local TARGET_ITEMS = {
     "Bamboo"
 }
 
-local RESTOCK_INTERVAL = 300  -- 5 menit
-local JITTER_MIN = 3          -- Jitter minimal setelah restock
-local JITTER_MAX = 5          -- Jitter maksimal setelah restock
-local BUY_JITTER_MIN = 0.3    -- Jitter minimal antar pembelian
-local BUY_JITTER_MAX = 2.8    -- Jitter maksimal antar pembelian
+local RESTOCK_INTERVAL = 300
+local JITTER_MIN = 3
+local JITTER_MAX = 5
+local BUY_JITTER_MIN = 0.3
+local BUY_JITTER_MAX = 2.8
 
 -- ──────────────────────────────────────────────────────────────────────
 -- 4️⃣  Build packet
@@ -99,21 +99,19 @@ local function buyItem(itemName)
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 6️⃣  Shop Detection
+-- 6️⃣  Shop Detection - REFRESH SETIAP SCAN
 -- ──────────────────────────────────────────────────────────────────────
-local shopElements = {}
-
-local function cacheShopElements()
-    if next(shopElements) then return end
+local function getShopElements()
+    local elements = {}
     
     local seedShop = playerGui:FindFirstChild("SeedShop")
-    if not seedShop then return end
+    if not seedShop then return elements end
     
     local frame = seedShop:FindFirstChild("Frame")
-    if not frame then return end
+    if not frame then return elements end
     
     local normalShop = frame:FindFirstChild("NormalShop")
-    if not normalShop then return end
+    if not normalShop then return elements end
     
     for _, itemContainer in ipairs(normalShop:GetChildren()) do
         local itemName = itemContainer.Name
@@ -124,10 +122,7 @@ local function cacheShopElements()
                 if mainFrame then
                     local costText = mainFrame:FindFirstChild("Cost_Text")
                     if costText then
-                        shopElements[itemName] = {
-                            container = itemContainer,
-                            costText = costText
-                        }
+                        elements[itemName] = costText  -- Simpan langsung Cost_Text
                     end
                 end
             end
@@ -135,20 +130,28 @@ local function cacheShopElements()
     end
     
     local count = 0
-    for _ in pairs(shopElements) do count += 1 end
-    print("[AutoBuy] 📋 Shop cached:", count, "items")
+    for _ in pairs(elements) do count += 1 end
+    return elements, count
 end
 
-local function isItemAvailable(itemName)
-    local elements = shopElements[itemName]
-    if not elements then return false end
-    if not elements.container.Visible then return false end
+local function isItemAvailable(itemName, shopElements)
+    local costText = shopElements[itemName]
+    if not costText then return false end
+    
+    -- Cek parent container visible
+    local container = costText.Parent
+    while container do
+        if container:IsA("GuiObject") and not container.Visible then
+            return false
+        end
+        container = container.Parent
+    end
     
     local text = ""
-    pcall(function() text = elements.costText.Text end)
+    pcall(function() text = costText.Text end)
     
-    if text:upper():find("NO STOCK") then return false end
     if text == "" then return false end
+    if text:upper():find("NO STOCK") then return false end
     
     return true
 end
@@ -180,27 +183,26 @@ local function getSecondsUntilNextRestock()
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 8️⃣  BELI SEMUA SAMPAI HABIS dengan jitter
+-- 8️⃣  BELI SEMUA SAMPAI HABIS
 -- ──────────────────────────────────────────────────────────────────────
-local function buyAllAvailable()
+local function buyAllAvailable(shopElements)
     local totalBought = 0
     local boughtItems = {}
+    local maxLoops = 100  -- Safety limit
     
-    -- Loop sampai semua item habis
-    while true do
+    for _ = 1, maxLoops do
         local foundAny = false
         
-        -- Cek setiap item target
         for _, itemName in ipairs(TARGET_ITEMS) do
-            if isItemAvailable(itemName) then
+            if isItemAvailable(itemName, shopElements) then
                 foundAny = true
                 
                 -- Jitter sebelum beli
                 local buyJitter = BUY_JITTER_MIN + math.random() * (BUY_JITTER_MAX - BUY_JITTER_MIN)
                 task.wait(buyJitter)
                 
-                -- Cek ulang sebelum beli (siapa tau udah keburu habis)
-                if isItemAvailable(itemName) then
+                -- Cek ulang (pakai shopElements yang sama)
+                if isItemAvailable(itemName, shopElements) then
                     print("[AutoBuy] 🛒 Membeli:", itemName)
                     local success = buyItem(itemName)
                     
@@ -215,10 +217,7 @@ local function buyAllAvailable()
             end
         end
         
-        -- Kalau gak ada item tersedia, berhenti
-        if not foundAny then
-            break
-        end
+        if not foundAny then break end
     end
     
     -- Summary
@@ -245,20 +244,23 @@ local scanCount = 0
 local function scanAndBuyAll()
     scanCount += 1
     local now = os.date("%H:%M:%S")
-    print("\n" .. "=":rep(50))
+    print("\n" .. string.rep("=", 50))
     print("[AutoBuy] 🔍 Scan #" .. scanCount .. " | " .. now)
-    print("=":rep(50))
+    print(string.rep("=", 50))
     
-    cacheShopElements()
+    -- FRESH scan setiap kali (biar gak stale)
+    local shopElements, count = getShopElements()
     
-    if next(shopElements) == nil then
-        print("[AutoBuy] ⚠️  Shop belum terdeteksi")
+    if count == 0 then
+        print("[AutoBuy] ⚠️  Shop tidak terdeteksi")
         return
     end
     
+    print("[AutoBuy] 📋 Item terdeteksi:", count)
+    
     -- Update status
     for _, itemName in ipairs(TARGET_ITEMS) do
-        local available = isItemAvailable(itemName)
+        local available = isItemAvailable(itemName, shopElements)
         local newStatus = available and "stock" or "nostock"
         local oldStatus = itemStatus[itemName] or "unknown"
         
@@ -271,9 +273,9 @@ local function scanAndBuyAll()
         itemStatus[itemName] = newStatus
     end
     
-    -- BELI SEMUA SAMPAI HABIS
+    -- BELI SEMUA
     print("[AutoBuy] 🎯 Mulai membeli semua yang tersedia...")
-    local bought = buyAllAvailable()
+    local bought = buyAllAvailable(shopElements)
     print("[AutoBuy] ✅ Scan selesai - Dibeli:", bought, "items")
 end
 
@@ -307,9 +309,7 @@ local function startMonitoring()
     print("[AutoBuy] 🛒 Jitter beli:", BUY_JITTER_MIN .. "-" .. BUY_JITTER_MAX, "s")
     print("[AutoBuy] 🔄 Akan beli semua item sampai NO STOCK")
     
-    cacheShopElements()
-    
-    -- 🔥 LANGSUNG SCAN & BELI SEMUA
+    -- 🔥 LANGSUNG SCAN
     print("\n[AutoBuy] 🔥 Initial scan & buy all...")
     pcall(scanAndBuyAll)
     
@@ -324,7 +324,7 @@ local function stopMonitoring()
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 🔟 GUI
+-- 🔟 GUI (sama seperti sebelumnya)
 -- ──────────────────────────────────────────────────────────────────────
 local function createGUI()
     local screenGui = Instance.new("ScreenGui")
@@ -333,8 +333,8 @@ local function createGUI()
     screenGui.ResetOnSpawn = false
     
     local mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0, 250, 0, 330)
-    mainFrame.Position = UDim2.new(1, -260, 0.5, -165)
+    mainFrame.Size = UDim2.new(0, 250, 0, 340)
+    mainFrame.Position = UDim2.new(1, -260, 0.5, -170)
     mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
     mainFrame.BorderSizePixel = 0
     mainFrame.BackgroundTransparency = 0.1
@@ -344,7 +344,6 @@ local function createGUI()
     corner.CornerRadius = UDim.new(0, 10)
     corner.Parent = mainFrame
     
-    -- Title Bar
     local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1, 0, 0, 35)
     titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
@@ -386,14 +385,12 @@ local function createGUI()
     minimizeButton.BackgroundTransparency = 1
     minimizeButton.Parent = titleBar
     
-    -- Content
     local contentFrame = Instance.new("Frame")
     contentFrame.Size = UDim2.new(1, -20, 1, -80)
     contentFrame.Position = UDim2.new(0, 10, 0, 45)
     contentFrame.BackgroundTransparency = 1
     contentFrame.Parent = mainFrame
     
-    -- Status
     local statusText = Instance.new("TextLabel")
     statusText.Name = "StatusText"
     statusText.Size = UDim2.new(1, 0, 0, 22)
@@ -405,7 +402,6 @@ local function createGUI()
     statusText.TextXAlignment = Enum.TextXAlignment.Center
     statusText.Parent = contentFrame
     
-    -- Timer
     local timerText = Instance.new("TextLabel")
     timerText.Name = "TimerText"
     timerText.Size = UDim2.new(1, 0, 0, 30)
@@ -418,7 +414,6 @@ local function createGUI()
     timerText.TextXAlignment = Enum.TextXAlignment.Center
     timerText.Parent = contentFrame
     
-    -- Countdown
     local countdownText = Instance.new("TextLabel")
     countdownText.Name = "CountdownText"
     countdownText.Size = UDim2.new(1, 0, 0, 18)
@@ -431,7 +426,6 @@ local function createGUI()
     countdownText.TextXAlignment = Enum.TextXAlignment.Center
     countdownText.Parent = contentFrame
     
-    -- Mode info
     local modeText = Instance.new("TextLabel")
     modeText.Size = UDim2.new(1, 0, 0, 18)
     modeText.Position = UDim2.new(0, 0, 0, 72)
@@ -443,9 +437,8 @@ local function createGUI()
     modeText.TextXAlignment = Enum.TextXAlignment.Center
     modeText.Parent = contentFrame
     
-    -- Item List
     local itemList = Instance.new("ScrollingFrame")
-    itemList.Size = UDim2.new(1, 0, 0, 90)
+    itemList.Size = UDim2.new(1, 0, 0, 100)
     itemList.Position = UDim2.new(0, 0, 0, 92)
     itemList.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
     itemList.BorderSizePixel = 0
@@ -472,11 +465,10 @@ local function createGUI()
         itemLabels[itemName] = label
     end
     
-    -- Stats
     local statsText = Instance.new("TextLabel")
     statsText.Name = "StatsText"
     statsText.Size = UDim2.new(1, 0, 0, 25)
-    statsText.Position = UDim2.new(0, 0, 0, 187)
+    statsText.Position = UDim2.new(0, 0, 0, 197)
     statsText.Text = "✅ 0 | ❌ 0 | 🔄 0"
     statsText.TextColor3 = Color3.fromRGB(150, 150, 150)
     statsText.Font = Enum.Font.Gotham
@@ -485,10 +477,9 @@ local function createGUI()
     statsText.TextXAlignment = Enum.TextXAlignment.Center
     statsText.Parent = contentFrame
     
-    -- Toggle Button
     local toggleButton = Instance.new("TextButton")
     toggleButton.Size = UDim2.new(1, 0, 0, 40)
-    toggleButton.Position = UDim2.new(0, 0, 0, 217)
+    toggleButton.Position = UDim2.new(0, 0, 0, 227)
     toggleButton.Text = "▶ START"
     toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     toggleButton.Font = Enum.Font.GothamBold
@@ -501,7 +492,6 @@ local function createGUI()
     buttonCorner.CornerRadius = UDim.new(0, 8)
     buttonCorner.Parent = toggleButton
     
-    -- Update UI
     local function updateUI()
         if isRunning then
             statusText.Text = "Status: ⏰ MENUNGGU RESTOCK"
@@ -548,7 +538,6 @@ local function createGUI()
             buyStats.success, buyStats.failed, scanCount)
     end
     
-    -- Periodic UI refresh
     task.spawn(function()
         while screenGui.Parent do
             task.wait(0.5)
@@ -567,8 +556,7 @@ local function createGUI()
     
     -- Draggable
     local dragging = false
-    local dragStart = nil
-    local frameStart = nil
+    local dragStart, frameStart
     
     titleBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -600,7 +588,7 @@ local function createGUI()
     minimizeButton.MouseButton1Click:Connect(function()
         isMinimized = not isMinimized
         contentFrame.Visible = not isMinimized
-        mainFrame.Size = isMinimized and UDim2.new(0, 250, 0, 35) or UDim2.new(0, 250, 0, 335)
+        mainFrame.Size = isMinimized and UDim2.new(0, 250, 0, 35) or UDim2.new(0, 250, 0, 345)
         minimizeButton.Text = isMinimized and "□" or "─"
     end)
     
@@ -614,9 +602,7 @@ local function createGUI()
 end
 
 -- ──────────────────────────────────────────────────────────────────────
--- 🔟 Start
+-- START
 -- ──────────────────────────────────────────────────────────────────────
 createGUI()
-print("[AutoBuy] 🚀 Buy ALL Mode Ready")
-print("[AutoBuy] ⏰ Scan setiap 5 menit | Jitter:", JITTER_MIN .. "-" .. JITTER_MAX, "s")
-print("[AutoBuy] 🛒 Beli semua item sampai NO STOCK | Jitter beli:", BUY_JITTER_MIN .. "-" .. BUY_JITTER_MAX, "s")
+print("[AutoBuy] 🚀 Buy ALL Mode Ready | Opcode:", OPCODE)
