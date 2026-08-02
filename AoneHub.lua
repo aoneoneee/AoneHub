@@ -32,7 +32,7 @@ local function autoDetectOpcode()
     print("[AutoBuy] 🔍 Deteksi opcode...")
     local countBefore = countItem("Carrot")
     
-    for _, testOpcode in ipairs({133, 131, 136, 132, 134, 135}) do
+    for _, testOpcode in ipairs({158, 159, 160, 161, 162, 163, 164, 165, 166, 167}) do
         local packetStr = string.char(testOpcode, 0, 6) .. "Carrot"
         pcall(function() 
             packetRemote:FireServer(buffer.fromstring(packetStr)) 
@@ -45,8 +45,8 @@ local function autoDetectOpcode()
         end
     end
     
-    warn("[AutoBuy] ⚠️  Fallback 133")
-    return 133
+    warn("[AutoBuy] ⚠️  Fallback 159")
+    return 159
 end
 
 local OPCODE = autoDetectOpcode()
