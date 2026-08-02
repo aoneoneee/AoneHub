@@ -1,116 +1,105 @@
--- AUTO MAIL & CLAIM - FINAL WORKING
--- Format buffer TERBUKTI berhasil
+-- AUTO MAIL + AUTO CLAIM - GABUNGAN FINAL
+-- Pakai remote & buffer TERBUKTI BERHASIL
+-- Tab Mail: Scan menit 03, 08, 13... | Kirim stok item terpilih
+-- Tab Claim: Scan menit 04, 09, 14... | Claim semua gift
+-- Toggle terpisah, Claim langsung scan saat diaktifkan
 
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
+
+-- ============================================
+-- STATE
+-- ============================================
 local isMailRunning = false
 local isClaimRunning = false
 local lastMailMinute = -1
 local lastClaimMinute = -1
+
+-- ============================================
+-- DAFTAR ITEM UNTUK AUTO MAIL
+-- ============================================
+local AVAILABLE_ITEMS = {
+    {Name = "Briar Rose", Category = "Seeds", DisplayName = "🌹 Briar Rose"},
+    {Name = "Dragon's Breath", Category = "Seeds", DisplayName = "🐉 Dragon's Breath"},
+    {Name = "Star Fruit", Category = "Seeds", DisplayName = "⭐ Star Fruit"},
+    {Name = "Hypno Bloom", Category = "Seeds", DisplayName = "🌀 Hypno Bloom"},
+    {Name = "Sun Bloom", Category = "Seeds", DisplayName = "☀️ Sun Bloom"},
+    {Name = "Moon Bloom", Category = "Seeds", DisplayName = "🌙 Moon Bloom"},
+    {Name = "Carrot", Category = "Seeds", DisplayName = "🥕 Carrot"},
+    {Name = "Corn", Category = "Seeds", DisplayName = "🌽 Corn"},
+    {Name = "Super Sprinkler", Category = "Sprinklers", DisplayName = "💦 Super Sprinkler"},
+    {Name = "Rare Sprinkler", Category = "Sprinklers", DisplayName = "💎 Rare Sprinkler"},
+    {Name = "Super Watering Can", Category = "WateringCans", DisplayName = "🚿 Super Watering Can"},
+}
+
+local selectedItems = {}
+local checkboxes = {}
 local targetUsername = "aoneoneee"
 
+for _, item in ipairs(AVAILABLE_ITEMS) do
+    selectedItems[item.Name] = false
+end
+
+-- ============================================
+-- REFERENCE GUI
+-- ============================================
+local mailStatusLabel = nil
+local claimStatusLabel = nil
+local mailToggleBtn = nil
+local claimToggleBtn = nil
+
+-- ============================================
+-- FUNGSI UPDATE STATUS
+-- ============================================
+local function updateMailStatus(msg)
+    if mailStatusLabel then
+        mailStatusLabel.Text = msg
+    end
+end
+
+local function updateClaimStatus(msg)
+    if claimStatusLabel then
+        claimStatusLabel.Text = msg
+    end
+end
+
+-- ============================================
+-- GET REMOTE
+-- ============================================
 local function getRemote()
     return ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("Packet"):WaitForChild("RemoteEvent")
 end
 
 -- ============================================
--- DAFTAR ITEM
+-- ENCODE (FORMAT TERBUKTI)
 -- ============================================
-local AVAILABLE_ITEMS = {
-    "Dragon's Breath",
-    "Hypno Bloom",
-    "Moon Bloom",
-    "Briar Rose",
-    "Star Fruit",
-    "Sun Bloom",
-    "Carrot",
-    "Corn",
-    "Super Sprinkler",
-    "Rare Sprinkler",
-    "Super Watering Can",
-}
+local function encodeCount(count)
+    if count <= 9 then return "\005\00" .. tostring(count)
+    else return "\005" .. string.char(count) end
+end
 
-local selectedItems = {}
-for _, name in ipairs(AVAILABLE_ITEMS) do
-    selectedItems[name] = false
+local function encodeLen(len)
+    if len < 10 then return "\00" .. tostring(len)
+    elseif len < 20 then return "\0" .. tostring(len)
+    else return "\v" .. string.char(len) end
+end
+
+local function encodeUsernameLen(len)
+    if len < 10 then return "\00" .. tostring(len)
+    else return "\0" .. tostring(len) end
 end
 
 -- ============================================
--- CEK STOK
+-- SET TARGET VIA REMOTE (TERBUKTI: ^\001b\?username)
 -- ============================================
-function getItemCount(itemName)
-    local backpack = player:FindFirstChild("Backpack")
-    if not backpack then return 0 end
-    local total = 0
-    for _, item in pairs(backpack:GetChildren()) do
-        if item:IsA("Tool") and item.Name == itemName then total = total + 1 end
-    end
-    local character = player.Character
-    if character then
-        for _, item in pairs(character:GetChildren()) do
-            if item:IsA("Tool") and item.Name == itemName then total = total + 1 end
-        end
-    end
-    return total
-end
-
--- ============================================
--- KATEGORI
--- ============================================
-function getCategory(itemName)
-    if string.find(itemName, "Sprinkler") then return "Sprinklers"
-    elseif string.find(itemName, "Watering") then return "WateringCans"
-    else return "Seeds" end
-end
-
--- ============================================
--- ENCODE COUNT (sesuai format terbukti)
--- ============================================
-function encodeCount(count)
-    if count <= 9 then
-        return "\005\00" .. tostring(count)
-    else
-        -- 10+ pakai karakter khusus
-        return "\005" .. string.char(count)
-    end
-end
-
--- ============================================
--- ENCODE PANJANG NAMA
--- ============================================
-function encodeLen(len)
-    if len < 10 then
-        return "\00" .. tostring(len)
-    elseif len < 20 then
-        return "\0" .. tostring(len)
-    else
-        return "\v" .. string.char(len)
-    end
-end
-
--- ============================================
--- ENCODE USERNAME LENGTH (untuk set target)
--- ============================================
-function encodeUsernameLen(len)
-    if len < 10 then
-        return "\00" .. tostring(len)
-    else
-        return "\0" .. tostring(len)
-    end
-end
-
--- ============================================
--- SET TARGET (pakai remote TERBUKTI)
--- ============================================
-function setTargetRemote(username)
+local function setTargetRemote(username)
     local len = string.len(username)
-    
-    -- Format: ^\001b\?username
     local packet = "^\001b" .. encodeUsernameLen(len) .. username
     
-    print("[Mail] Set target: " .. username .. " (len=" .. len .. ")")
+    print("[Mail] Set target: " .. username)
     
     local success = false
     pcall(function()
@@ -122,15 +111,15 @@ function setTargetRemote(username)
 end
 
 -- ============================================
--- KIRIM ITEM (pakai header TERBUKTI)
+-- KIRIM ITEM VIA REMOTE (TERBUKTI: ]\001c\000\000\000<y%\166A...)
 -- ============================================
-function sendItemRemote(itemName, count, category)
+local function sendItemRemote(itemName, count, category)
     if count <= 0 then return false end
     
     local nameLen = string.len(itemName)
     local catLen = string.len(category)
     
-    -- Pakai header yang terbukti: ]\001c\000\000\000<y%\166A
+    -- Header terbukti
     local packet = "]\001c\000\000\000<y%\166A"
     packet = packet .. "\028\005\001"
     packet = packet .. "\028\v\aItemKey\v"
@@ -154,380 +143,704 @@ function sendItemRemote(itemName, count, category)
 end
 
 -- ============================================
--- KIRIM SEMUA ITEM TERPILIH
+-- FUNGSI CEK STOK ITEM
 -- ============================================
-function sendAllSelectedItems()
+local function getItemCount(itemName)
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return 0 end
+    
+    local total = 0
+    
+    for _, item in pairs(backpack:GetChildren()) do
+        if item:IsA("Tool") and item.Name == itemName then
+            total = total + 1
+        end
+    end
+    
+    local character = player.Character
+    if character then
+        for _, item in pairs(character:GetChildren()) do
+            if item:IsA("Tool") and item.Name == itemName then
+                total = total + 1
+            end
+        end
+    end
+    
+    return total
+end
+
+-- ============================================
+-- FUNGSI DAPATKAN ITEM TERPILIH DENGAN STOK
+-- ============================================
+local function getSelectedItemsWithStock()
+    local itemsWithStock = {}
+    
+    for _, item in ipairs(AVAILABLE_ITEMS) do
+        if selectedItems[item.Name] then
+            local stock = getItemCount(item.Name)
+            if stock > 0 then
+                table.insert(itemsWithStock, {
+                    Name = item.Name,
+                    Count = stock,
+                    Category = item.Category
+                })
+            end
+        end
+    end
+    
+    return itemsWithStock
+end
+
+-- ============================================
+-- FUNGSI KIRIM SEMUA ITEM (SET TARGET + KIRIM)
+-- ============================================
+local function sendAllMail()
+    if targetUsername == "" then return false end
+    
     -- Step 1: Set target
-    print("[Mail] === SET TARGET ===")
-    local targetSet = setTargetRemote(targetUsername)
-    if not targetSet then
+    print("[Mail] ===== SET TARGET =====")
+    updateMailStatus("Set target: " .. targetUsername)
+    
+    if not setTargetRemote(targetUsername) then
         print("[Mail] GAGAL set target!")
+        updateMailStatus("Gagal set target!")
         return false
     end
     
     wait(0.5)
     
     -- Step 2: Scan stok
-    local toSend = {}
-    for _, itemName in ipairs(AVAILABLE_ITEMS) do
-        if selectedItems[itemName] then
-            local stock = getItemCount(itemName)
-            if stock > 0 then
-                table.insert(toSend, {
-                    Name = itemName,
-                    Count = stock,
-                    Category = getCategory(itemName)
-                })
-            end
-        end
-    end
+    print("[Mail] ===== SCANNING BACKPACK =====")
+    local itemsToSend = getSelectedItemsWithStock()
     
-    if #toSend == 0 then
-        print("[Mail] Stok kosong")
+    if #itemsToSend == 0 then
+        print("[Mail] Tidak ada item terpilih di backpack")
+        updateMailStatus("Stok kosong - Menunggu scan berikutnya")
         return true
     end
     
-    -- Step 3: Kirim item satu per satu
-    print("[Mail] === KIRIM " .. #toSend .. " ITEM ===")
+    -- Step 3: Kirim
+    print("[Mail] ===== KIRIM " .. #itemsToSend .. " ITEM =====")
     
-    for _, item in ipairs(toSend) do
+    local successCount = 0
+    for _, item in ipairs(itemsToSend) do
         local ok = sendItemRemote(item.Name, item.Count, item.Category)
         
         if ok then
+            successCount = successCount + 1
             print("[Mail] ✓ " .. item.Name .. " x" .. item.Count)
         else
             print("[Mail] ✗ " .. item.Name)
         end
         
         -- Jeda antar item
-        if #toSend > 1 then
+        if #itemsToSend > 1 then
             wait(math.random(1, 2))
         end
     end
     
-    print("[Mail] === SELESAI ===")
+    print("[Mail] ===== SELESAI: " .. successCount .. "/" .. #itemsToSend .. " =====")
+    updateMailStatus("Terkirim: " .. successCount .. " item")
+    
     return true
 end
 
 -- ============================================
--- CLAIM FUNCTIONS
+-- FUNGSI SCAN & KIRIM MAIL (DENGAN RETRY JITTER)
 -- ============================================
-function scanGifts()
-    local gifts = {}
-    pcall(function()
-        local rf = player.PlayerGui:FindFirstChild("MailboxUI")
-        if rf then rf = rf:FindFirstChild("Frame") end
-        if rf then rf = rf:FindFirstChild("ReceiveFrame") end
-        if rf then
-            for _, c in ipairs(rf:GetChildren()) do
-                if c:IsA("Frame") and string.find(c.Name, "Gift_4:") then
-                    local id = string.match(c.Name, "Gift_4:(.+)")
-                    if id then table.insert(gifts, id) end
-                end
-            end
+local function scanAndSendMail()
+    if not isMailRunning then return end
+    if targetUsername == "" then return end
+    
+    sendAllMail()
+    
+    -- Retry jika masih ada stok
+    local retryCount = 0
+    while isMailRunning do
+        wait(math.random(21, 25))
+        
+        local remainingItems = getSelectedItemsWithStock()
+        
+        if #remainingItems == 0 then
+            print("[Mail] Stok habis, menunggu scan berikutnya...")
+            updateMailStatus("Stok habis - Menunggu scan berikutnya")
+            break
         end
-    end)
-    return gifts
+        
+        retryCount = retryCount + 1
+        print("[Mail] Masih ada stok! Retry #" .. retryCount)
+        updateMailStatus("Retry #" .. retryCount .. " - Mengirim lagi...")
+        sendAllMail()
+    end
 end
 
-function claimAllGifts()
+-- ============================================
+-- FUNGSI CEK WAKTU SCAN MAIL (03, 08, 13, dst)
+-- ============================================
+local function isMailScanTime()
+    local minutes = os.date("*t").min
+    local seconds = os.date("*t").sec
+    local targetMinute = minutes % 5 == 3
+    local targetSecond = seconds >= 0 and seconds <= 2
+    
+    if targetMinute and targetSecond and lastMailMinute ~= minutes then
+        lastMailMinute = minutes
+        return true
+    end
+    
+    return false
+end
+
+-- ============================================
+-- FUNGSI GET RECEIVE FRAME
+-- ============================================
+local function getReceiveFrame()
+    local success, result = pcall(function()
+        local mailboxUI = player.PlayerGui:FindFirstChild("MailboxUI")
+        if mailboxUI then
+            local frame = mailboxUI:FindFirstChild("Frame")
+            if frame then
+                return frame:FindFirstChild("ReceiveFrame")
+            end
+        end
+        return nil
+    end)
+    
+    if success and result then
+        return result
+    end
+    
+    return nil
+end
+
+-- ============================================
+-- FUNGSI SCAN GIFT FRAMES
+-- ============================================
+local function scanGiftFrames()
+    local receiveFrame = getReceiveFrame()
+    if not receiveFrame then return {} end
+    
+    local giftFrames = {}
+    
+    for _, child in ipairs(receiveFrame:GetChildren()) do
+        if child:IsA("Frame") and string.find(child.Name, "Gift_4:") then
+            local itemId = string.match(child.Name, "Gift_4:(.+)")
+            if itemId and itemId ~= "" then
+                table.insert(giftFrames, {
+                    itemId = itemId,
+                    name = child.Name
+                })
+            end
+        end
+    end
+    
+    return giftFrames
+end
+
+-- ============================================
+-- FUNGSI CLAIM SATU GIFT
+-- ============================================
+local function claimGift(itemId)
+    local success = false
+    
+    pcall(function()
+        local packetData = "b\0014&4:" .. itemId
+        getRemote():FireServer(buffer.fromstring(packetData))
+        success = true
+    end)
+    
+    return success
+end
+
+-- ============================================
+-- FUNGSI CLAIM SEMUA GIFT
+-- ============================================
+local function claimAllGifts()
     if not isClaimRunning then return end
     
-    print("[Claim] Scan...")
-    local gifts = scanGifts()
+    print("[Claim] ===== SCANNING GIFTS =====")
+    updateClaimStatus("Scanning...")
     
-    if #gifts == 0 then
-        print("[Claim] Tidak ada gift")
+    local giftFrames = scanGiftFrames()
+    
+    if #giftFrames == 0 then
+        print("[Claim] Tidak ada gift di ReceiveFrame")
+        updateClaimStatus("Tidak ada gift")
         return
     end
     
-    print("[Claim] " .. #gifts .. " gift")
+    print("[Claim] Ditemukan " .. #giftFrames .. " gift!")
+    updateClaimStatus("Claiming " .. #giftFrames .. " gifts...")
     
-    for i, id in ipairs(gifts) do
+    local claimedCount = 0
+    
+    for i, gift in ipairs(giftFrames) do
         if not isClaimRunning then break end
-        pcall(function()
-            getRemote():FireServer(buffer.fromstring("b\0014&4:" .. id))
-        end)
-        print("[Claim] #" .. i .. " ✓")
-        if i < #gifts then
-            wait(math.random(10, 30) / 10)
-        end
-    end
-    
-    print("[Claim] Selesai")
-end
-
--- ============================================
--- SCAN & RETRY
--- ============================================
-function scanAndSend()
-    if not isMailRunning then return end
-    
-    sendAllSelectedItems()
-    
-    -- Retry setelah jitter
-    wait(math.random(21, 25))
-    
-    if isMailRunning then
-        local hasStock = false
-        for _, name in ipairs(AVAILABLE_ITEMS) do
-            if selectedItems[name] and getItemCount(name) > 0 then
-                hasStock = true
-                break
-            end
+        
+        print("[Claim] Claim #" .. i .. ": " .. gift.itemId)
+        
+        local success = claimGift(gift.itemId)
+        
+        if success then
+            claimedCount = claimedCount + 1
+            print("[Claim] ✓ BERHASIL: " .. gift.itemId)
+        else
+            print("[Claim] ✗ GAGAL: " .. gift.itemId)
         end
         
-        if hasStock then
-            print("[Mail] Retry - stok masih ada")
-            sendAllSelectedItems()
+        if i < #giftFrames and isClaimRunning then
+            local jitter = math.random(10, 30) / 10
+            wait(jitter)
         end
     end
+    
+    print("[Claim] ===== SELESAI: " .. claimedCount .. "/" .. #giftFrames .. " =====")
+    updateClaimStatus("Selesai: " .. claimedCount .. "/" .. #giftFrames)
 end
 
 -- ============================================
--- TIME CHECK
+-- FUNGSI CEK WAKTU SCAN CLAIM (04, 09, 14, dst)
 -- ============================================
-function isMailScanTime()
-    local m = os.date("*t").min
-    local s = os.date("*t").sec
-    if m % 5 == 3 and s <= 2 and lastMailMinute ~= m then
-        lastMailMinute = m
+local function isClaimScanTime()
+    local minutes = os.date("*t").min
+    local seconds = os.date("*t").sec
+    local targetMinute = minutes % 5 == 4
+    local targetSecond = seconds >= 0 and seconds <= 2
+    
+    if targetMinute and targetSecond and lastClaimMinute ~= minutes then
+        lastClaimMinute = minutes
         return true
     end
+    
     return false
 end
 
-function isClaimScanTime()
-    local m = os.date("*t").min
-    local s = os.date("*t").sec
-    if m % 5 == 4 and s <= 2 and lastClaimMinute ~= m then
-        lastClaimMinute = m
-        return true
+-- ============================================
+-- FUNGSI UPDATE CHECKBOX VISUAL
+-- ============================================
+local function updateCheckboxVisual(itemName)
+    local cb = checkboxes[itemName]
+    if not cb then return end
+    
+    if selectedItems[itemName] then
+        cb.button.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+        cb.mark.Visible = true
+        cb.frame.BackgroundColor3 = Color3.fromRGB(40, 60, 45)
+    else
+        cb.button.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
+        cb.mark.Visible = false
+        cb.frame.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
     end
-    return false
 end
 
 -- ============================================
--- GUI
+-- BUILD GUI GABUNGAN (TAB MAIL + TAB CLAIM)
 -- ============================================
 local function createGUI()
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "AutoMail_GUI"
-    sg.ResetOnSpawn = false
-    sg.Parent = player:WaitForChild("PlayerGui")
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "AutoMailClaim_GUI"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = player:WaitForChild("PlayerGui")
     
-    local mf = Instance.new("Frame")
-    mf.Size = UDim2.new(0, 290, 0, 420)
-    mf.Position = UDim2.new(0, 10, 0.5, -210)
-    mf.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
-    mf.BackgroundTransparency = 0.03
-    mf.BorderSizePixel = 0
-    mf.Active = true
-    mf.Draggable = true
-    mf.Parent = sg
-    Instance.new("UICorner", mf).CornerRadius = UDim.new(0, 10)
+    -- Main Frame
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 290, 0, 440)
+    mainFrame.Position = UDim2.new(0, 10, 0.5, -220)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+    mainFrame.BackgroundTransparency = 0.05
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Active = true
+    mainFrame.Draggable = true
+    mainFrame.Parent = screenGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = mainFrame
     
     -- Title
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 25)
-    title.Position = UDim2.new(0, 0, 0, 10)
+    title.Size = UDim2.new(1, -20, 0, 25)
+    title.Position = UDim2.new(0, 10, 0, 8)
     title.BackgroundTransparency = 1
     title.Text = "📦📬 AUTO MAIL & CLAIM"
     title.TextColor3 = Color3.fromRGB(255, 255, 255)
     title.Font = Enum.Font.GothamBold
     title.TextSize = 14
-    title.Parent = mf
+    title.TextXAlignment = Enum.TextXAlignment.Center
+    title.Parent = mainFrame
     
-    -- Target Label
-    local ul = Instance.new("TextLabel")
-    ul.Size = UDim2.new(1, -20, 0, 14)
-    ul.Position = UDim2.new(0, 10, 0, 40)
-    ul.BackgroundTransparency = 1
-    ul.Text = "🎯 Target Username:"
-    ul.TextColor3 = Color3.fromRGB(180, 180, 180)
-    ul.Font = Enum.Font.Gotham
-    ul.TextSize = 10
-    ul.TextXAlignment = Enum.TextXAlignment.Left
-    ul.Parent = mf
+    -- Tab Bar Background
+    local tabBar = Instance.new("Frame")
+    tabBar.Size = UDim2.new(1, -20, 0, 30)
+    tabBar.Position = UDim2.new(0, 10, 0, 38)
+    tabBar.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+    tabBar.BorderSizePixel = 0
+    tabBar.Parent = mainFrame
     
-    -- Target TextBox
-    local ut = Instance.new("TextBox")
-    ut.Size = UDim2.new(1, -20, 0, 26)
-    ut.Position = UDim2.new(0, 10, 0, 56)
-    ut.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-    ut.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ut.PlaceholderText = "Username..."
-    ut.PlaceholderColor3 = Color3.fromRGB(110, 110, 110)
-    ut.Font = Enum.Font.Gotham
-    ut.TextSize = 12
-    ut.Text = targetUsername
-    ut.Parent = mf
-    Instance.new("UICorner", ut).CornerRadius = UDim.new(0, 5)
+    local tabCorner = Instance.new("UICorner")
+    tabCorner.CornerRadius = UDim.new(0, 6)
+    tabCorner.Parent = tabBar
+    
+    -- Tab Mail Button
+    local tabMailBtn = Instance.new("TextButton")
+    tabMailBtn.Name = "TabMailBtn"
+    tabMailBtn.Size = UDim2.new(0.5, -2, 1, -4)
+    tabMailBtn.Position = UDim2.new(0, 2, 0, 2)
+    tabMailBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 80)
+    tabMailBtn.Text = "📦 MAIL"
+    tabMailBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    tabMailBtn.Font = Enum.Font.GothamBold
+    tabMailBtn.TextSize = 12
+    tabMailBtn.BorderSizePixel = 0
+    tabMailBtn.Parent = tabBar
+    
+    local tabMailCorner = Instance.new("UICorner")
+    tabMailCorner.CornerRadius = UDim.new(0, 5)
+    tabMailCorner.Parent = tabMailBtn
+    
+    -- Tab Claim Button
+    local tabClaimBtn = Instance.new("TextButton")
+    tabClaimBtn.Name = "TabClaimBtn"
+    tabClaimBtn.Size = UDim2.new(0.5, -2, 1, -4)
+    tabClaimBtn.Position = UDim2.new(0.5, 0, 0, 2)
+    tabClaimBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+    tabClaimBtn.Text = "📬 CLAIM"
+    tabClaimBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    tabClaimBtn.Font = Enum.Font.GothamBold
+    tabClaimBtn.TextSize = 12
+    tabClaimBtn.BorderSizePixel = 0
+    tabClaimBtn.Parent = tabBar
+    
+    local tabClaimCorner = Instance.new("UICorner")
+    tabClaimCorner.CornerRadius = UDim.new(0, 5)
+    tabClaimCorner.Parent = tabClaimBtn
+    
+    -- ============================================
+    -- TAB MAIL CONTENT
+    -- ============================================
+    local mailContent = Instance.new("Frame")
+    mailContent.Name = "MailContent"
+    mailContent.Size = UDim2.new(1, -20, 0, 335)
+    mailContent.Position = UDim2.new(0, 10, 0, 75)
+    mailContent.BackgroundTransparency = 1
+    mailContent.Visible = true
+    mailContent.Parent = mainFrame
+    
+    -- Username Label
+    local userLabel = Instance.new("TextLabel")
+    userLabel.Size = UDim2.new(1, 0, 0, 16)
+    userLabel.BackgroundTransparency = 1
+    userLabel.Text = "Target Username:"
+    userLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+    userLabel.Font = Enum.Font.Gotham
+    userLabel.TextSize = 10
+    userLabel.TextXAlignment = Enum.TextXAlignment.Left
+    userLabel.Parent = mailContent
+    
+    -- Username TextBox
+    local userTextBox = Instance.new("TextBox")
+    userTextBox.Name = "UserTextBox"
+    userTextBox.Size = UDim2.new(1, 0, 0, 26)
+    userTextBox.Position = UDim2.new(0, 0, 0, 18)
+    userTextBox.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    userTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    userTextBox.PlaceholderText = "Masukkan username..."
+    userTextBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+    userTextBox.Font = Enum.Font.Gotham
+    userTextBox.TextSize = 12
+    userTextBox.Text = targetUsername
+    userTextBox.Parent = mailContent
+    
+    local userCorner = Instance.new("UICorner")
+    userCorner.CornerRadius = UDim.new(0, 4)
+    userCorner.Parent = userTextBox
     
     -- Items Label
-    local il = Instance.new("TextLabel")
-    il.Size = UDim2.new(1, -20, 0, 14)
-    il.Position = UDim2.new(0, 10, 0, 88)
-    il.BackgroundTransparency = 1
-    il.Text = "📋 Pilih Item:"
-    il.TextColor3 = Color3.fromRGB(180, 180, 180)
-    il.Font = Enum.Font.Gotham
-    il.TextSize = 10
-    il.TextXAlignment = Enum.TextXAlignment.Left
-    il.Parent = mf
+    local itemsLabel = Instance.new("TextLabel")
+    itemsLabel.Size = UDim2.new(1, 0, 0, 16)
+    itemsLabel.Position = UDim2.new(0, 0, 0, 50)
+    itemsLabel.BackgroundTransparency = 1
+    itemsLabel.Text = "Pilih Item:"
+    itemsLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+    itemsLabel.Font = Enum.Font.Gotham
+    itemsLabel.TextSize = 10
+    itemsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    itemsLabel.Parent = mailContent
     
-    -- ScrollFrame
-    local sf = Instance.new("ScrollingFrame")
-    sf.Size = UDim2.new(1, -10, 0, 200)
-    sf.Position = UDim2.new(0, 5, 0, 104)
-    sf.BackgroundColor3 = Color3.fromRGB(28, 28, 33)
-    sf.BorderSizePixel = 0
-    sf.ScrollBarThickness = 5
-    sf.ScrollBarImageColor3 = Color3.fromRGB(90, 90, 100)
-    sf.CanvasSize = UDim2.new(0, 0, 0, #AVAILABLE_ITEMS * 30 + 8)
-    sf.Parent = mf
-    Instance.new("UICorner", sf).CornerRadius = UDim.new(0, 5)
+    -- Scrolling Frame
+    local scrollFrame = Instance.new("ScrollingFrame")
+    scrollFrame.Name = "ScrollFrame"
+    scrollFrame.Size = UDim2.new(1, 0, 0, 200)
+    scrollFrame.Position = UDim2.new(0, 0, 0, 68)
+    scrollFrame.BackgroundColor3 = Color3.fromRGB(32, 32, 36)
+    scrollFrame.BorderSizePixel = 0
+    scrollFrame.ScrollBarThickness = 5
+    scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 110)
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #AVAILABLE_ITEMS * 30 + 8)
+    scrollFrame.Parent = mailContent
     
-    local ly = Instance.new("UIListLayout")
-    ly.Padding = UDim.new(0, 2)
-    ly.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    ly.Parent = sf
+    local scrollCorner = Instance.new("UICorner")
+    scrollCorner.CornerRadius = UDim.new(0, 4)
+    scrollCorner.Parent = scrollFrame
+    
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 2)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = scrollFrame
     
     -- Checkbox items
-    for i, name in ipairs(AVAILABLE_ITEMS) do
-        local fr = Instance.new("Frame")
-        fr.Size = UDim2.new(1, -8, 0, 26)
-        fr.BackgroundColor3 = Color3.fromRGB(42, 42, 48)
-        fr.BorderSizePixel = 0
-        fr.Parent = sf
-        Instance.new("UICorner", fr).CornerRadius = UDim.new(0, 4)
+    for i, item in ipairs(AVAILABLE_ITEMS) do
+        local itemFrame = Instance.new("Frame")
+        itemFrame.Name = item.Name
+        itemFrame.Size = UDim2.new(1, -8, 0, 26)
+        itemFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        itemFrame.BorderSizePixel = 0
+        itemFrame.Parent = scrollFrame
         
-        local cb = Instance.new("TextButton")
-        cb.Size = UDim2.new(0, 18, 0, 18)
-        cb.Position = UDim2.new(0, 4, 0.5, -9)
-        cb.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
-        cb.Text = ""
-        cb.BorderSizePixel = 0
-        cb.Parent = fr
-        Instance.new("UICorner", cb).CornerRadius = UDim.new(0, 3)
+        local itemCorner = Instance.new("UICorner")
+        itemCorner.CornerRadius = UDim.new(0, 3)
+        itemCorner.Parent = itemFrame
         
-        local cm = Instance.new("TextLabel")
-        cm.Size = UDim2.new(1, 0, 1, 0)
-        cm.BackgroundTransparency = 1
-        cm.Text = "✓"
-        cm.TextColor3 = Color3.fromRGB(0, 255, 100)
-        cm.Font = Enum.Font.GothamBold
-        cm.TextSize = 13
-        cm.Visible = false
-        cm.Parent = cb
+        local checkBtn = Instance.new("TextButton")
+        checkBtn.Name = "CheckBtn"
+        checkBtn.Size = UDim2.new(0, 20, 0, 20)
+        checkBtn.Position = UDim2.new(0, 3, 0.5, -10)
+        checkBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
+        checkBtn.Text = ""
+        checkBtn.BorderSizePixel = 0
+        checkBtn.Parent = itemFrame
         
-        local lb = Instance.new("TextLabel")
-        lb.Size = UDim2.new(1, -28, 1, 0)
-        lb.Position = UDim2.new(0, 26, 0, 0)
-        lb.BackgroundTransparency = 1
-        lb.Text = name
-        lb.TextColor3 = Color3.fromRGB(220, 220, 220)
-        lb.Font = Enum.Font.Gotham
-        lb.TextSize = 10
-        lb.TextXAlignment = Enum.TextXAlignment.Left
-        lb.Parent = fr
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 3)
+        btnCorner.Parent = checkBtn
         
-        local function ch()
-            selectedItems[name] = not selectedItems[name]
-            if selectedItems[name] then
-                cb.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
-                cm.Visible = true
-                fr.BackgroundColor3 = Color3.fromRGB(40, 60, 45)
-            else
-                cb.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
-                cm.Visible = false
-                fr.BackgroundColor3 = Color3.fromRGB(42, 42, 48)
-            end
+        local checkMark = Instance.new("TextLabel")
+        checkMark.Name = "CheckMark"
+        checkMark.Size = UDim2.new(1, 0, 1, 0)
+        checkMark.BackgroundTransparency = 1
+        checkMark.Text = "✓"
+        checkMark.TextColor3 = Color3.fromRGB(0, 255, 100)
+        checkMark.Font = Enum.Font.GothamBold
+        checkMark.TextSize = 13
+        checkMark.Visible = false
+        checkMark.Parent = checkBtn
+        
+        local itemLabel = Instance.new("TextLabel")
+        itemLabel.Name = "ItemLabel"
+        itemLabel.Size = UDim2.new(1, -30, 1, 0)
+        itemLabel.Position = UDim2.new(0, 26, 0, 0)
+        itemLabel.BackgroundTransparency = 1
+        itemLabel.Text = item.DisplayName
+        itemLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+        itemLabel.Font = Enum.Font.Gotham
+        itemLabel.TextSize = 11
+        itemLabel.TextXAlignment = Enum.TextXAlignment.Left
+        itemLabel.Parent = itemFrame
+        
+        checkboxes[item.Name] = {
+            button = checkBtn,
+            mark = checkMark,
+            frame = itemFrame
+        }
+        
+        local clickHandler = function()
+            selectedItems[item.Name] = not selectedItems[item.Name]
+            updateCheckboxVisual(item.Name)
         end
         
-        cb.MouseButton1Click:Connect(ch)
-        fr.InputBegan:Connect(function(inp)
-            if inp.UserInputType == Enum.UserInputType.MouseButton1 then ch() end
+        checkBtn.MouseButton1Click:Connect(clickHandler)
+        itemFrame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                clickHandler()
+            end
         end)
     end
     
-    -- Status
-    local st = Instance.new("TextLabel")
-    st.Size = UDim2.new(1, -20, 0, 14)
-    st.Position = UDim2.new(0, 10, 0, 312)
-    st.BackgroundTransparency = 1
-    st.Text = "Status: SIAP - Kirim via REMOTE"
-    st.TextColor3 = Color3.fromRGB(255, 200, 0)
-    st.Font = Enum.Font.Gotham
-    st.TextSize = 9
-    st.TextXAlignment = Enum.TextXAlignment.Left
-    st.Parent = mf
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #AVAILABLE_ITEMS * 30 + 8)
     
-    -- Toggle Mail
-    local tm = Instance.new("TextButton")
-    tm.Size = UDim2.new(1, -20, 0, 30)
-    tm.Position = UDim2.new(0, 10, 0, 332)
-    tm.BackgroundColor3 = Color3.fromRGB(0, 170, 80)
-    tm.Text = "▶ MULAI MAIL"
-    tm.TextColor3 = Color3.fromRGB(255, 255, 255)
-    tm.Font = Enum.Font.GothamBold
-    tm.TextSize = 12
-    tm.BorderSizePixel = 0
-    tm.Parent = mf
-    Instance.new("UICorner", tm).CornerRadius = UDim.new(0, 5)
+    -- Mail Status Label
+    local mailStatus = Instance.new("TextLabel")
+    mailStatus.Name = "MailStatus"
+    mailStatus.Size = UDim2.new(1, 0, 0, 16)
+    mailStatus.Position = UDim2.new(0, 0, 0, 274)
+    mailStatus.BackgroundTransparency = 1
+    mailStatus.Text = "Status: SIAP - Remote OK"
+    mailStatus.TextColor3 = Color3.fromRGB(255, 200, 0)
+    mailStatus.Font = Enum.Font.Gotham
+    mailStatus.TextSize = 10
+    mailStatus.TextXAlignment = Enum.TextXAlignment.Left
+    mailStatus.Parent = mailContent
     
-    -- Toggle Claim
-    local tc = Instance.new("TextButton")
-    tc.Size = UDim2.new(1, -20, 0, 30)
-    tc.Position = UDim2.new(0, 10, 0, 370)
-    tc.BackgroundColor3 = Color3.fromRGB(0, 140, 200)
-    tc.Text = "▶ MULAI CLAIM"
-    tc.TextColor3 = Color3.fromRGB(255, 255, 255)
-    tc.Font = Enum.Font.GothamBold
-    tc.TextSize = 12
-    tc.BorderSizePixel = 0
-    tc.Parent = mf
-    Instance.new("UICorner", tc).CornerRadius = UDim.new(0, 5)
+    mailStatusLabel = mailStatus
     
-    -- Toggle handlers
-    tm.MouseButton1Click:Connect(function()
+    -- Mail Toggle Button
+    local mailToggle = Instance.new("TextButton")
+    mailToggle.Name = "MailToggleBtn"
+    mailToggle.Size = UDim2.new(1, 0, 0, 30)
+    mailToggle.Position = UDim2.new(0, 0, 0, 295)
+    mailToggle.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+    mailToggle.Text = "▶ MULAI MAIL"
+    mailToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    mailToggle.Font = Enum.Font.GothamBold
+    mailToggle.TextSize = 13
+    mailToggle.BorderSizePixel = 0
+    mailToggle.Parent = mailContent
+    
+    local mailToggleCorner = Instance.new("UICorner")
+    mailToggleCorner.CornerRadius = UDim.new(0, 5)
+    mailToggleCorner.Parent = mailToggle
+    
+    mailToggleBtn = mailToggle
+    
+    -- ============================================
+    -- TAB CLAIM CONTENT
+    -- ============================================
+    local claimContent = Instance.new("Frame")
+    claimContent.Name = "ClaimContent"
+    claimContent.Size = UDim2.new(1, -20, 0, 335)
+    claimContent.Position = UDim2.new(0, 10, 0, 75)
+    claimContent.BackgroundTransparency = 1
+    claimContent.Visible = false
+    claimContent.Parent = mainFrame
+    
+    -- Claim Info
+    local claimInfo = Instance.new("TextLabel")
+    claimInfo.Size = UDim2.new(1, 0, 0, 80)
+    claimInfo.Position = UDim2.new(0, 0, 0, 20)
+    claimInfo.BackgroundTransparency = 1
+    claimInfo.Text = "📬 Auto Claim Mailbox\n\n• Scan setiap menit 04, 09, 14...\n• Claim semua gift di ReceiveFrame\n• Jitter 1-3 detik antar claim\n• Tidak perlu buka mailbox"
+    claimInfo.TextColor3 = Color3.fromRGB(200, 200, 200)
+    claimInfo.Font = Enum.Font.Gotham
+    claimInfo.TextSize = 11
+    claimInfo.TextXAlignment = Enum.TextXAlignment.Left
+    claimInfo.TextWrapped = true
+    claimInfo.Parent = claimContent
+    
+    -- Claim Status Label
+    local claimStatus = Instance.new("TextLabel")
+    claimStatus.Name = "ClaimStatus"
+    claimStatus.Size = UDim2.new(1, 0, 0, 16)
+    claimStatus.Position = UDim2.new(0, 0, 0, 260)
+    claimStatus.BackgroundTransparency = 1
+    claimStatus.Text = "Status: SIAP"
+    claimStatus.TextColor3 = Color3.fromRGB(255, 200, 0)
+    claimStatus.Font = Enum.Font.Gotham
+    claimStatus.TextSize = 10
+    claimStatus.TextXAlignment = Enum.TextXAlignment.Left
+    claimStatus.Parent = claimContent
+    
+    claimStatusLabel = claimStatus
+    
+    -- Claim Toggle Button
+    local claimToggle = Instance.new("TextButton")
+    claimToggle.Name = "ClaimToggleBtn"
+    claimToggle.Size = UDim2.new(1, 0, 0, 30)
+    claimToggle.Position = UDim2.new(0, 0, 0, 285)
+    claimToggle.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
+    claimToggle.Text = "▶ MULAI CLAIM"
+    claimToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    claimToggle.Font = Enum.Font.GothamBold
+    claimToggle.TextSize = 13
+    claimToggle.BorderSizePixel = 0
+    claimToggle.Parent = claimContent
+    
+    local claimToggleCorner = Instance.new("UICorner")
+    claimToggleCorner.CornerRadius = UDim.new(0, 5)
+    claimToggleCorner.Parent = claimToggle
+    
+    claimToggleBtn = claimToggle
+    
+    -- ============================================
+    -- TAB SWITCHING
+    -- ============================================
+    tabMailBtn.MouseButton1Click:Connect(function()
+        mailContent.Visible = true
+        claimContent.Visible = false
+        tabMailBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 80)
+        tabMailBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tabClaimBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+        tabClaimBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    end)
+    
+    tabClaimBtn.MouseButton1Click:Connect(function()
+        mailContent.Visible = false
+        claimContent.Visible = true
+        tabClaimBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 200)
+        tabClaimBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tabMailBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+        tabMailBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    end)
+    
+    -- ============================================
+    -- TOGGLE HANDLERS
+    -- ============================================
+    mailToggle.MouseButton1Click:Connect(function()
         isMailRunning = not isMailRunning
+        
         if isMailRunning then
-            targetUsername = ut.Text
+            targetUsername = userTextBox.Text
             if targetUsername == "" then
-                st.Text = "ISI USERNAME DULU!"
+                updateMailStatus("ISI USERNAME DULU!")
                 isMailRunning = false
                 return
             end
-            tm.Text = "⏸ BERHENTI MAIL"
-            tm.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-            st.Text = "AKTIF - Menunggu scan..."
-            st.TextColor3 = Color3.fromRGB(0, 255, 100)
+            
+            local hasSelection = false
+            for _, item in ipairs(AVAILABLE_ITEMS) do
+                if selectedItems[item.Name] then
+                    hasSelection = true
+                    break
+                end
+            end
+            
+            if not hasSelection then
+                updateMailStatus("PILIH ITEM DULU!")
+                isMailRunning = false
+                return
+            end
+            
+            mailToggle.Text = "⏸ BERHENTI MAIL"
+            mailToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+            updateMailStatus("AKTIF - Menunggu scan...")
             lastMailMinute = -1
+            print("[Mail] ===== AUTO MAIL DIMULAI =====")
+            print("[Mail] Target: " .. targetUsername)
         else
-            tm.Text = "▶ MULAI MAIL"
-            tm.BackgroundColor3 = Color3.fromRGB(0, 170, 80)
-            st.Text = "BERHENTI"
-            st.TextColor3 = Color3.fromRGB(255, 200, 0)
+            mailToggle.Text = "▶ MULAI MAIL"
+            mailToggle.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+            updateMailStatus("BERHENTI")
+            print("[Mail] ===== AUTO MAIL BERHENTI =====")
         end
     end)
     
-    tc.MouseButton1Click:Connect(function()
+    claimToggle.MouseButton1Click:Connect(function()
         isClaimRunning = not isClaimRunning
+        
         if isClaimRunning then
-            tc.Text = "⏸ BERHENTI CLAIM"
-            tc.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-            st.Text = "CLAIM AKTIF"
-            st.TextColor3 = Color3.fromRGB(0, 255, 100)
+            claimToggle.Text = "⏸ BERHENTI CLAIM"
+            claimToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+            updateClaimStatus("AKTIF - Scan & claim...")
             lastClaimMinute = -1
+            print("[Claim] ===== AUTO CLAIM DIMULAI =====")
+            
+            -- LANGSUNG SCAN SEKALI SAAT DIAKTIFKAN
+            print("[Claim] Scan awal saat diaktifkan...")
             claimAllGifts()
+            
+            if isClaimRunning then
+                updateClaimStatus("AKTIF - Menunggu scan berikutnya")
+            end
         else
-            tc.Text = "▶ MULAI CLAIM"
-            tc.BackgroundColor3 = Color3.fromRGB(0, 140, 200)
-            st.Text = "BERHENTI"
-            st.TextColor3 = Color3.fromRGB(255, 200, 0)
+            claimToggle.Text = "▶ MULAI CLAIM"
+            claimToggle.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
+            updateClaimStatus("BERHENTI")
+            print("[Claim] ===== AUTO CLAIM BERHENTI =====")
         end
     end)
+    
+    return screenGui
 end
 
 -- ============================================
@@ -536,46 +849,68 @@ end
 spawn(function()
     createGUI()
     
-    -- Default selection
+    -- Default: select Dragon's Breath & Super Sprinkler
     selectedItems["Dragon's Breath"] = true
     selectedItems["Super Sprinkler"] = true
     
+    wait(0.5)
+    updateCheckboxVisual("Dragon's Breath")
+    updateCheckboxVisual("Super Sprinkler")
+    
     print("========================================")
-    print(" AUTO MAIL & CLAIM - WORKING")
-    print(" Target: @" .. targetUsername)
-    print(" Format: Remote terbukti berhasil")
+    print(" AUTO MAIL & CLAIM - FINAL")
+    print(" Remote: TERBUKTI BERHASIL")
+    print(" Tab Mail: Scan menit 03, 08, 13...")
+    print(" Tab Claim: Scan menit 04, 09, 14...")
+    print(" ")
+    print(" Ketik sendnow() untuk kirim sekarang!")
     print("========================================")
-    print(" ")
-    print("Commands:")
-    print("  sendnow()  - Kirim sekarang")
-    print("  claimnow() - Claim sekarang")
-    print("  status()   - Cek status")
-    print(" ")
     
     while true do
         wait(1)
         
+        -- Cek scan mail
         if isMailRunning and isMailScanTime() then
-            print("[Mail] SCAN: " .. os.date("%H:%M:%S"))
-            scanAndSend()
+            local currentTime = os.date("%H:%M:%S")
+            print("[Mail] ===== SCAN TIME: " .. currentTime .. " =====")
+            updateMailStatus("Scanning... " .. currentTime)
+            scanAndSendMail()
+            if isMailRunning then
+                updateMailStatus("AKTIF - Menunggu scan berikutnya")
+            end
         end
         
+        -- Cek scan claim
         if isClaimRunning and isClaimScanTime() then
-            print("[Claim] SCAN: " .. os.date("%H:%M:%S"))
+            local currentTime = os.date("%H:%M:%S")
+            print("[Claim] ===== SCAN TIME: " .. currentTime .. " =====")
+            updateClaimStatus("Scanning... " .. currentTime)
             claimAllGifts()
+            if isClaimRunning then
+                updateClaimStatus("AKTIF - Menunggu scan berikutnya")
+            end
         end
     end
 end)
 
--- Global functions
+-- ============================================
+-- FUNGSI KIRIM LANGSUNG
+-- ============================================
 function sendnow()
-    print("[Mail] Kirim sekarang ke " .. targetUsername)
-    sendAllSelectedItems()
+    print("=================================")
+    print(" KIRIM SEKARANG ke " .. targetUsername)
+    print("=================================")
+    sendAllMail()
 end
 
 function claimnow()
-    print("[Claim] Claim sekarang")
+    print("=================================")
+    print(" CLAIM SEKARANG")
+    print("=================================")
+    local wasRunning = isClaimRunning
+    isClaimRunning = true
     claimAllGifts()
+    isClaimRunning = wasRunning
 end
 
 function status()
@@ -583,11 +918,9 @@ function status()
     print("Mail: " .. (isMailRunning and "ON" or "OFF"))
     print("Claim: " .. (isClaimRunning and "ON" or "OFF"))
     print("Target: @" .. targetUsername)
-    print("Item dipilih:")
-    for _, name in ipairs(AVAILABLE_ITEMS) do
-        if selectedItems[name] then
-            print("  ✓ " .. name .. ": " .. getItemCount(name))
+    for _, item in ipairs(AVAILABLE_ITEMS) do
+        if selectedItems[item.Name] then
+            print("  ✓ " .. item.Name .. ": " .. getItemCount(item.Name))
         end
     end
-    print("==============")
 end
