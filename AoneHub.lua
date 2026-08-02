@@ -27,71 +27,82 @@ local function getCarrotStock()
     local normalShop = frame:FindFirstChild("NormalShop")
     if not normalShop then return nil end
     
-    -- Cari Carrot container
     local carrotContainer = normalShop:FindFirstChild("Carrot")
     if not carrotContainer then return nil end
     
-    local mainFrame = carrotContainer:FindFirstChild("Main_Frame")
+    local mainFrame = carrotContainer:FindFirstChild("Main_Frame") or carrotContainer:FindFirstChild("MainFrame")
     if not mainFrame then return nil end
     
-    local stockText = mainFrame:FindFirstChild("StockText") or mainFrame:FindFirstChild("Stock_Text")
+    -- Cari element yang mengandung "Stock" atau "stock" di namanya
+    local stockText = nil
+    for _, child in ipairs(mainFrame:GetChildren()) do
+        if child.Name:lower():find("stock") and (child:IsA("TextLabel") or child:IsA("TextButton")) then
+            stockText = child
+            break
+        end
+    end
+    
     if not stockText then return nil end
     
     local text = ""
     pcall(function() text = stockText.Text end)
     
-    -- Parse "x4 in Stock" -> 4
-    local stock = tonumber(string.match(text, "x(%d+)"))
-    return stock
+    if text == "" then return nil end
+    
+    -- Cari ANGKA PERTAMA di text (fleksibel untuk semua format)
+    -- Contoh: "x4 in Stock" -> 4, "4" -> 4, "Stock: 10" -> 10
+    local number = string.match(text, "(%d+)")
+    
+    if number then
+        return tonumber(number)
+    end
+    
+    return nil
 end
 
 local function autoDetectOpcode()
     print("[AutoBuy] 🔍 Deteksi opcode via StockText Carrot...")
+    print("[AutoBuy] ⚠️  Pastikan shop TERBUKA & Carrot ADA STOCK (>0)!")
     
-    -- Cek stock awal
+    task.wait(1)
+    
     local stockBefore = getCarrotStock()
+    
     if not stockBefore then
-        warn("[AutoBuy] ⚠️  Tidak bisa baca stock Carrot! Pakai default 133")
+        warn("[AutoBuy] ❌ Tidak bisa baca stock Carrot! Pakai default 133")
         return 133
     end
-    
-    print("[AutoBuy] 📦 Stock Carrot awal:", stockBefore)
     
     if stockBefore == 0 then
-        warn("[AutoBuy] ⚠️  Carrot habis! Tidak bisa deteksi opcode. Pakai default 133")
+        warn("[AutoBuy] ❌ Stock Carrot = 0! Pakai default 133")
         return 133
     end
     
-    -- Test opcode 158-165
+    print("[AutoBuy] 📦 Stock awal:", stockBefore)
     print("[AutoBuy] 🧪 Testing opcode 158-165...")
     
     for testOpcode = 158, 165 do
-        print("[AutoBuy] 🔄 Coba opcode:", testOpcode)
+        print("[AutoBuy] 🔄 Test opcode:", testOpcode)
         
-        -- Kirim packet untuk beli Carrot
         local packetStr = string.char(testOpcode, 0, 6) .. "Carrot"
         pcall(function()
             packetRemote:FireServer(buffer.fromstring(packetStr))
         end)
         
-        -- Tunggu sebentar biar server proses
-        task.wait(0.8)
+        task.wait(1)
         
-        -- Cek stock setelahnya
         local stockAfter = getCarrotStock()
         
         if stockAfter and stockAfter < stockBefore then
-            print("[AutoBuy] 🎯 OPCODE DITEMUKAN:", testOpcode)
-            print("[AutoBuy] 📦 Stock berkurang:", stockBefore, "->", stockAfter)
+            print("[AutoBuy] 🎯 OPCODE:", testOpcode)
+            print("[AutoBuy] 📦 Stock:", stockBefore, "→", stockAfter)
             return testOpcode
-        else
-            print("[AutoBuy] ❌ Opcode", testOpcode, "- Stock tetap:", stockAfter)
         end
         
         task.wait(0.3)
     end
     
-    warn("[AutoBuy] ⚠️  Tidak ada opcode yang bekerja! Pakai default 133")
+    warn("[AutoBuy] ❌ Tidak ada opcode bekerja! Pakai default 133")
     return 133
 end
 
@@ -169,9 +180,9 @@ local function cacheShopElements()
         
         for _, targetName in ipairs(TARGET_ITEMS) do
             if itemName == targetName then
-                local mainFrame = itemContainer:FindFirstChild("Main_Frame")
+                local mainFrame = itemContainer:FindFirstChild("Main_Frame") or itemContainer:FindFirstChild("MainFrame")
                 if mainFrame then
-                    local costText = mainFrame:FindFirstChild("Cost_Text")
+                    local costText = mainFrame:FindFirstChild("Cost_Text") or mainFrame:FindFirstChild("CostText")
                     if costText then
                         shopElements[itemName] = {
                             container = itemContainer,
@@ -256,7 +267,6 @@ local function buyAllAvailable()
                 if buyItem(itemName) then
                     totalBought += 1
                     boughtAny = true
-                    print("[AutoBuy] ✅", itemName, "| Sesi:", totalBought)
                     itemStatus[itemName] = "stock"
                     
                     local delay = BUY_JITTER_MIN + math.random() * (BUY_JITTER_MAX - BUY_JITTER_MIN)
@@ -288,10 +298,7 @@ local function scanAndBuy()
     
     cacheShopElements()
     
-    if next(shopElements) == nil then
-        print("[AutoBuy] ⚠️  Shop belum terdeteksi")
-        return
-    end
+    if next(shopElements) == nil then return end
     
     buyHistory = {}
     
@@ -319,7 +326,7 @@ local function mainLoop()
         
         local mins = math.floor(waitTime / 60)
         local secs = math.floor(waitTime % 60)
-        print(string.format("[AutoBuy] ⏰ Next scan: %s (%dm %ds)", 
+        print(string.format("[AutoBuy] ⏰ Next: %s (%dm %ds)", 
             os.date("%H:%M:%S", nextScanTime), mins, secs))
         
         task.wait(waitTime)
@@ -336,11 +343,7 @@ local function startMonitoring()
     
     print("[AutoBuy] ▶️  START | Opcode:", OPCODE)
     cacheShopElements()
-    
-    -- Langsung scan
-    print("[AutoBuy] 🔍 Initial scan...")
     pcall(scanAndBuy)
-    
     task.spawn(mainLoop)
 end
 
@@ -371,7 +374,6 @@ local function createGUI()
     corner.CornerRadius = UDim.new(0, 10)
     corner.Parent = mainFrame
     
-    -- Title Bar
     local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1, 0, 0, 35)
     titleBar.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
@@ -413,14 +415,12 @@ local function createGUI()
     minimizeButton.BackgroundTransparency = 1
     minimizeButton.Parent = titleBar
     
-    -- Content
     local contentFrame = Instance.new("Frame")
     contentFrame.Size = UDim2.new(1, -20, 1, -80)
     contentFrame.Position = UDim2.new(0, 10, 0, 45)
     contentFrame.BackgroundTransparency = 1
     contentFrame.Parent = mainFrame
     
-    -- Status
     local statusText = Instance.new("TextLabel")
     statusText.Size = UDim2.new(1, 0, 0, 22)
     statusText.Text = "Status: ⏹️ OFF"
@@ -431,7 +431,6 @@ local function createGUI()
     statusText.TextXAlignment = Enum.TextXAlignment.Center
     statusText.Parent = contentFrame
     
-    -- Opcode display + input
     local opcodeLabel = Instance.new("TextLabel")
     opcodeLabel.Size = UDim2.new(0, 50, 0, 20)
     opcodeLabel.Position = UDim2.new(0, 0, 0, 25)
@@ -481,7 +480,6 @@ local function createGUI()
         end
     end)
     
-    -- Timer
     local timerText = Instance.new("TextLabel")
     timerText.Size = UDim2.new(1, 0, 0, 28)
     timerText.Position = UDim2.new(0, 0, 0, 50)
@@ -515,7 +513,6 @@ local function createGUI()
     buyingText.TextXAlignment = Enum.TextXAlignment.Center
     buyingText.Parent = contentFrame
     
-    -- Item List
     local itemList = Instance.new("ScrollingFrame")
     itemList.Size = UDim2.new(1, 0, 0, 80)
     itemList.Position = UDim2.new(0, 0, 0, 115)
@@ -544,7 +541,6 @@ local function createGUI()
         itemLabels[itemName] = label
     end
     
-    -- Stats
     local statsText = Instance.new("TextLabel")
     statsText.Size = UDim2.new(1, 0, 0, 22)
     statsText.Position = UDim2.new(0, 0, 0, 200)
@@ -556,7 +552,6 @@ local function createGUI()
     statsText.TextXAlignment = Enum.TextXAlignment.Center
     statsText.Parent = contentFrame
     
-    -- Toggle Button
     local toggleButton = Instance.new("TextButton")
     toggleButton.Size = UDim2.new(1, 0, 0, 40)
     toggleButton.Position = UDim2.new(0, 0, 0, 228)
@@ -572,7 +567,6 @@ local function createGUI()
     buttonCorner.CornerRadius = UDim.new(0, 8)
     buttonCorner.Parent = toggleButton
     
-    -- Update UI
     local function updateUI()
         if isRunning then
             statusText.Text = isBuying and "🛒 MEMBORONG" or "⏰ MENUNGGU"
@@ -592,9 +586,6 @@ local function createGUI()
                     local secs = math.floor(remaining % 60)
                     countdownText.Text = string.format("%d menit %d detik", mins, secs)
                     timerText.Text = os.date("%H:%M:%S", nextScanTime)
-                else
-                    timerText.Text = "SEKARANG"
-                    countdownText.Text = "🔍 Scanning..."
                 end
             end
         else
@@ -635,7 +626,6 @@ local function createGUI()
         updateUI()
     end)
     
-    -- Draggable
     local dragging = false
     local dragStart = nil
     local frameStart = nil
@@ -677,7 +667,7 @@ local function createGUI()
     closeButton.MouseButton1Click:Connect(function()
         stopMonitoring()
         screenGui:Destroy()
-    end
+    end)
     
     updateUI()
     print("[AutoBuy] 🖥️  GUI Loaded")
@@ -688,4 +678,3 @@ end
 -- ──────────────────────────────────────────────────────────────────────
 createGUI()
 print("[AutoBuy] 🚀 Ready | Opcode:", OPCODE)
-print("[AutoBuy] 🎯 Deteksi: Cek StockText Carrot sebelum & sesudah test opcode")
