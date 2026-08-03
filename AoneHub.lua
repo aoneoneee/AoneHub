@@ -1,5 +1,5 @@
--- AUTO MAIL - GUI TEST (BERHASIL)
--- Format buffer sudah terbukti: ^\001b + panjang + username, ]\001 + item
+-- AUTO MAIL - GUI TEST (STOK DARI ATRIBUT COUNT)
+-- Stok: Players>USN>Backpack>NamaItem (Count = jumlah)
 local player = game:GetService("Players").LocalPlayer
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local remote = ReplicatedStorage:WaitForChild("SharedModules"):WaitForChild("Packet"):WaitForChild("RemoteEvent")
@@ -45,7 +45,6 @@ local selectedCategory = "Seeds"
 local selectedItems = {}
 local allItems = {}
 
--- Init
 for _, cat in ipairs(CATEGORIES) do
     for _, itemName in ipairs(cat.Items) do
         selectedItems[itemName] = false
@@ -54,22 +53,41 @@ for _, cat in ipairs(CATEGORIES) do
 end
 
 -- ============================================
--- FUNGSI CEK STOK
+-- FUNGSI CEK STOK (DARI ATRIBUT COUNT)
 -- ============================================
 local function getItemCount(itemName)
     local total = 0
+    
+    -- Cek di Backpack
     local backpack = player:FindFirstChild("Backpack")
     if backpack then
-        for _, item in pairs(backpack:GetChildren()) do
-            if item:IsA("Tool") and item.Name == itemName then total = total + 1 end
+        local tool = backpack:FindFirstChild(itemName)
+        if tool and tool:IsA("Tool") then
+            -- Cek atribut Count
+            local count = tool:GetAttribute("Count")
+            if count and type(count) == "number" then
+                total = total + count
+            else
+                -- Fallback: kalau tidak ada atribut, anggap 1
+                total = total + 1
+            end
         end
     end
+    
+    -- Cek di Character (item yang sedang dipegang)
     local character = player.Character
     if character then
-        for _, item in pairs(character:GetChildren()) do
-            if item:IsA("Tool") and item.Name == itemName then total = total + 1 end
+        local tool = character:FindFirstChild(itemName)
+        if tool and tool:IsA("Tool") then
+            local count = tool:GetAttribute("Count")
+            if count and type(count) == "number" then
+                total = total + count
+            else
+                total = total + 1
+            end
         end
     end
+    
     return total
 end
 
@@ -100,10 +118,9 @@ local function setTarget(username)
         lenStr = "\0" .. tostring(len)
     end
     
-    -- Format: ^\001b + panjang + username
     local packet = "^\001b" .. lenStr .. username
     
-    print("[Mail] Set target: " .. username .. " (len=" .. len .. ")")
+    print("[Mail] Set target: " .. username)
     
     local success = false
     pcall(function()
@@ -122,7 +139,6 @@ local function sendItem(itemName, count, category)
     local nameLen = string.len(itemName)
     local catLen = string.len(category)
     
-    -- Format: ]\001 + header + item
     local packet = "]\001c\000\000\000<y%\166A\028\005\001"
     packet = packet .. "\028\v\aItemKey\v"
     packet = packet .. encodeLen(nameLen)
@@ -133,7 +149,7 @@ local function sendItem(itemName, count, category)
     packet = packet .. category
     packet = packet .. "\000\000\000"
     
-    print("[Mail] Kirim: " .. count .. "x " .. itemName .. " (" .. category .. ")")
+    print("[Mail] Kirim: " .. count .. "x " .. itemName)
     
     local success = false
     pcall(function()
@@ -152,22 +168,19 @@ local function sendSelectedItems(username, manualCount)
         return false
     end
     
-    -- Set target
     if not setTarget(username) then
         print("[Mail] GAGAL set target!")
         return false
     end
     wait(0.3)
     
-    -- Kumpulkan item terpilih
     local toSend = {}
     for itemName, selected in pairs(selectedItems) do
         if selected then
             local stock = getItemCount(itemName)
-            local count = manualCount and math.min(manualCount, stock) or stock
+            local count = (manualCount and manualCount > 0) and math.min(manualCount, stock) or stock
             
             if count > 0 then
-                -- Cari kategori item ini
                 local cat = "Seeds"
                 for _, c in ipairs(CATEGORIES) do
                     for _, n in ipairs(c.Items) do
@@ -175,11 +188,7 @@ local function sendSelectedItems(username, manualCount)
                     end
                 end
                 
-                table.insert(toSend, {
-                    Name = itemName,
-                    Count = count,
-                    Category = cat
-                })
+                table.insert(toSend, {Name = itemName, Count = count, Category = cat})
             end
         end
     end
@@ -232,7 +241,7 @@ local function createGUI()
     title.TextSize = 15
     title.Parent = mf
     
-    -- Username Label
+    -- Username
     local ul = Instance.new("TextLabel")
     ul.Size = UDim2.new(1, -20, 0, 14)
     ul.Position = UDim2.new(0, 10, 0, 42)
@@ -244,7 +253,6 @@ local function createGUI()
     ul.TextXAlignment = Enum.TextXAlignment.Left
     ul.Parent = mf
     
-    -- Username TextBox
     local userBox = Instance.new("TextBox")
     userBox.Size = UDim2.new(1, -20, 0, 28)
     userBox.Position = UDim2.new(0, 10, 0, 57)
@@ -258,19 +266,18 @@ local function createGUI()
     userBox.Parent = mf
     Instance.new("UICorner", userBox).CornerRadius = UDim.new(0, 5)
     
-    -- Jumlah Label
+    -- Jumlah
     local jl = Instance.new("TextLabel")
     jl.Size = UDim2.new(1, -20, 0, 14)
     jl.Position = UDim2.new(0, 10, 0, 92)
     jl.BackgroundTransparency = 1
-    jl.Text = "🔢 Jumlah per item (0 = semua stok):"
+    jl.Text = "🔢 Jumlah (0 = semua stok):"
     jl.TextColor3 = Color3.fromRGB(180, 180, 180)
     jl.Font = Enum.Font.Gotham
     jl.TextSize = 10
     jl.TextXAlignment = Enum.TextXAlignment.Left
     jl.Parent = mf
     
-    -- Jumlah TextBox
     local countBox = Instance.new("TextBox")
     countBox.Size = UDim2.new(1, -20, 0, 28)
     countBox.Position = UDim2.new(0, 10, 0, 107)
@@ -326,7 +333,7 @@ local function createGUI()
     catArrow.TextSize = 14
     catArrow.Parent = catFrame
     
-    -- Dropdown list (hidden)
+    -- Dropdown list
     local dropdown = Instance.new("Frame")
     dropdown.Size = UDim2.new(1, 0, 0, #CATEGORIES * 30)
     dropdown.Position = UDim2.new(0, 0, 1, 3)
@@ -354,11 +361,10 @@ local function createGUI()
             selectedCategory = cat.Name
             catLabel.Text = cat.Name
             dropdown.Visible = false
-            updateItemList(scrollFrame, countBox)
+            updateItemList(scrollFrame)
         end)
     end
     
-    -- Toggle dropdown
     catFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dropdown.Visible = not dropdown.Visible
@@ -375,14 +381,14 @@ local function createGUI()
     il.Size = UDim2.new(1, -20, 0, 14)
     il.Position = UDim2.new(0, 10, 0, 194)
     il.BackgroundTransparency = 1
-    il.Text = "📋 Pilih Item:"
+    il.Text = "📋 Item (Stok dari atribut Count):"
     il.TextColor3 = Color3.fromRGB(180, 180, 180)
     il.Font = Enum.Font.Gotham
-    il.TextSize = 10
+    il.TextSize = 9
     il.TextXAlignment = Enum.TextXAlignment.Left
     il.Parent = mf
     
-    -- Scrolling Frame untuk item
+    -- Scrolling Frame
     local scrollFrame = Instance.new("ScrollingFrame")
     scrollFrame.Size = UDim2.new(1, -10, 0, 140)
     scrollFrame.Position = UDim2.new(0, 5, 0, 210)
@@ -400,13 +406,11 @@ local function createGUI()
     layout.Parent = scrollFrame
     
     -- Fungsi update item list
-    function updateItemList(sf, cb)
-        -- Hapus semua
+    function updateItemList(sf)
         for _, child in ipairs(sf:GetChildren()) do
             if child:IsA("Frame") then child:Destroy() end
         end
         
-        -- Cari items di kategori terpilih
         local items = {}
         for _, cat in ipairs(CATEGORIES) do
             if cat.Name == selectedCategory then
@@ -418,6 +422,8 @@ local function createGUI()
         sf.CanvasSize = UDim2.new(0, 0, 0, #items * 30 + 8)
         
         for _, itemName in ipairs(items) do
+            local stock = getItemCount(itemName)
+            
             local fr = Instance.new("Frame")
             fr.Size = UDim2.new(1, -8, 0, 26)
             fr.BackgroundColor3 = selectedItems[itemName] and Color3.fromRGB(40, 60, 45) or Color3.fromRGB(42, 42, 48)
@@ -444,20 +450,20 @@ local function createGUI()
             cm.Visible = selectedItems[itemName]
             cm.Parent = cbtn
             
-            -- Stok label
+            -- Stok label (dari atribut Count)
             local sl = Instance.new("TextLabel")
-            sl.Size = UDim2.new(0, 30, 1, 0)
-            sl.Position = UDim2.new(1, -32, 0, 0)
+            sl.Size = UDim2.new(0, 40, 1, 0)
+            sl.Position = UDim2.new(1, -42, 0, 0)
             sl.BackgroundTransparency = 1
-            sl.Text = tostring(getItemCount(itemName))
-            sl.TextColor3 = getItemCount(itemName) > 0 and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(120, 120, 120)
-            sl.Font = Enum.Font.Gotham
+            sl.Text = "x" .. tostring(stock)
+            sl.TextColor3 = stock > 0 and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(120, 120, 120)
+            sl.Font = Enum.Font.GothamBold
             sl.TextSize = 9
             sl.TextXAlignment = Enum.TextXAlignment.Right
             sl.Parent = fr
             
             local lb = Instance.new("TextLabel")
-            lb.Size = UDim2.new(1, -65, 1, 0)
+            lb.Size = UDim2.new(1, -70, 1, 0)
             lb.Position = UDim2.new(0, 26, 0, 0)
             lb.BackgroundTransparency = 1
             lb.Text = itemName
@@ -524,16 +530,16 @@ local function createGUI()
         if ok then
             st.Text = "TERKIRIM! ✓"
             st.TextColor3 = Color3.fromRGB(0, 255, 100)
+            -- Refresh stok
+            updateItemList(scrollFrame)
         else
             st.Text = "GAGAL!"
             st.TextColor3 = Color3.fromRGB(255, 80, 80)
         end
     end)
     
-    -- Inisialisasi item list
-    updateItemList(scrollFrame, countBox)
-    
-    return sg, st, userBox, countBox, scrollFrame
+    -- Init
+    updateItemList(scrollFrame)
 end
 
 -- ============================================
@@ -543,13 +549,5 @@ createGUI()
 
 print("========================================")
 print(" AUTO MAIL TEST GUI - SIAP")
-print(" 1. Pilih kategori (dropdown)")
-print(" 2. Centang item yang mau dikirim")
-print(" 3. Isi username target")
-print(" 4. Isi jumlah (0 = semua stok)")
-print(" 5. Klik KIRIM SEKARANG")
-print("========================================")
-print(" ")
-print("Format buffer: ^\\001b + len + username")
-print("Format item: ]\\001c... + item + count")
+print(" Stok dari: Tool > GetAttribute('Count')")
 print("========================================")
