@@ -1,5 +1,5 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - GUI SYSTEM (FULL FIX)
+-- AONEHUB - GUI SYSTEM (FINAL FIX)
 -- ──────────────────────────────────────────────────────────────────────
 
 local function main()
@@ -83,54 +83,39 @@ local function main()
     titleBar.Parent = mainFrame
     
     -- DRAG SYSTEM for main frame
-    local dragging = false
-    local dragStartX, dragStartY
-    local frameStartX, frameStartY
+    local function makeDraggable(dragButton, targetObject)
+        local dragging = false
+        local startMouseX, startMouseY
+        local startObjX, startObjY
+        
+        dragButton.MouseButton1Down:Connect(function(x, y)
+            dragging = true
+            startMouseX = x
+            startMouseY = y
+            startObjX = targetObject.AbsolutePosition.X
+            startObjY = targetObject.AbsolutePosition.Y
+        end)
+        
+        dragButton.MouseMoved:Connect(function(x, y)
+            if dragging then
+                local deltaX = x - startMouseX
+                local deltaY = y - startMouseY
+                targetObject.Position = UDim2.new(0, startObjX + deltaX, 0, startObjY + deltaY)
+            end
+        end)
+        
+        dragButton.MouseButton1Up:Connect(function()
+            dragging = false
+        end)
+        
+        -- Safety: stop drag kalau mouse keluar
+        dragButton.MouseLeave:Connect(function()
+            dragging = false
+        end)
+    end
     
-    titleBar.MouseButton1Down:Connect(function(x, y)
-        dragging = true
-        dragStartX = x
-        dragStartY = y
-        frameStartX = mainFrame.AbsolutePosition.X
-        frameStartY = mainFrame.AbsolutePosition.Y
-    end)
-    
-    titleBar.MouseMoved:Connect(function(x, y)
-        if dragging then
-            local deltaX = x - dragStartX
-            local deltaY = y - dragStartY
-            mainFrame.Position = UDim2.new(0, frameStartX + deltaX, 0, frameStartY + deltaY)
-        end
-    end)
-    
-    titleBar.MouseButton1Up:Connect(function()
-        dragging = false
-    end)
-    
-    -- DRAG SYSTEM for minimized circle
-    local circleDragging = false
-    local circleDragStartX, circleDragStartY
-    local circleStartX, circleStartY
-    
-    minimizedCircle.MouseButton1Down:Connect(function(x, y)
-        circleDragging = true
-        circleDragStartX = x
-        circleDragStartY = y
-        circleStartX = minimizedCircle.AbsolutePosition.X
-        circleStartY = minimizedCircle.AbsolutePosition.Y
-    end)
-    
-    minimizedCircle.MouseMoved:Connect(function(x, y)
-        if circleDragging then
-            local deltaX = x - circleDragStartX
-            local deltaY = y - circleDragStartY
-            minimizedCircle.Position = UDim2.new(0, circleStartX + deltaX, 0, circleStartY + deltaY)
-        end
-    end)
-    
-    minimizedCircle.MouseButton1Up:Connect(function()
-        circleDragging = false
-    end)
+    makeDraggable(titleBar, mainFrame)
+    makeDraggable(minimizedCircle, minimizedCircle)
     
     -- Title bar corner
     local titleCorner = Instance.new("UICorner")
@@ -193,16 +178,15 @@ local function main()
     
     -- Minimize / Restore
     minimizeBtn.MouseButton1Click:Connect(function()
+        minimizedCircle.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
         mainFrame.Visible = false
         minimizedCircle.Visible = true
-        minimizedCircle.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
     end)
     
     minimizedCircle.MouseButton1Click:Connect(function()
-        -- Hanya restore kalau tidak sedang drag (cek jarak gerak)
+        mainFrame.Position = UDim2.new(0, minimizedCircle.AbsolutePosition.X, 0, minimizedCircle.AbsolutePosition.Y)
         minimizedCircle.Visible = false
         mainFrame.Visible = true
-        mainFrame.Position = UDim2.new(0, minimizedCircle.AbsolutePosition.X, 0, minimizedCircle.AbsolutePosition.Y)
     end)
     
     -- Close
@@ -386,7 +370,7 @@ local function main()
     
     -- ==================================================================
     -- ╔══════════════════════════════════════════════════════════════╗
-    -- ║  TAB 1: AUTO BUY SCRIPT                                   ║
+    -- ║  TAB 1: AUTO BUY WITH OPCODE DETECTION                    ║
     -- ╚══════════════════════════════════════════════════════════════╝
     -- ==================================================================
     
@@ -405,7 +389,10 @@ local function main()
         return false
     end
     
+    -- OPCODE (pakai global variable biar persist)
     local OPCODE = 133
+    local opcodeDetected = false  -- Flag: udah pernah detect?
+    
     local ALL_ITEMS = {"Hypno Bloom", "Dragon's Breath", "Sun Bloom", "Star Fruit"}
     local SELECTED_ITEMS = {}
     local RESTOCK_INTERVAL = 300
@@ -425,6 +412,93 @@ local function main()
     
     for _, item in ipairs(ALL_ITEMS) do
         SELECTED_ITEMS[item] = true
+    end
+    
+    -- ==================================================================
+    -- DETEKSI OPCODE (Jalan sekali pas START pertama kali)
+    -- ==================================================================
+    local function getCarrotStock()
+        local seedShop = playerGui:FindFirstChild("SeedShop")
+        if not seedShop then return nil end
+        local f = seedShop:FindFirstChild("Frame")
+        if not f then return nil end
+        local ns = f:FindFirstChild("NormalShop")
+        if not ns then return nil end
+        local carrot = ns:FindFirstChild("Carrot")
+        if not carrot then return nil end
+        local mf = carrot:FindFirstChild("Main_Frame") or carrot:FindFirstChild("MainFrame")
+        if not mf then return nil end
+        
+        -- Cari StockText
+        for _, child in ipairs(mf:GetChildren()) do
+            if child.Name:lower():find("stock") and (child:IsA("TextLabel") or child:IsA("TextButton")) then
+                local txt = ""
+                pcall(function() txt = child.Text end)
+                local num = string.match(txt, "(%d+)")
+                if num then return tonumber(num) end
+            end
+        end
+        return nil
+    end
+    
+    local function detectOpcode()
+        if opcodeDetected then
+            print("[AutoBuy] 🔢 Opcode sudah terdeteksi:", OPCODE)
+            return OPCODE
+        end
+        
+        if not getRemote() then
+            warn("[AutoBuy] ❌ RemoteEvent not found!")
+            return OPCODE
+        end
+        
+        print("[AutoBuy] 🔍 Mendeteksi opcode...")
+        print("[AutoBuy] ⚠️  Pastikan shop TERBUKA & Carrot ADA STOCK!")
+        
+        task.wait(1)
+        
+        local stockBefore = getCarrotStock()
+        
+        if not stockBefore or stockBefore == 0 then
+            warn("[AutoBuy] ⚠️  Carrot tidak tersedia, pakai default:", OPCODE)
+            opcodeDetected = true
+            return OPCODE
+        end
+        
+        print("[AutoBuy] 📦 Stock Carrot awal:", stockBefore)
+        print("[AutoBuy] 🧪 Testing opcode 158-165...")
+        
+        for testOpcode = 158, 165 do
+            print("[AutoBuy] 🔄 Test opcode:", testOpcode)
+            
+            local packetStr = string.char(testOpcode, 0, 6) .. "Carrot"
+            pcall(function()
+                packetRemote:FireServer(buffer.fromstring(packetStr))
+            end)
+            
+            task.wait(1)
+            
+            local stockAfter = getCarrotStock()
+            
+            if stockAfter and stockAfter < stockBefore then
+                OPCODE = testOpcode
+                opcodeDetected = true
+                print("[AutoBuy] 🎯 OPCODE DITEMUKAN:", OPCODE)
+                print("[AutoBuy] 📦 Stock:", stockBefore, "→", stockAfter)
+                
+                -- Update opcode input di GUI
+                if opInput then
+                    opInput.Text = tostring(OPCODE)
+                end
+                return OPCODE
+            end
+            
+            task.wait(0.3)
+        end
+        
+        warn("[AutoBuy] ⚠️  Tidak ada opcode bekerja, pakai default:", OPCODE)
+        opcodeDetected = true
+        return OPCODE
     end
     
     -- Build packet
@@ -563,6 +637,10 @@ local function main()
             warn("[AutoBuy] ❌ RemoteEvent not found!")
             return
         end
+        
+        -- Deteksi opcode (hanya pertama kali)
+        detectOpcode()
+        
         isRunning = true
         cacheShopElements()
         pcall(scanAndBuy)
@@ -582,7 +660,7 @@ local function main()
     
     local scroll = Instance.new("ScrollingFrame")
     scroll.Size = UDim2.new(1, 0, 1, 0)
-    scroll.CanvasSize = UDim2.new(0, 0, 0, 520)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 530)
     scroll.ScrollBarThickness = 3
     scroll.BackgroundTransparency = 1
     scroll.BorderSizePixel = 0
@@ -614,9 +692,9 @@ local function main()
     statusText.TextXAlignment = Enum.TextXAlignment.Left
     statusText.BackgroundTransparency = 1
     statusText.Parent = scroll
-    y += 28
+    y += 26
     
-    -- Opcode
+    -- Opcode row
     local opRow = Instance.new("Frame")
     opRow.Size = UDim2.new(1, -20, 0, 26)
     opRow.Position = UDim2.new(0, 10, 0, y)
@@ -635,7 +713,7 @@ local function main()
     local opInput = Instance.new("TextBox")
     opInput.Size = UDim2.new(0, 55, 1, 0)
     opInput.Position = UDim2.new(0, 58, 0, 0)
-    opInput.Text = "133"
+    opInput.Text = tostring(OPCODE)
     opInput.TextColor3 = C.text
     opInput.Font = Enum.Font.GothamBold
     opInput.TextSize = 12
@@ -659,8 +737,23 @@ local function main()
     
     opBtn.MouseButton1Click:Connect(function()
         local n = tonumber(opInput.Text)
-        if n and n >= 100 and n <= 200 then OPCODE = n end
+        if n and n >= 100 and n <= 200 then
+            OPCODE = n
+            print("[AutoBuy] 🔢 Opcode manual:", OPCODE)
+        end
     end)
+    
+    -- Detect status
+    local detectStatus = Instance.new("TextLabel")
+    detectStatus.Size = UDim2.new(0, 80, 1, 0)
+    detectStatus.Position = UDim2.new(0, 185, 0, 0)
+    detectStatus.Text = opcodeDetected and "✅ Detected" or "🔍 Auto"
+    detectStatus.TextColor3 = opcodeDetected and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 200, 50)
+    detectStatus.Font = Enum.Font.Gotham
+    detectStatus.TextSize = 9
+    detectStatus.TextXAlignment = Enum.TextXAlignment.Left
+    detectStatus.BackgroundTransparency = 1
+    detectStatus.Parent = opRow
     y += 34
     
     -- Timer
@@ -753,8 +846,7 @@ local function main()
     statsText.TextSize = 11
     statsText.TextXAlignment = Enum.TextXAlignment.Left
     statsText.BackgroundTransparency = 1
-    statsText.Parent = scroll
-    y += 26
+    statsText.Parent = scroll    y += 26
     
     -- Start/Stop button
     local toggleBtn = Instance.new("TextButton")
@@ -780,6 +872,10 @@ local function main()
     
     -- UPDATE UI FUNCTION
     function updateUI()
+        -- Update detect status
+        detectStatus.Text = opcodeDetected and "✅ Detected" or "🔍 Auto"
+        detectStatus.TextColor3 = opcodeDetected and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 200, 50)
+        
         if isRunning then
             statusText.Text = isBuying and "🛒  MEMBORONG..." or "⏰  MENUNGGU RESTOCK"
             statusText.TextColor3 = isBuying and Color3.fromRGB(255, 150, 50) or Color3.fromRGB(100, 200, 255)
@@ -834,7 +930,7 @@ local function main()
     
     parent.Destroying:Connect(stopMonitoring)
     
-    print("[AutoBuy] ✅ Tab AutoBuy loaded")
+    print("[AutoBuy] ✅ Tab AutoBuy loaded (dengan auto-detect opcode)")
     
     -- ==================================================================
     -- PLACEHOLDER TABS
