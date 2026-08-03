@@ -393,13 +393,13 @@ local function main()
     local OPCODE = 133
     local opcodeDetected = false  -- Flag: udah pernah detect?
     
-    local ALL_ITEMS = {"Hypno Bloom", "Dragon's Breath", "Sun Bloom", "Star Fruit"}
+    local ALL_ITEMS = {"Hypno Bloom", "Dragon's Breath", "Sun Bloom", "Star Fruit", "Carrot", "Bamboo"}
     local SELECTED_ITEMS = {}
     local RESTOCK_INTERVAL = 300
     local JITTER_MIN = 3
     local JITTER_MAX = 5
     local BUY_JITTER_MIN = 0.3
-    local BUY_JITTER_MAX = 0.8
+    local BUY_JITTER_MAX = 2.8
     
     local buyStats = {total = 0, success = 0, failed = 0}
     local buyHistory = {}
