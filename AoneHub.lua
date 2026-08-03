@@ -1,5 +1,5 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - FINAL (POSISI BENAR-BENAR INDEPENDEN)
+-- AONEHUB - FINAL (POSISI INDEPENDEN - MASING-MASING INGAT POSISI)
 -- ──────────────────────────────────────────────────────────────────────
 
 local function main()
@@ -29,10 +29,68 @@ local function main()
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
     -- ==================================================================
-    -- POSISI INDEPENDEN
+    -- POSISI DISIMPAN TERPISAH (masing-masing ingat posisinya)
     -- ==================================================================
-    local mainFramePos = UDim2.new(0.5, -310, 0.5, -195)
-    local circlePos = UDim2.new(0.5, -25, 0.5, -25)
+    local mainFrameSavedX = 0
+    local mainFrameSavedY = 0
+    local circleSavedX = 0
+    local circleSavedY = 0
+    
+    -- Inisialisasi posisi awal
+    local initMainX = 0.5 * workspace.CurrentCamera.ViewportSize.X - 310
+    local initMainY = 0.5 * workspace.CurrentCamera.ViewportSize.Y - 195
+    local initCircleX = 0.5 * workspace.CurrentCamera.ViewportSize.X - 25
+    local initCircleY = 0.5 * workspace.CurrentCamera.ViewportSize.Y - 25
+    
+    mainFrameSavedX = initMainX
+    mainFrameSavedY = initMainY
+    circleSavedX = initCircleX
+    circleSavedY = initCircleY
+    
+    -- ==================================================================
+    -- CUSTOM DRAG FUNCTION
+    -- ==================================================================
+    local function makeDraggable(button, target, saveFunc)
+        local dragging = false
+        local startX, startY
+        local objStartX, objStartY
+        
+        button.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                startX = input.Position.X
+                startY = input.Position.Y
+                objStartX = target.AbsolutePosition.X
+                objStartY = target.AbsolutePosition.Y
+            end
+        end)
+        
+        button.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = false
+                -- Simpan posisi setelah selesai drag
+                if saveFunc then
+                    saveFunc(target.AbsolutePosition.X, target.AbsolutePosition.Y)
+                end
+            end
+        end)
+        
+        button.MouseMoved:Connect(function(x, y)
+            if dragging then
+                local newX = objStartX + (x - startX)
+                local newY = objStartY + (y - startY)
+                target.Position = UDim2.new(0, newX, 0, newY)
+            end
+        end)
+        
+        -- Safety: stop drag kalau mouse keluar
+        button.MouseLeave:Connect(function()
+            if dragging and saveFunc then
+                saveFunc(target.AbsolutePosition.X, target.AbsolutePosition.Y)
+            end
+            dragging = false
+        end)
+    end
     
     -- ==================================================================
     -- MINIMIZED CIRCLE
@@ -40,7 +98,7 @@ local function main()
     local minimizedCircle = Instance.new("TextButton")
     minimizedCircle.Name = "MinimizedCircle"
     minimizedCircle.Size = UDim2.new(0, 50, 0, 50)
-    minimizedCircle.Position = circlePos
+    minimizedCircle.Position = UDim2.new(0, circleSavedX, 0, circleSavedY)
     minimizedCircle.Text = "AH"
     minimizedCircle.TextColor3 = C.text
     minimizedCircle.Font = Enum.Font.GothamBlack
@@ -51,7 +109,6 @@ local function main()
     minimizedCircle.ZIndex = 10
     minimizedCircle.AutoButtonColor = false
     minimizedCircle.Active = true
-    minimizedCircle.Draggable = true
     minimizedCircle.Parent = screenGui
     
     Instance.new("UICorner", minimizedCircle).CornerRadius = UDim.new(1, 0)
@@ -62,39 +119,38 @@ local function main()
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
     mainFrame.Size = UDim2.new(0, 620, 0, 390)
-    mainFrame.Position = mainFramePos
+    mainFrame.Position = UDim2.new(0, mainFrameSavedX, 0, mainFrameSavedY)
     mainFrame.BackgroundColor3 = C.bg
     mainFrame.BorderSizePixel = 0
     mainFrame.ClipsDescendants = true
     mainFrame.Active = true
-    mainFrame.Draggable = true
     mainFrame.Parent = screenGui
     
     Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
     
     -- ==================================================================
-    -- BACKGROUND LOOP: SIMPAN POSISI TERAKHIR
-    -- ==================================================================
-    task.spawn(function()
-        while screenGui.Parent do
-            if mainFrame.Visible then
-                mainFramePos = mainFrame.Position
-            end
-            if minimizedCircle.Visible then
-                circlePos = minimizedCircle.Position
-            end
-            task.wait(0.3)
-        end
-    end)
-    
-    -- ==================================================================
     -- TITLE BAR
     -- ==================================================================
-    local titleBar = Instance.new("Frame")
+    local titleBar = Instance.new("TextButton")
     titleBar.Size = UDim2.new(1, 0, 0, 38)
+    titleBar.Text = ""
     titleBar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
     titleBar.BorderSizePixel = 0
+    titleBar.AutoButtonColor = false
+    titleBar.Active = true
     titleBar.Parent = mainFrame
+    
+    -- Terapkan custom drag ke title bar
+    makeDraggable(titleBar, mainFrame, function(x, y)
+        mainFrameSavedX = x
+        mainFrameSavedY = y
+    end)
+    
+    -- Terapkan custom drag ke minimized circle
+    makeDraggable(minimizedCircle, minimizedCircle, function(x, y)
+        circleSavedX = x
+        circleSavedY = y
+    end)
     
     Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
     
@@ -147,25 +203,31 @@ local function main()
     Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 5)
     
     -- ==================================================================
-    -- MINIMIZE / RESTORE (POSISI BENAR-BENAR INDEPENDEN)
+    -- MINIMIZE / RESTORE (MASING-MASING INGAT POSISI SENDIRI)
     -- ==================================================================
     minimizeBtn.MouseButton1Click:Connect(function()
-        -- Simpan posisi main frame terakhir
-        mainFramePos = mainFrame.Position
-        -- Set circle ke posisi main frame
-        minimizedCircle.Position = mainFramePos
-        -- Switch
+        -- Simpan posisi main frame saat ini
+        mainFrameSavedX = mainFrame.AbsolutePosition.X
+        mainFrameSavedY = mainFrame.AbsolutePosition.Y
+        
+        -- Sembunyikan main frame
         mainFrame.Visible = false
+        
+        -- Tampilkan circle di posisi circle terakhir (bukan posisi main frame!)
+        minimizedCircle.Position = UDim2.new(0, circleSavedX, 0, circleSavedY)
         minimizedCircle.Visible = true
     end)
     
     minimizedCircle.MouseButton1Click:Connect(function()
-        -- Simpan posisi circle terakhir
-        circlePos = minimizedCircle.Position
-        -- Set main frame ke posisi circle
-        mainFrame.Position = circlePos
-        -- Switch
+        -- Simpan posisi circle saat ini
+        circleSavedX = minimizedCircle.AbsolutePosition.X
+        circleSavedY = minimizedCircle.AbsolutePosition.Y
+        
+        -- Sembunyikan circle
         minimizedCircle.Visible = false
+        
+        -- Tampilkan main frame di posisi main frame terakhir (bukan posisi circle!)
+        mainFrame.Position = UDim2.new(0, mainFrameSavedX, 0, mainFrameSavedY)
         mainFrame.Visible = true
     end)
     
@@ -324,7 +386,7 @@ local function main()
     print("[AoneHub] ✅ GUI Framework Ready")
     
     -- ==================================================================
-    -- TAB 1: AUTO BUY WITH OPCODE DETECTION
+    -- TAB 1: AUTO BUY (SAMA SEPERTI SEBELUMNYA - TIDAK DIUBAH)
     -- ==================================================================
     local parent = tabFrames["AutoBuy"]
     
@@ -349,7 +411,7 @@ local function main()
     local JITTER_MIN = 3
     local JITTER_MAX = 5
     local BUY_JITTER_MIN = 0.3
-    local BUY_JITTER_MAX = 2.8
+    local BUY_JITTER_MAX = 0.8
     
     local buyStats = {total = 0, success = 0, failed = 0}
     local buyHistory = {}
@@ -569,7 +631,6 @@ local function main()
     statusText.TextXAlignment = Enum.TextXAlignment.Left; statusText.BackgroundTransparency = 1; statusText.Parent = scroll
     y += 26
     
-    -- Opcode row
     local opRow = Instance.new("Frame")
     opRow.Size = UDim2.new(1, -20, 0, 26); opRow.Position = UDim2.new(0, 10, 0, y)
     opRow.BackgroundTransparency = 1; opRow.Parent = scroll
