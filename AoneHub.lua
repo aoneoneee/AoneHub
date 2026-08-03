@@ -31,9 +31,21 @@ local function main()
     -- ==================================================================
     -- POSISI INDEPENDEN - Simpan posisi masing-masing
     -- ==================================================================
-    local mainFrameSavedPos = UDim2.new(0.5, -310, 0.5, -195)
-    local circleSavedPos = UDim2.new(0.5, -25, 0.5, -25)
-    
+    local mainFramePos = UDim2.new(0.5, -310, 0.5, -195)
+    local circlePos = UDim2.new(0.5, -25, 0.5, -25)
+
+    -- Update posisi saat drag (pakai loop checker)
+    task.spawn(function()
+        while screenGui.Parent do
+            if mainFrame.Visible then
+                mainFramePos = mainFrame.Position
+            end
+            if minimizedCircle.Visible then
+                circlePos = minimizedCircle.Position
+            end
+            task.wait(0.2)
+        end
+    end)    
     -- ==================================================================
     -- MINIMIZED CIRCLE
     -- ==================================================================
@@ -146,25 +158,23 @@ local function main()
     Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 5)
     
     -- ==================================================================
-    -- MINIMIZE / RESTORE (PAKAI POSISI TERSIMPAN)
+    -- MINIMIZE / RESTORE (PAKAI POSISI TERSIMPAN, TIDAK SALING UPDATE)
     -- ==================================================================
     minimizeBtn.MouseButton1Click:Connect(function()
         -- Simpan posisi main frame terakhir
-        mainFrameSavedPos = mainFrame.Position
-        -- Set circle ke posisi main frame
-        minimizedCircle.Position = mainFrameSavedPos
-        circleSavedPos = minimizedCircle.Position
+        mainFramePos = mainFrame.Position
+        -- Set circle ke posisi main frame (hanya saat minimize)
+        minimizedCircle.Position = mainFramePos
         -- Switch
         mainFrame.Visible = false
         minimizedCircle.Visible = true
     end)
-    
+
     minimizedCircle.MouseButton1Click:Connect(function()
-        -- Simpan posisi circle terakhir
-        circleSavedPos = minimizedCircle.Position
-        -- Set main frame ke posisi circle
-        mainFrame.Position = circleSavedPos
-        mainFrameSavedPos = mainFrame.Position
+        -- Simpan posisi circle terakhir  
+        circlePos = minimizedCircle.Position
+        -- Set main frame ke posisi circle (hanya saat restore)
+        mainFrame.Position = circlePos
         -- Switch
         minimizedCircle.Visible = false
         mainFrame.Visible = true
