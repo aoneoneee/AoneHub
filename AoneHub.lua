@@ -1,5 +1,5 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - GUI SYSTEM (DRAG FINAL FIX)
+-- AONEHUB - GUI SYSTEM (DRAG ULTIMATE FIX)
 -- ──────────────────────────────────────────────────────────────────────
 
 local function main()
@@ -8,6 +8,7 @@ local function main()
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local Players = game:GetService("Players")
     local UserInputService = game:GetService("UserInputService")
+    local RunService = game:GetService("RunService")
     
     local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
@@ -75,39 +76,41 @@ local function main()
     titleBar.Parent = mainFrame
     
     -- ==================================================================
-    -- DRAG SYSTEM - PAKAI MOUSE ABSOLUTE POSITION
+    -- DRAG SYSTEM - PAKAI RENDERSTEPPED + GETMOUSELOCATION
     -- ==================================================================
     local function makeDraggable(button, target)
         local isDragging = false
-        local startMouseX = 0
-        local startMouseY = 0
-        local startPosX = 0
-        local startPosY = 0
+        local offsetX = 0
+        local offsetY = 0
+        local connection = nil
         
-        button.MouseButton1Down:Connect(function(x, y)
-            isDragging = true
-            -- x, y dari event adalah posisi mouse absolute di layar
-            startMouseX = x
-            startMouseY = y
-            startPosX = target.AbsolutePosition.X
-            startPosY = target.AbsolutePosition.Y
-        end)
-        
-        button.MouseMoved:Connect(function(x, y)
-            if isDragging then
-                local deltaX = x - startMouseX
-                local deltaY = y - startMouseY
-                target.Position = UDim2.new(0, startPosX + deltaX, 0, startPosY + deltaY)
+        button.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                if not isDragging then
+                    isDragging = true
+                    local mousePos = UserInputService:GetMouseLocation()
+                    offsetX = target.AbsolutePosition.X - mousePos.X
+                    offsetY = target.AbsolutePosition.Y - mousePos.Y
+                    
+                    -- Start render loop
+                    connection = RunService.RenderStepped:Connect(function()
+                        if isDragging then
+                            local mousePos = UserInputService:GetMouseLocation()
+                            target.Position = UDim2.new(0, mousePos.X + offsetX, 0, mousePos.Y + offsetY)
+                        end
+                    end)
+                end
             end
         end)
         
-        button.MouseButton1Up:Connect(function(x, y)
-            isDragging = false
-        end)
-        
-        -- Safety: stop drag kalau mouse keluar button
-        button.MouseLeave:Connect(function()
-            isDragging = false
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                isDragging = false
+                if connection then
+                    connection:Disconnect()
+                    connection = nil
+                end
+            end
         end)
     end
     
@@ -304,13 +307,6 @@ local function main()
     subLabel.BackgroundTransparency = 1
     subLabel.Parent = defaultView
     
-    local accentLine = Instance.new("Frame")
-    accentLine.Size = UDim2.new(0, 80, 0, 2)
-    accentLine.Position = UDim2.new(0.5, -40, 0.54, 0)
-    accentLine.BackgroundColor3 = C.accent
-    accentLine.BorderSizePixel = 0
-    accentLine.Parent = defaultView
-    
     -- Tab frames
     local tabFrames = {}
     for _, tab in ipairs(tabs) do
@@ -347,7 +343,6 @@ local function main()
     
     -- ==================================================================
     -- TAB 1: AUTO BUY WITH OPCODE DETECTION
-    -- (Sama seperti sebelumnya, tidak diubah)
     -- ==================================================================
     local parent = tabFrames["AutoBuy"]
     
@@ -372,7 +367,7 @@ local function main()
     local JITTER_MIN = 3
     local JITTER_MAX = 5
     local BUY_JITTER_MIN = 0.3
-    local BUY_JITTER_MAX = 2.8
+    local BUY_JITTER_MAX = 0.8
     
     local buyStats = {total = 0, success = 0, failed = 0}
     local buyHistory = {}
@@ -549,9 +544,7 @@ local function main()
     local function startMonitoring()
         if isRunning then return end
         if not getRemote() then return end
-        
         detectOpcode()
-        
         isRunning = true
         cacheShopElements()
         pcall(scanAndBuy)
