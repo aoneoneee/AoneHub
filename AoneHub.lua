@@ -1,20 +1,17 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - GUI SYSTEM (FINAL FIX)
+-- AONEHUB - GUI SYSTEM (DRAG FIX)
 -- ──────────────────────────────────────────────────────────────────────
 
 local function main()
     print("[AoneHub] Starting...")
     
-    -- Services
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local Players = game:GetService("Players")
     local UserInputService = game:GetService("UserInputService")
-    local RunService = game:GetService("RunService")
     
     local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
     
-    -- Colors
     local C = {
         bg = Color3.fromRGB(22, 22, 28),
         sidebar = Color3.fromRGB(28, 28, 35),
@@ -27,7 +24,7 @@ local function main()
     }
     
     -- ==================================================================
-    -- CREATE SCREENGUI
+    -- SCREENGUI
     -- ==================================================================
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "AoneHub"
@@ -59,7 +56,6 @@ local function main()
     -- MAIN FRAME
     -- ==================================================================
     local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "MainFrame"
     mainFrame.Size = UDim2.new(0, 620, 0, 390)
     mainFrame.Position = UDim2.new(0.5, -310, 0.5, -195)
     mainFrame.BackgroundColor3 = C.bg
@@ -70,10 +66,9 @@ local function main()
     Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
     
     -- ==================================================================
-    -- TITLE BAR with DRAG
+    -- TITLE BAR
     -- ==================================================================
     local titleBar = Instance.new("TextButton")
-    titleBar.Name = "TitleBar"
     titleBar.Size = UDim2.new(1, 0, 0, 38)
     titleBar.Text = ""
     titleBar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
@@ -82,47 +77,66 @@ local function main()
     titleBar.ZIndex = 2
     titleBar.Parent = mainFrame
     
-    -- DRAG SYSTEM for main frame
-    local function makeDraggable(dragButton, targetObject)
-        local dragging = false
-        local startMouseX, startMouseY
-        local startObjX, startObjY
-        
-        dragButton.MouseButton1Down:Connect(function(x, y)
-            dragging = true
-            startMouseX = x
-            startMouseY = y
-            startObjX = targetObject.AbsolutePosition.X
-            startObjY = targetObject.AbsolutePosition.Y
-        end)
-        
-        dragButton.MouseMoved:Connect(function(x, y)
-            if dragging then
-                local deltaX = x - startMouseX
-                local deltaY = y - startMouseY
-                targetObject.Position = UDim2.new(0, startObjX + deltaX, 0, startObjY + deltaY)
-            end
-        end)
-        
-        dragButton.MouseButton1Up:Connect(function()
-            dragging = false
-        end)
-        
-        -- Safety: stop drag kalau mouse keluar
-        dragButton.MouseLeave:Connect(function()
-            dragging = false
-        end)
+    -- ==================================================================
+    -- UNIFIED DRAG SYSTEM (pakai UserInputService)
+    -- ==================================================================
+    local dragTarget = nil
+    local dragOffset = nil
+    
+    local function startDrag(obj)
+        dragTarget = obj
+        local mousePos = UserInputService:GetMouseLocation()
+        dragOffset = Vector2.new(
+            obj.AbsolutePosition.X - mousePos.X,
+            obj.AbsolutePosition.Y - mousePos.Y
+        )
     end
     
-    makeDraggable(titleBar, mainFrame)
-    makeDraggable(minimizedCircle, minimizedCircle)
+    local function stopDrag()
+        dragTarget = nil
+        dragOffset = nil
+    end
     
-    -- Title bar corner
+    local function updateDrag()
+        if not dragTarget then return end
+        local mousePos = UserInputService:GetMouseLocation()
+        dragTarget.Position = UDim2.new(
+            0,
+            mousePos.X + dragOffset.X,
+            0,
+            mousePos.Y + dragOffset.Y
+        )
+    end
+    
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            startDrag(mainFrame)
+        end
+    end)
+    
+    minimizedCircle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            startDrag(minimizedCircle)
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            stopDrag()
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            updateDrag()
+        end
+    end)
+    
+    -- Title bar UI
     local titleCorner = Instance.new("UICorner")
     titleCorner.CornerRadius = UDim.new(0, 10)
     titleCorner.Parent = titleBar
     
-    -- Title bar fill
     local titleFill = Instance.new("Frame")
     titleFill.Size = UDim2.new(1, 0, 0.5, 0)
     titleFill.Position = UDim2.new(0, 0, 0.5, 0)
@@ -131,7 +145,6 @@ local function main()
     titleFill.ZIndex = 1
     titleFill.Parent = titleBar
     
-    -- Title label
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
     titleLabel.Position = UDim2.new(0, 16, 0, 0)
@@ -184,6 +197,7 @@ local function main()
     end)
     
     minimizedCircle.MouseButton1Click:Connect(function()
+        -- Hanya restore kalau gak drag (drag pakai InputBegan)
         mainFrame.Position = UDim2.new(0, minimizedCircle.AbsolutePosition.X, 0, minimizedCircle.AbsolutePosition.Y)
         minimizedCircle.Visible = false
         mainFrame.Visible = true
@@ -204,9 +218,7 @@ local function main()
     sidebar.BorderSizePixel = 0
     sidebar.Parent = mainFrame
     
-    local sidebarCorner = Instance.new("UICorner")
-    sidebarCorner.CornerRadius = UDim.new(0, 10)
-    sidebarCorner.Parent = sidebar
+    Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 10)
     
     local sidebarFill = Instance.new("Frame")
     sidebarFill.Size = UDim2.new(1, 0, 0.3, 0)
@@ -215,7 +227,6 @@ local function main()
     sidebarFill.BorderSizePixel = 0
     sidebarFill.Parent = sidebar
     
-    -- Menu label
     local menuLabel = Instance.new("TextLabel")
     menuLabel.Size = UDim2.new(1, 0, 0, 22)
     menuLabel.Position = UDim2.new(0, 0, 0, 10)
@@ -227,7 +238,6 @@ local function main()
     menuLabel.BackgroundTransparency = 1
     menuLabel.Parent = sidebar
     
-    -- Separator
     local sep = Instance.new("Frame")
     sep.Size = UDim2.new(0.7, 0, 0, 1)
     sep.Position = UDim2.new(0.15, 0, 0, 36)
@@ -249,7 +259,6 @@ local function main()
     
     for i, tab in ipairs(tabs) do
         local btn = Instance.new("TextButton")
-        btn.Name = tab.name
         btn.Size = UDim2.new(0.82, 0, 0, 38)
         btn.Position = UDim2.new(0.09, 0, 0, 50 + (i-1)*46)
         btn.Text = tab.label
@@ -288,9 +297,7 @@ local function main()
     contentArea.ClipsDescendants = true
     contentArea.Parent = mainFrame
     
-    -- ==================================================================
-    -- DEFAULT VIEW
-    -- ==================================================================
+    -- Default view
     local defaultView = Instance.new("Frame")
     defaultView.Size = UDim2.new(1, 0, 1, 0)
     defaultView.BackgroundTransparency = 1
@@ -323,11 +330,8 @@ local function main()
     accentLine.BorderSizePixel = 0
     accentLine.Parent = defaultView
     
-    -- ==================================================================
-    -- TAB FRAMES
-    -- ==================================================================
+    -- Tab frames
     local tabFrames = {}
-    
     for _, tab in ipairs(tabs) do
         local f = Instance.new("Frame")
         f.Size = UDim2.new(1, 0, 1, 0)
@@ -337,21 +341,13 @@ local function main()
         tabFrames[tab.name] = f
     end
     
-    -- ==================================================================
-    -- SWITCH TAB
-    -- ==================================================================
     local function switchTab(tabName)
         defaultView.Visible = false
-        
-        for _, f in pairs(tabFrames) do
-            f.Visible = false
-        end
-        
+        for _, f in pairs(tabFrames) do f.Visible = false end
         for _, btn in pairs(tabBtns) do
             btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
             btn.TextColor3 = C.textDim
         end
-        
         if tabFrames[tabName] then
             tabFrames[tabName].Visible = true
             tabBtns[tabName].BackgroundColor3 = C.accent
@@ -369,14 +365,10 @@ local function main()
     print("[AoneHub] ✅ GUI Framework Ready")
     
     -- ==================================================================
-    -- ╔══════════════════════════════════════════════════════════════╗
-    -- ║  TAB 1: AUTO BUY WITH OPCODE DETECTION                    ║
-    -- ╚══════════════════════════════════════════════════════════════╝
+    -- TAB 1: AUTO BUY WITH OPCODE DETECTION
     -- ==================================================================
-    
     local parent = tabFrames["AutoBuy"]
     
-    -- Auto Buy Variables
     local packetRemote = nil
     local function getRemote()
         if packetRemote then return true end
@@ -389,17 +381,16 @@ local function main()
         return false
     end
     
-    -- OPCODE (pakai global variable biar persist)
     local OPCODE = 133
-    local opcodeDetected = false  -- Flag: udah pernah detect?
+    local opcodeDetected = false
     
-    local ALL_ITEMS = {"Hypno Bloom", "Dragon's Breath", "Sun Bloom", "Star Fruit", "Carrot", "Bamboo"}
+    local ALL_ITEMS = {"Hypno Bloom", "Dragon's Breath", "Sun Bloom", "Star Fruit", "Carrot"}
     local SELECTED_ITEMS = {}
     local RESTOCK_INTERVAL = 300
     local JITTER_MIN = 3
     local JITTER_MAX = 5
     local BUY_JITTER_MIN = 0.3
-    local BUY_JITTER_MAX = 2.8
+    local BUY_JITTER_MAX = 0.8
     
     local buyStats = {total = 0, success = 0, failed = 0}
     local buyHistory = {}
@@ -415,7 +406,7 @@ local function main()
     end
     
     -- ==================================================================
-    -- DETEKSI OPCODE (Jalan sekali pas START pertama kali)
+    -- DETEKSI OPCODE
     -- ==================================================================
     local function getCarrotStock()
         local seedShop = playerGui:FindFirstChild("SeedShop")
@@ -429,7 +420,6 @@ local function main()
         local mf = carrot:FindFirstChild("Main_Frame") or carrot:FindFirstChild("MainFrame")
         if not mf then return nil end
         
-        -- Cari StockText
         for _, child in ipairs(mf:GetChildren()) do
             if child.Name:lower():find("stock") and (child:IsA("TextLabel") or child:IsA("TextButton")) then
                 local txt = ""
@@ -442,87 +432,54 @@ local function main()
     end
     
     local function detectOpcode()
-        if opcodeDetected then
-            print("[AutoBuy] 🔢 Opcode sudah terdeteksi:", OPCODE)
-            return OPCODE
-        end
-        
-        if not getRemote() then
-            warn("[AutoBuy] ❌ RemoteEvent not found!")
-            return OPCODE
-        end
+        if opcodeDetected then return OPCODE end
+        if not getRemote() then return OPCODE end
         
         print("[AutoBuy] 🔍 Mendeteksi opcode...")
-        print("[AutoBuy] ⚠️  Pastikan shop TERBUKA & Carrot ADA STOCK!")
-        
         task.wait(1)
         
         local stockBefore = getCarrotStock()
-        
         if not stockBefore or stockBefore == 0 then
-            warn("[AutoBuy] ⚠️  Carrot tidak tersedia, pakai default:", OPCODE)
+            warn("[AutoBuy] ⚠️  Carrot tidak tersedia, default:", OPCODE)
             opcodeDetected = true
             return OPCODE
         end
         
-        print("[AutoBuy] 📦 Stock Carrot awal:", stockBefore)
-        print("[AutoBuy] 🧪 Testing opcode 158-165...")
+        print("[AutoBuy] 📦 Stock Carrot:", stockBefore)
         
         for testOpcode = 158, 165 do
-            print("[AutoBuy] 🔄 Test opcode:", testOpcode)
-            
             local packetStr = string.char(testOpcode, 0, 6) .. "Carrot"
-            pcall(function()
-                packetRemote:FireServer(buffer.fromstring(packetStr))
-            end)
-            
+            pcall(function() packetRemote:FireServer(buffer.fromstring(packetStr)) end)
             task.wait(1)
             
             local stockAfter = getCarrotStock()
-            
             if stockAfter and stockAfter < stockBefore then
                 OPCODE = testOpcode
                 opcodeDetected = true
-                print("[AutoBuy] 🎯 OPCODE DITEMUKAN:", OPCODE)
-                print("[AutoBuy] 📦 Stock:", stockBefore, "→", stockAfter)
-                
-                -- Update opcode input di GUI
-                if opInput then
-                    opInput.Text = tostring(OPCODE)
-                end
+                print("[AutoBuy] 🎯 OPCODE:", OPCODE, "| Stock:", stockBefore, "→", stockAfter)
+                if opInput then opInput.Text = tostring(OPCODE) end
                 return OPCODE
             end
-            
             task.wait(0.3)
         end
         
-        warn("[AutoBuy] ⚠️  Tidak ada opcode bekerja, pakai default:", OPCODE)
         opcodeDetected = true
         return OPCODE
     end
     
-    -- Build packet
+    -- Build packet, buy, cache, check, timing functions (same as before)
     local function buildPacket(itemName)
         return buffer.fromstring(string.char(OPCODE, 0, #itemName) .. itemName)
     end
     
-    -- Buy item
     local function buyItem(itemName)
         if not getRemote() then return false end
-        local packet = buildPacket(itemName)
-        local s = pcall(function() packetRemote:FireServer(packet) end)
+        local s = pcall(function() packetRemote:FireServer(buildPacket(itemName)) end)
         buyStats.total += 1
-        if s then
-            buyStats.success += 1
-            buyHistory[itemName] = (buyHistory[itemName] or 0) + 1
-            return true
-        else
-            buyStats.failed += 1
-            return false
-        end
+        if s then buyStats.success += 1; buyHistory[itemName] = (buyHistory[itemName] or 0) + 1; return true
+        else buyStats.failed += 1; return false end
     end
     
-    -- Cache shop
     local function cacheShopElements()
         if next(shopElements) then return end
         local seedShop = playerGui:FindFirstChild("SeedShop")
@@ -536,26 +493,20 @@ local function main()
                 local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
                 if mf then
                     local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
-                    if ct then
-                        shopElements[ic.Name] = {container = ic, costText = ct}
-                    end
+                    if ct then shopElements[ic.Name] = {container = ic, costText = ct} end
                 end
             end
         end
     end
     
-    -- Check available
     local function isItemAvailable(itemName)
         local el = shopElements[itemName]
         if not el then return false end
         if not el.container.Visible then return false end
-        local txt = ""
-        pcall(function() txt = el.costText.Text end)
-        if txt:upper():find("NO STOCK") or txt == "" then return false end
-        return true
+        local txt = ""; pcall(function() txt = el.costText.Text end)
+        return not (txt:upper():find("NO STOCK") or txt == "")
     end
     
-    -- Timing
     local function getSecondsUntilNextRestock()
         local now = os.time()
         local cm = math.floor(now / 60)
@@ -565,32 +516,22 @@ local function main()
         local mutr = nrm - cm
         if mutr == 0 and cs < jitter then return jitter - cs end
         local sutr = (mutr * 60) - cs + jitter
-        if sutr <= 0 then sutr += RESTOCK_INTERVAL end
-        return sutr
+        return sutr <= 0 and sutr + RESTOCK_INTERVAL or sutr
     end
     
-    -- Buy all
     local function buyAllAvailable()
         if isBuying then return end
         isBuying = true
-        local total = 0
         while isRunning do
             local any = false
             for _, itemName in ipairs(ALL_ITEMS) do
                 if not isRunning then break end
                 if SELECTED_ITEMS[itemName] and isItemAvailable(itemName) then
                     if buyItem(itemName) then
-                        total += 1
-                        any = true
-                        itemStatus[itemName] = "stock"
+                        any = true; itemStatus[itemName] = "stock"
                         task.wait(BUY_JITTER_MIN + math.random() * (BUY_JITTER_MAX - BUY_JITTER_MIN))
-                    else
-                        itemStatus[itemName] = "nostock"
-                        task.wait(0.2)
-                    end
-                else
-                    itemStatus[itemName] = "nostock"
-                end
+                    else itemStatus[itemName] = "nostock"; task.wait(0.2) end
+                else itemStatus[itemName] = "nostock" end
             end
             if not any then break end
             task.wait(0.2)
@@ -607,12 +548,8 @@ local function main()
         local any = false
         for _, itemName in ipairs(ALL_ITEMS) do
             if SELECTED_ITEMS[itemName] then
-                if isItemAvailable(itemName) then
-                    any = true
-                    itemStatus[itemName] = "stock"
-                else
-                    itemStatus[itemName] = "nostock"
-                end
+                if isItemAvailable(itemName) then any = true; itemStatus[itemName] = "stock"
+                else itemStatus[itemName] = "nostock" end
             end
         end
         updateUI()
@@ -633,12 +570,8 @@ local function main()
     
     local function startMonitoring()
         if isRunning then return end
-        if not getRemote() then
-            warn("[AutoBuy] ❌ RemoteEvent not found!")
-            return
-        end
+        if not getRemote() then return end
         
-        -- Deteksi opcode (hanya pertama kali)
         detectOpcode()
         
         isRunning = true
@@ -657,7 +590,6 @@ local function main()
     -- ==================================================================
     -- BUILD AUTO BUY UI
     -- ==================================================================
-    
     local scroll = Instance.new("ScrollingFrame")
     scroll.Size = UDim2.new(1, 0, 1, 0)
     scroll.CanvasSize = UDim2.new(0, 0, 0, 530)
@@ -668,161 +600,93 @@ local function main()
     
     local y = 10
     
-    -- Header
     local hdr = Instance.new("TextLabel")
     hdr.Size = UDim2.new(1, -20, 0, 28)
     hdr.Position = UDim2.new(0, 10, 0, y)
     hdr.Text = "🛒  Auto Buy Borong"
-    hdr.TextColor3 = C.text
-    hdr.Font = Enum.Font.GothamBold
-    hdr.TextSize = 16
-    hdr.TextXAlignment = Enum.TextXAlignment.Left
-    hdr.BackgroundTransparency = 1
-    hdr.Parent = scroll
+    hdr.TextColor3 = C.text; hdr.Font = Enum.Font.GothamBold; hdr.TextSize = 16
+    hdr.TextXAlignment = Enum.TextXAlignment.Left; hdr.BackgroundTransparency = 1; hdr.Parent = scroll
     y += 34
     
-    -- Status
     local statusText = Instance.new("TextLabel")
-    statusText.Size = UDim2.new(1, -20, 0, 22)
-    statusText.Position = UDim2.new(0, 10, 0, y)
-    statusText.Text = "⏹️  OFF"
-    statusText.TextColor3 = C.red
-    statusText.Font = Enum.Font.GothamSemibold
-    statusText.TextSize = 13
-    statusText.TextXAlignment = Enum.TextXAlignment.Left
-    statusText.BackgroundTransparency = 1
-    statusText.Parent = scroll
+    statusText.Size = UDim2.new(1, -20, 0, 22); statusText.Position = UDim2.new(0, 10, 0, y)
+    statusText.Text = "⏹️  OFF"; statusText.TextColor3 = C.red
+    statusText.Font = Enum.Font.GothamSemibold; statusText.TextSize = 13
+    statusText.TextXAlignment = Enum.TextXAlignment.Left; statusText.BackgroundTransparency = 1; statusText.Parent = scroll
     y += 26
     
     -- Opcode row
     local opRow = Instance.new("Frame")
-    opRow.Size = UDim2.new(1, -20, 0, 26)
-    opRow.Position = UDim2.new(0, 10, 0, y)
-    opRow.BackgroundTransparency = 1
-    opRow.Parent = scroll
+    opRow.Size = UDim2.new(1, -20, 0, 26); opRow.Position = UDim2.new(0, 10, 0, y)
+    opRow.BackgroundTransparency = 1; opRow.Parent = scroll
     
     local opLbl = Instance.new("TextLabel")
-    opLbl.Size = UDim2.new(0, 55, 1, 0)
-    opLbl.Text = "Opcode:"
-    opLbl.TextColor3 = C.textDim
-    opLbl.Font = Enum.Font.Gotham
-    opLbl.TextSize = 12
-    opLbl.BackgroundTransparency = 1
-    opLbl.Parent = opRow
+    opLbl.Size = UDim2.new(0, 55, 1, 0); opLbl.Text = "Opcode:"; opLbl.TextColor3 = C.textDim
+    opLbl.Font = Enum.Font.Gotham; opLbl.TextSize = 12; opLbl.BackgroundTransparency = 1; opLbl.Parent = opRow
     
     local opInput = Instance.new("TextBox")
-    opInput.Size = UDim2.new(0, 55, 1, 0)
-    opInput.Position = UDim2.new(0, 58, 0, 0)
-    opInput.Text = tostring(OPCODE)
-    opInput.TextColor3 = C.text
-    opInput.Font = Enum.Font.GothamBold
-    opInput.TextSize = 12
-    opInput.BackgroundColor3 = C.input
-    opInput.BorderSizePixel = 0
-    opInput.Parent = opRow
+    opInput.Size = UDim2.new(0, 55, 1, 0); opInput.Position = UDim2.new(0, 58, 0, 0)
+    opInput.Text = tostring(OPCODE); opInput.TextColor3 = C.text
+    opInput.Font = Enum.Font.GothamBold; opInput.TextSize = 12
+    opInput.BackgroundColor3 = C.input; opInput.BorderSizePixel = 0; opInput.Parent = opRow
     Instance.new("UICorner", opInput).CornerRadius = UDim.new(0, 4)
     
     local opBtn = Instance.new("TextButton")
-    opBtn.Size = UDim2.new(0, 60, 1, 0)
-    opBtn.Position = UDim2.new(0, 120, 0, 0)
-    opBtn.Text = "Update"
-    opBtn.TextColor3 = C.text
-    opBtn.Font = Enum.Font.GothamSemibold
-    opBtn.TextSize = 11
-    opBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
-    opBtn.BorderSizePixel = 0
-    opBtn.AutoButtonColor = false
-    opBtn.Parent = opRow
+    opBtn.Size = UDim2.new(0, 60, 1, 0); opBtn.Position = UDim2.new(0, 120, 0, 0)
+    opBtn.Text = "Update"; opBtn.TextColor3 = C.text; opBtn.Font = Enum.Font.GothamSemibold; opBtn.TextSize = 11
+    opBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 65); opBtn.BorderSizePixel = 0
+    opBtn.AutoButtonColor = false; opBtn.Parent = opRow
     Instance.new("UICorner", opBtn).CornerRadius = UDim.new(0, 4)
     
     opBtn.MouseButton1Click:Connect(function()
         local n = tonumber(opInput.Text)
-        if n and n >= 100 and n <= 200 then
-            OPCODE = n
-            print("[AutoBuy] 🔢 Opcode manual:", OPCODE)
-        end
+        if n and n >= 100 and n <= 200 then OPCODE = n; print("[AutoBuy] 🔢 Opcode:", OPCODE) end
     end)
     
-    -- Detect status
     local detectStatus = Instance.new("TextLabel")
-    detectStatus.Size = UDim2.new(0, 80, 1, 0)
-    detectStatus.Position = UDim2.new(0, 185, 0, 0)
-    detectStatus.Text = opcodeDetected and "✅ Detected" or "🔍 Auto"
-    detectStatus.TextColor3 = opcodeDetected and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 200, 50)
-    detectStatus.Font = Enum.Font.Gotham
-    detectStatus.TextSize = 9
-    detectStatus.TextXAlignment = Enum.TextXAlignment.Left
-    detectStatus.BackgroundTransparency = 1
-    detectStatus.Parent = opRow
+    detectStatus.Size = UDim2.new(0, 80, 1, 0); detectStatus.Position = UDim2.new(0, 185, 0, 0)
+    detectStatus.Text = "🔍 Auto"; detectStatus.TextColor3 = Color3.fromRGB(255, 200, 50)
+    detectStatus.Font = Enum.Font.Gotham; detectStatus.TextSize = 9
+    detectStatus.TextXAlignment = Enum.TextXAlignment.Left; detectStatus.BackgroundTransparency = 1; detectStatus.Parent = opRow
     y += 34
     
     -- Timer
     local timerText = Instance.new("TextLabel")
-    timerText.Size = UDim2.new(1, -20, 0, 22)
-    timerText.Position = UDim2.new(0, 10, 0, y)
-    timerText.Text = "Next scan: --:--:--"
-    timerText.TextColor3 = Color3.fromRGB(255, 200, 50)
-    timerText.Font = Enum.Font.GothamBold
-    timerText.TextSize = 13
-    timerText.TextXAlignment = Enum.TextXAlignment.Left
-    timerText.BackgroundTransparency = 1
-    timerText.Parent = scroll
+    timerText.Size = UDim2.new(1, -20, 0, 22); timerText.Position = UDim2.new(0, 10, 0, y)
+    timerText.Text = "Next scan: --:--:--"; timerText.TextColor3 = Color3.fromRGB(255, 200, 50)
+    timerText.Font = Enum.Font.GothamBold; timerText.TextSize = 13
+    timerText.TextXAlignment = Enum.TextXAlignment.Left; timerText.BackgroundTransparency = 1; timerText.Parent = scroll
     y += 24
     
     local countdownText = Instance.new("TextLabel")
-    countdownText.Size = UDim2.new(1, -20, 0, 16)
-    countdownText.Position = UDim2.new(0, 10, 0, y)
-    countdownText.Text = ""
-    countdownText.TextColor3 = C.textDim
-    countdownText.Font = Enum.Font.Gotham
-    countdownText.TextSize = 10
-    countdownText.TextXAlignment = Enum.TextXAlignment.Left
-    countdownText.BackgroundTransparency = 1
-    countdownText.Parent = scroll
+    countdownText.Size = UDim2.new(1, -20, 0, 16); countdownText.Position = UDim2.new(0, 10, 0, y)
+    countdownText.TextColor3 = C.textDim; countdownText.Font = Enum.Font.Gotham; countdownText.TextSize = 10
+    countdownText.TextXAlignment = Enum.TextXAlignment.Left; countdownText.BackgroundTransparency = 1; countdownText.Parent = scroll
     y += 22
     
     -- Checklist
     local checkLbl = Instance.new("TextLabel")
-    checkLbl.Size = UDim2.new(1, -20, 0, 20)
-    checkLbl.Position = UDim2.new(0, 10, 0, y)
-    checkLbl.Text = "📋  Pilih Item:"
-    checkLbl.TextColor3 = C.textDim
-    checkLbl.Font = Enum.Font.GothamSemibold
-    checkLbl.TextSize = 12
-    checkLbl.TextXAlignment = Enum.TextXAlignment.Left
-    checkLbl.BackgroundTransparency = 1
-    checkLbl.Parent = scroll
+    checkLbl.Size = UDim2.new(1, -20, 0, 20); checkLbl.Position = UDim2.new(0, 10, 0, y)
+    checkLbl.Text = "📋  Pilih Item:"; checkLbl.TextColor3 = C.textDim
+    checkLbl.Font = Enum.Font.GothamSemibold; checkLbl.TextSize = 12
+    checkLbl.TextXAlignment = Enum.TextXAlignment.Left; checkLbl.BackgroundTransparency = 1; checkLbl.Parent = scroll
     y += 24
     
     local itemChecks = {}
-    
     for _, itemName in ipairs(ALL_ITEMS) do
         local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, -20, 0, 22)
-        row.Position = UDim2.new(0, 10, 0, y)
-        row.BackgroundTransparency = 1
-        row.Parent = scroll
+        row.Size = UDim2.new(1, -20, 0, 22); row.Position = UDim2.new(0, 10, 0, y)
+        row.BackgroundTransparency = 1; row.Parent = scroll
         
         local cb = Instance.new("TextButton")
-        cb.Size = UDim2.new(0, 18, 0, 18)
-        cb.Position = UDim2.new(0, 0, 0, 2)
-        cb.Text = "✅"
-        cb.TextSize = 12
-        cb.BackgroundTransparency = 1
-        cb.BorderSizePixel = 0
-        cb.AutoButtonColor = false
-        cb.Parent = row
+        cb.Size = UDim2.new(0, 18, 0, 18); cb.Position = UDim2.new(0, 0, 0, 2)
+        cb.Text = "✅"; cb.TextSize = 12; cb.BackgroundTransparency = 1
+        cb.BorderSizePixel = 0; cb.AutoButtonColor = false; cb.Parent = row
         
         local lbl = Instance.new("TextLabel")
-        lbl.Size = UDim2.new(1, -22, 1, 0)
-        lbl.Position = UDim2.new(0, 22, 0, 0)
-        lbl.Text = itemName
-        lbl.TextColor3 = C.text
-        lbl.Font = Enum.Font.Gotham
-        lbl.TextSize = 12
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.BackgroundTransparency = 1
-        lbl.Parent = row
+        lbl.Size = UDim2.new(1, -22, 1, 0); lbl.Position = UDim2.new(0, 22, 0, 0)
+        lbl.Text = itemName; lbl.TextColor3 = C.text; lbl.Font = Enum.Font.Gotham; lbl.TextSize = 12
+        lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.BackgroundTransparency = 1; lbl.Parent = row
         
         cb.MouseButton1Click:Connect(function()
             SELECTED_ITEMS[itemName] = not SELECTED_ITEMS[itemName]
@@ -833,34 +697,23 @@ local function main()
         itemChecks[itemName] = {lbl = lbl}
         y += 24
     end
-    
     y += 6
     
     -- Stats
     local statsText = Instance.new("TextLabel")
-    statsText.Size = UDim2.new(1, -20, 0, 18)
-    statsText.Position = UDim2.new(0, 10, 0, y)
-    statsText.Text = "✅ 0  |  ❌ 0  |  🔄 0"
-    statsText.TextColor3 = C.textDim
-    statsText.Font = Enum.Font.Gotham
-    statsText.TextSize = 11
-    statsText.TextXAlignment = Enum.TextXAlignment.Left
-    statsText.BackgroundTransparency = 1
-    statsText.Parent = scroll    y += 26
+    statsText.Size = UDim2.new(1, -20, 0, 18); statsText.Position = UDim2.new(0, 10, 0, y)
+    statsText.Text = "✅ 0  |  ❌ 0  |  🔄 0"; statsText.TextColor3 = C.textDim
+    statsText.Font = Enum.Font.Gotham; statsText.TextSize = 11
+    statsText.TextXAlignment = Enum.TextXAlignment.Left; statsText.BackgroundTransparency = 1; statsText.Parent = scroll
+    y += 26
     
-    -- Start/Stop button
+    -- Toggle
     local toggleBtn = Instance.new("TextButton")
-    toggleBtn.Size = UDim2.new(1, -20, 0, 40)
-    toggleBtn.Position = UDim2.new(0, 10, 0, y)
-    toggleBtn.Text = "▶  START"
-    toggleBtn.TextColor3 = C.text
-    toggleBtn.Font = Enum.Font.GothamBold
-    toggleBtn.TextSize = 14
-    toggleBtn.BackgroundColor3 = C.green
-    toggleBtn.BorderSizePixel = 0
-    toggleBtn.AutoButtonColor = false
-    toggleBtn.Parent = scroll
-    
+    toggleBtn.Size = UDim2.new(1, -20, 0, 40); toggleBtn.Position = UDim2.new(0, 10, 0, y)
+    toggleBtn.Text = "▶  START"; toggleBtn.TextColor3 = C.text
+    toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextSize = 14
+    toggleBtn.BackgroundColor3 = C.green; toggleBtn.BorderSizePixel = 0
+    toggleBtn.AutoButtonColor = false; toggleBtn.Parent = scroll
     Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
     
     toggleBtn.MouseEnter:Connect(function()
@@ -870,48 +723,32 @@ local function main()
         toggleBtn.BackgroundColor3 = isRunning and C.red or C.green
     end)
     
-    -- UPDATE UI FUNCTION
     function updateUI()
-        -- Update detect status
         detectStatus.Text = opcodeDetected and "✅ Detected" or "🔍 Auto"
         detectStatus.TextColor3 = opcodeDetected and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 200, 50)
         
         if isRunning then
             statusText.Text = isBuying and "🛒  MEMBORONG..." or "⏰  MENUNGGU RESTOCK"
             statusText.TextColor3 = isBuying and Color3.fromRGB(255, 150, 50) or Color3.fromRGB(100, 200, 255)
-            toggleBtn.Text = "⏹  STOP"
-            toggleBtn.BackgroundColor3 = C.red
-            
+            toggleBtn.Text = "⏹  STOP"; toggleBtn.BackgroundColor3 = C.red
             if not isBuying and nextScanTime > 0 then
                 local rem = nextScanTime - os.time()
                 if rem > 0 then
-                    local m = math.floor(rem / 60)
-                    local s = math.floor(rem % 60)
-                    countdownText.Text = string.format("Scan dalam %d menit %d detik", m, s)
+                    countdownText.Text = string.format("Scan dalam %d menit %d detik", math.floor(rem/60), math.floor(rem%60))
                     timerText.Text = os.date("%H:%M:%S", nextScanTime)
                 end
-            elseif isBuying then
-                timerText.Text = "MEMBORONG..."
-                countdownText.Text = "Membeli semua item tersedia"
-            end
+            elseif isBuying then timerText.Text = "MEMBORONG..."; countdownText.Text = "Membeli semua item tersedia" end
         else
-            statusText.Text = "⏹️  OFF"
-            statusText.TextColor3 = C.red
-            toggleBtn.Text = "▶  START"
-            toggleBtn.BackgroundColor3 = C.green
-            timerText.Text = "Next scan: --:--:--"
-            countdownText.Text = ""
+            statusText.Text = "⏹️  OFF"; statusText.TextColor3 = C.red
+            toggleBtn.Text = "▶  START"; toggleBtn.BackgroundColor3 = C.green
+            timerText.Text = "Next scan: --:--:--"; countdownText.Text = ""
         end
         
         for itemName, data in pairs(itemChecks) do
             local st = itemStatus[itemName]
-            if st == "stock" then
-                data.lbl.TextColor3 = Color3.fromRGB(100, 255, 100)
-            elseif st == "nostock" then
-                data.lbl.TextColor3 = Color3.fromRGB(255, 100, 100)
-            end
+            if st == "stock" then data.lbl.TextColor3 = Color3.fromRGB(100, 255, 100)
+            elseif st == "nostock" then data.lbl.TextColor3 = Color3.fromRGB(255, 100, 100) end
         end
-        
         statsText.Text = string.format("✅ %d  |  ❌ %d  |  🔄 %d", buyStats.success, buyStats.failed, scanCount)
     end
     
@@ -920,60 +757,37 @@ local function main()
         updateUI()
     end)
     
-    -- Periodic UI refresh
     task.spawn(function()
-        while parent.Parent do
-            task.wait(0.5)
-            pcall(updateUI)
-        end
+        while parent.Parent do task.wait(0.5); pcall(updateUI) end
     end)
     
     parent.Destroying:Connect(stopMonitoring)
-    
-    print("[AutoBuy] ✅ Tab AutoBuy loaded (dengan auto-detect opcode)")
     
     -- ==================================================================
     -- PLACEHOLDER TABS
     -- ==================================================================
     for _, tab in ipairs({"AutoMail", "Ekstra"}) do
         local f = tabFrames[tab]
-        local icon = tab == "AutoMail" and "📧" or "⚙️"
-        local title = tab == "AutoMail" and "Auto Mail" or "Ekstra"
-        
         local ic = Instance.new("TextLabel")
-        ic.Size = UDim2.new(1, 0, 0, 50)
-        ic.Position = UDim2.new(0, 0, 0.35, -25)
-        ic.Text = icon
-        ic.Font = Enum.Font.Gotham
-        ic.TextSize = 45
-        ic.BackgroundTransparency = 1
-        ic.Parent = f
+        ic.Size = UDim2.new(1, 0, 0, 50); ic.Position = UDim2.new(0, 0, 0.35, -25)
+        ic.Text = tab == "AutoMail" and "📧" or "⚙️"; ic.Font = Enum.Font.Gotham; ic.TextSize = 45
+        ic.BackgroundTransparency = 1; ic.Parent = f
         
         local tt = Instance.new("TextLabel")
-        tt.Size = UDim2.new(1, 0, 0, 28)
-        tt.Position = UDim2.new(0, 0, 0.45, 0)
-        tt.Text = title
-        tt.TextColor3 = C.text
-        tt.Font = Enum.Font.GothamBold
-        tt.TextSize = 18
-        tt.BackgroundTransparency = 1
-        tt.Parent = f
+        tt.Size = UDim2.new(1, 0, 0, 28); tt.Position = UDim2.new(0, 0, 0.45, 0)
+        tt.Text = tab == "AutoMail" and "Auto Mail" or "Ekstra"
+        tt.TextColor3 = C.text; tt.Font = Enum.Font.GothamBold; tt.TextSize = 18
+        tt.BackgroundTransparency = 1; tt.Parent = f
         
         local st = Instance.new("TextLabel")
-        st.Size = UDim2.new(1, 0, 0, 18)
-        st.Position = UDim2.new(0, 0, 0.52, 0)
-        st.Text = "Coming soon..."
-        st.TextColor3 = C.textDim
-        st.Font = Enum.Font.Gotham
-        st.TextSize = 12
-        st.BackgroundTransparency = 1
-        st.Parent = f
+        st.Size = UDim2.new(1, 0, 0, 18); st.Position = UDim2.new(0, 0, 0.52, 0)
+        st.Text = "Coming soon..."; st.TextColor3 = C.textDim
+        st.Font = Enum.Font.Gotham; st.TextSize = 12; st.BackgroundTransparency = 1; st.Parent = f
     end
     
     print("[AoneHub] ✅ Semua tab siap")
     print("[AoneHub] 🚀 GUI COMPLETE")
 end
 
--- Run
 local s, e = pcall(main)
 if not s then warn("[AoneHub] ERROR:", e) end
