@@ -1,5 +1,5 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - FINAL (POSISI INDEPENDEN)
+-- AONEHUB - FINAL (POSISI BENAR-BENAR INDEPENDEN)
 -- ──────────────────────────────────────────────────────────────────────
 
 local function main()
@@ -29,30 +29,18 @@ local function main()
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
     -- ==================================================================
-    -- POSISI INDEPENDEN - Simpan posisi masing-masing
+    -- POSISI INDEPENDEN
     -- ==================================================================
     local mainFramePos = UDim2.new(0.5, -310, 0.5, -195)
     local circlePos = UDim2.new(0.5, -25, 0.5, -25)
-
-    -- Update posisi saat drag (pakai loop checker)
-    task.spawn(function()
-        while screenGui.Parent do
-            if mainFrame.Visible then
-                mainFramePos = mainFrame.Position
-            end
-            if minimizedCircle.Visible then
-                circlePos = minimizedCircle.Position
-            end
-            task.wait(0.2)
-        end
-    end)    
+    
     -- ==================================================================
     -- MINIMIZED CIRCLE
     -- ==================================================================
     local minimizedCircle = Instance.new("TextButton")
     minimizedCircle.Name = "MinimizedCircle"
     minimizedCircle.Size = UDim2.new(0, 50, 0, 50)
-    minimizedCircle.Position = circleSavedPos
+    minimizedCircle.Position = circlePos
     minimizedCircle.Text = "AH"
     minimizedCircle.TextColor3 = C.text
     minimizedCircle.Font = Enum.Font.GothamBlack
@@ -68,20 +56,13 @@ local function main()
     
     Instance.new("UICorner", minimizedCircle).CornerRadius = UDim.new(1, 0)
     
-    -- Simpan posisi circle setelah didrag
-    minimizedCircle.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            circleSavedPos = minimizedCircle.Position
-        end
-    end)
-    
     -- ==================================================================
     -- MAIN FRAME
     -- ==================================================================
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
     mainFrame.Size = UDim2.new(0, 620, 0, 390)
-    mainFrame.Position = mainFrameSavedPos
+    mainFrame.Position = mainFramePos
     mainFrame.BackgroundColor3 = C.bg
     mainFrame.BorderSizePixel = 0
     mainFrame.ClipsDescendants = true
@@ -91,10 +72,18 @@ local function main()
     
     Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
     
-    -- Simpan posisi main frame setelah didrag
-    mainFrame.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            mainFrameSavedPos = mainFrame.Position
+    -- ==================================================================
+    -- BACKGROUND LOOP: SIMPAN POSISI TERAKHIR
+    -- ==================================================================
+    task.spawn(function()
+        while screenGui.Parent do
+            if mainFrame.Visible then
+                mainFramePos = mainFrame.Position
+            end
+            if minimizedCircle.Visible then
+                circlePos = minimizedCircle.Position
+            end
+            task.wait(0.3)
         end
     end)
     
@@ -158,22 +147,22 @@ local function main()
     Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 5)
     
     -- ==================================================================
-    -- MINIMIZE / RESTORE (PAKAI POSISI TERSIMPAN, TIDAK SALING UPDATE)
+    -- MINIMIZE / RESTORE (POSISI BENAR-BENAR INDEPENDEN)
     -- ==================================================================
     minimizeBtn.MouseButton1Click:Connect(function()
         -- Simpan posisi main frame terakhir
         mainFramePos = mainFrame.Position
-        -- Set circle ke posisi main frame (hanya saat minimize)
+        -- Set circle ke posisi main frame
         minimizedCircle.Position = mainFramePos
         -- Switch
         mainFrame.Visible = false
         minimizedCircle.Visible = true
     end)
-
+    
     minimizedCircle.MouseButton1Click:Connect(function()
-        -- Simpan posisi circle terakhir  
+        -- Simpan posisi circle terakhir
         circlePos = minimizedCircle.Position
-        -- Set main frame ke posisi circle (hanya saat restore)
+        -- Set main frame ke posisi circle
         mainFrame.Position = circlePos
         -- Switch
         minimizedCircle.Visible = false
@@ -335,7 +324,7 @@ local function main()
     print("[AoneHub] ✅ GUI Framework Ready")
     
     -- ==================================================================
-    -- TAB 1: AUTO BUY (SAMA SEPERTI SEBELUMNYA)
+    -- TAB 1: AUTO BUY WITH OPCODE DETECTION
     -- ==================================================================
     local parent = tabFrames["AutoBuy"]
     
@@ -360,7 +349,7 @@ local function main()
     local JITTER_MIN = 3
     local JITTER_MAX = 5
     local BUY_JITTER_MIN = 0.3
-    local BUY_JITTER_MAX = 0.8
+    local BUY_JITTER_MAX = 2.8
     
     local buyStats = {total = 0, success = 0, failed = 0}
     local buyHistory = {}
