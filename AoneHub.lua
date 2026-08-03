@@ -1,5 +1,5 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - FINAL WORKING (DRAG SIMPLE)
+-- AONEHUB - FINAL (POSISI INDEPENDEN)
 -- ──────────────────────────────────────────────────────────────────────
 
 local function main()
@@ -29,12 +29,18 @@ local function main()
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
     -- ==================================================================
-    -- MINIMIZED CIRCLE (Draggable = true)
+    -- POSISI INDEPENDEN - Simpan posisi masing-masing
+    -- ==================================================================
+    local mainFrameSavedPos = UDim2.new(0.5, -310, 0.5, -195)
+    local circleSavedPos = UDim2.new(0.5, -25, 0.5, -25)
+    
+    -- ==================================================================
+    -- MINIMIZED CIRCLE
     -- ==================================================================
     local minimizedCircle = Instance.new("TextButton")
     minimizedCircle.Name = "MinimizedCircle"
     minimizedCircle.Size = UDim2.new(0, 50, 0, 50)
-    minimizedCircle.Position = UDim2.new(0.5, -25, 0.5, -25)
+    minimizedCircle.Position = circleSavedPos
     minimizedCircle.Text = "AH"
     minimizedCircle.TextColor3 = C.text
     minimizedCircle.Font = Enum.Font.GothamBlack
@@ -44,18 +50,26 @@ local function main()
     minimizedCircle.Visible = false
     minimizedCircle.ZIndex = 10
     minimizedCircle.AutoButtonColor = false
+    minimizedCircle.Active = true
     minimizedCircle.Draggable = true
     minimizedCircle.Parent = screenGui
     
     Instance.new("UICorner", minimizedCircle).CornerRadius = UDim.new(1, 0)
     
+    -- Simpan posisi circle setelah didrag
+    minimizedCircle.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            circleSavedPos = minimizedCircle.Position
+        end
+    end)
+    
     -- ==================================================================
-    -- MAIN FRAME (Draggable = true)
+    -- MAIN FRAME
     -- ==================================================================
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
     mainFrame.Size = UDim2.new(0, 620, 0, 390)
-    mainFrame.Position = UDim2.new(0.5, -310, 0.5, -195)
+    mainFrame.Position = mainFrameSavedPos
     mainFrame.BackgroundColor3 = C.bg
     mainFrame.BorderSizePixel = 0
     mainFrame.ClipsDescendants = true
@@ -64,6 +78,13 @@ local function main()
     mainFrame.Parent = screenGui
     
     Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+    
+    -- Simpan posisi main frame setelah didrag
+    mainFrame.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            mainFrameSavedPos = mainFrame.Position
+        end
+    end)
     
     -- ==================================================================
     -- TITLE BAR
@@ -74,9 +95,7 @@ local function main()
     titleBar.BorderSizePixel = 0
     titleBar.Parent = mainFrame
     
-    local titleCorner = Instance.new("UICorner")
-    titleCorner.CornerRadius = UDim.new(0, 10)
-    titleCorner.Parent = titleBar
+    Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
     
     local titleFill = Instance.new("Frame")
     titleFill.Size = UDim2.new(1, 0, 0.5, 0)
@@ -126,15 +145,27 @@ local function main()
     
     Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 5)
     
-    -- Minimize / Restore
+    -- ==================================================================
+    -- MINIMIZE / RESTORE (PAKAI POSISI TERSIMPAN)
+    -- ==================================================================
     minimizeBtn.MouseButton1Click:Connect(function()
-        minimizedCircle.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
+        -- Simpan posisi main frame terakhir
+        mainFrameSavedPos = mainFrame.Position
+        -- Set circle ke posisi main frame
+        minimizedCircle.Position = mainFrameSavedPos
+        circleSavedPos = minimizedCircle.Position
+        -- Switch
         mainFrame.Visible = false
         minimizedCircle.Visible = true
     end)
     
     minimizedCircle.MouseButton1Click:Connect(function()
-        mainFrame.Position = UDim2.new(0, minimizedCircle.AbsolutePosition.X, 0, minimizedCircle.AbsolutePosition.Y)
+        -- Simpan posisi circle terakhir
+        circleSavedPos = minimizedCircle.Position
+        -- Set main frame ke posisi circle
+        mainFrame.Position = circleSavedPos
+        mainFrameSavedPos = mainFrame.Position
+        -- Switch
         minimizedCircle.Visible = false
         mainFrame.Visible = true
     end)
@@ -294,7 +325,7 @@ local function main()
     print("[AoneHub] ✅ GUI Framework Ready")
     
     -- ==================================================================
-    -- TAB 1: AUTO BUY WITH OPCODE DETECTION + UPDATE DISPLAY
+    -- TAB 1: AUTO BUY (SAMA SEPERTI SEBELUMNYA)
     -- ==================================================================
     local parent = tabFrames["AutoBuy"]
     
@@ -539,7 +570,7 @@ local function main()
     statusText.TextXAlignment = Enum.TextXAlignment.Left; statusText.BackgroundTransparency = 1; statusText.Parent = scroll
     y += 26
     
-    -- Opcode row with update function
+    -- Opcode row
     local opRow = Instance.new("Frame")
     opRow.Size = UDim2.new(1, -20, 0, 26); opRow.Position = UDim2.new(0, 10, 0, y)
     opRow.BackgroundTransparency = 1; opRow.Parent = scroll
@@ -567,28 +598,19 @@ local function main()
         if n and n >= 100 and n <= 200 then OPCODE = n end
     end)
     
-    -- Opcode detect status display (AKAN DI-UPDATE)
     local opDetectStatus = Instance.new("TextLabel")
-    opDetectStatus.Name = "OpDetectStatus"
-    opDetectStatus.Size = UDim2.new(0, 90, 1, 0)
-    opDetectStatus.Position = UDim2.new(0, 185, 0, 0)
-    opDetectStatus.Text = "🔍 Auto"
-    opDetectStatus.TextColor3 = Color3.fromRGB(255, 200, 50)
-    opDetectStatus.Font = Enum.Font.Gotham
-    opDetectStatus.TextSize = 9
-    opDetectStatus.TextXAlignment = Enum.TextXAlignment.Left
-    opDetectStatus.BackgroundTransparency = 1
-    opDetectStatus.Parent = opRow
+    opDetectStatus.Size = UDim2.new(0, 90, 1, 0); opDetectStatus.Position = UDim2.new(0, 185, 0, 0)
+    opDetectStatus.Text = "🔍 Auto"; opDetectStatus.TextColor3 = Color3.fromRGB(255, 200, 50)
+    opDetectStatus.Font = Enum.Font.Gotham; opDetectStatus.TextSize = 9
+    opDetectStatus.TextXAlignment = Enum.TextXAlignment.Left; opDetectStatus.BackgroundTransparency = 1; opDetectStatus.Parent = opRow
     y += 34
     
-    -- Function to update opcode display (dipanggil setelah detect)
     function updateOpcodeDisplay()
         opInput.Text = tostring(OPCODE)
         opDetectStatus.Text = opcodeDetected and "✅ Detected" or "🔍 Auto"
         opDetectStatus.TextColor3 = opcodeDetected and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 200, 50)
     end
     
-    -- Timer
     local timerText = Instance.new("TextLabel")
     timerText.Size = UDim2.new(1, -20, 0, 22); timerText.Position = UDim2.new(0, 10, 0, y)
     timerText.Text = "Next scan: --:--:--"; timerText.TextColor3 = Color3.fromRGB(255, 200, 50)
@@ -602,7 +624,6 @@ local function main()
     countdownText.TextXAlignment = Enum.TextXAlignment.Left; countdownText.BackgroundTransparency = 1; countdownText.Parent = scroll
     y += 22
     
-    -- Checklist
     local checkLbl = Instance.new("TextLabel")
     checkLbl.Size = UDim2.new(1, -20, 0, 20); checkLbl.Position = UDim2.new(0, 10, 0, y)
     checkLbl.Text = "📋  Pilih Item:"; checkLbl.TextColor3 = C.textDim
@@ -637,7 +658,6 @@ local function main()
     end
     y += 6
     
-    -- Stats
     local statsText = Instance.new("TextLabel")
     statsText.Size = UDim2.new(1, -20, 0, 18); statsText.Position = UDim2.new(0, 10, 0, y)
     statsText.Text = "✅ 0  |  ❌ 0  |  🔄 0"; statsText.TextColor3 = C.textDim
@@ -645,7 +665,6 @@ local function main()
     statsText.TextXAlignment = Enum.TextXAlignment.Left; statsText.BackgroundTransparency = 1; statsText.Parent = scroll
     y += 26
     
-    -- Toggle button
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Size = UDim2.new(1, -20, 0, 40); toggleBtn.Position = UDim2.new(0, 10, 0, y)
     toggleBtn.Text = "▶  START"; toggleBtn.TextColor3 = C.text
@@ -699,8 +718,6 @@ local function main()
     end)
     
     parent.Destroying:Connect(stopMonitoring)
-    
-    print("[AutoBuy] ✅ Tab AutoBuy loaded")
     
     -- ==================================================================
     -- PLACEHOLDER TABS
