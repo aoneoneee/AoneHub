@@ -1,5 +1,5 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - GUI SYSTEM (DRAG ULTIMATE FIX)
+-- AONEHUB - FINAL WORKING (DRAG SIMPLE)
 -- ──────────────────────────────────────────────────────────────────────
 
 local function main()
@@ -7,8 +7,6 @@ local function main()
     
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local Players = game:GetService("Players")
-    local UserInputService = game:GetService("UserInputService")
-    local RunService = game:GetService("RunService")
     
     local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
@@ -31,7 +29,7 @@ local function main()
     screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
     -- ==================================================================
-    -- MINIMIZED CIRCLE
+    -- MINIMIZED CIRCLE (Draggable = true)
     -- ==================================================================
     local minimizedCircle = Instance.new("TextButton")
     minimizedCircle.Name = "MinimizedCircle"
@@ -46,19 +44,23 @@ local function main()
     minimizedCircle.Visible = false
     minimizedCircle.ZIndex = 10
     minimizedCircle.AutoButtonColor = false
+    minimizedCircle.Draggable = true
     minimizedCircle.Parent = screenGui
     
     Instance.new("UICorner", minimizedCircle).CornerRadius = UDim.new(1, 0)
     
     -- ==================================================================
-    -- MAIN FRAME
+    -- MAIN FRAME (Draggable = true)
     -- ==================================================================
     local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
     mainFrame.Size = UDim2.new(0, 620, 0, 390)
     mainFrame.Position = UDim2.new(0.5, -310, 0.5, -195)
     mainFrame.BackgroundColor3 = C.bg
     mainFrame.BorderSizePixel = 0
     mainFrame.ClipsDescendants = true
+    mainFrame.Active = true
+    mainFrame.Draggable = true
     mainFrame.Parent = screenGui
     
     Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
@@ -66,58 +68,12 @@ local function main()
     -- ==================================================================
     -- TITLE BAR
     -- ==================================================================
-    local titleBar = Instance.new("TextButton")
+    local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1, 0, 0, 38)
-    titleBar.Text = ""
     titleBar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
     titleBar.BorderSizePixel = 0
-    titleBar.AutoButtonColor = false
-    titleBar.ZIndex = 2
     titleBar.Parent = mainFrame
     
-    -- ==================================================================
-    -- DRAG SYSTEM - PAKAI RENDERSTEPPED + GETMOUSELOCATION
-    -- ==================================================================
-    local function makeDraggable(button, target)
-        local isDragging = false
-        local offsetX = 0
-        local offsetY = 0
-        local connection = nil
-        
-        button.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                if not isDragging then
-                    isDragging = true
-                    local mousePos = UserInputService:GetMouseLocation()
-                    offsetX = target.AbsolutePosition.X - mousePos.X
-                    offsetY = target.AbsolutePosition.Y - mousePos.Y
-                    
-                    -- Start render loop
-                    connection = RunService.RenderStepped:Connect(function()
-                        if isDragging then
-                            local mousePos = UserInputService:GetMouseLocation()
-                            target.Position = UDim2.new(0, mousePos.X + offsetX, 0, mousePos.Y + offsetY)
-                        end
-                    end)
-                end
-            end
-        end)
-        
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                isDragging = false
-                if connection then
-                    connection:Disconnect()
-                    connection = nil
-                end
-            end
-        end)
-    end
-    
-    makeDraggable(titleBar, mainFrame)
-    makeDraggable(minimizedCircle, minimizedCircle)
-    
-    -- Title bar UI
     local titleCorner = Instance.new("UICorner")
     titleCorner.CornerRadius = UDim.new(0, 10)
     titleCorner.Parent = titleBar
@@ -127,7 +83,6 @@ local function main()
     titleFill.Position = UDim2.new(0, 0, 0.5, 0)
     titleFill.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
     titleFill.BorderSizePixel = 0
-    titleFill.ZIndex = 1
     titleFill.Parent = titleBar
     
     local titleLabel = Instance.new("TextLabel")
@@ -139,7 +94,6 @@ local function main()
     titleLabel.TextSize = 14
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.BackgroundTransparency = 1
-    titleLabel.ZIndex = 3
     titleLabel.Parent = titleBar
     
     -- Minimize button
@@ -153,7 +107,6 @@ local function main()
     minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
     minimizeBtn.BorderSizePixel = 0
     minimizeBtn.AutoButtonColor = false
-    minimizeBtn.ZIndex = 3
     minimizeBtn.Parent = titleBar
     
     Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 5)
@@ -169,7 +122,6 @@ local function main()
     closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
     closeBtn.BorderSizePixel = 0
     closeBtn.AutoButtonColor = false
-    closeBtn.ZIndex = 3
     closeBtn.Parent = titleBar
     
     Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 5)
@@ -342,7 +294,7 @@ local function main()
     print("[AoneHub] ✅ GUI Framework Ready")
     
     -- ==================================================================
-    -- TAB 1: AUTO BUY WITH OPCODE DETECTION
+    -- TAB 1: AUTO BUY WITH OPCODE DETECTION + UPDATE DISPLAY
     -- ==================================================================
     local parent = tabFrames["AutoBuy"]
     
@@ -416,6 +368,7 @@ local function main()
         if not stockBefore or stockBefore == 0 then
             warn("[AutoBuy] ⚠️  Carrot tidak tersedia, default:", OPCODE)
             opcodeDetected = true
+            updateOpcodeDisplay()
             return OPCODE
         end
         
@@ -431,13 +384,14 @@ local function main()
                 OPCODE = testOpcode
                 opcodeDetected = true
                 print("[AutoBuy] 🎯 OPCODE:", OPCODE, "| Stock:", stockBefore, "→", stockAfter)
-                if opInput then opInput.Text = tostring(OPCODE) end
+                updateOpcodeDisplay()
                 return OPCODE
             end
             task.wait(0.3)
         end
         
         opcodeDetected = true
+        updateOpcodeDisplay()
         return OPCODE
     end
     
@@ -563,7 +517,7 @@ local function main()
     -- ==================================================================
     local scroll = Instance.new("ScrollingFrame")
     scroll.Size = UDim2.new(1, 0, 1, 0)
-    scroll.CanvasSize = UDim2.new(0, 0, 0, 530)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 540)
     scroll.ScrollBarThickness = 3
     scroll.BackgroundTransparency = 1
     scroll.BorderSizePixel = 0
@@ -585,6 +539,7 @@ local function main()
     statusText.TextXAlignment = Enum.TextXAlignment.Left; statusText.BackgroundTransparency = 1; statusText.Parent = scroll
     y += 26
     
+    -- Opcode row with update function
     local opRow = Instance.new("Frame")
     opRow.Size = UDim2.new(1, -20, 0, 26); opRow.Position = UDim2.new(0, 10, 0, y)
     opRow.BackgroundTransparency = 1; opRow.Parent = scroll
@@ -612,13 +567,28 @@ local function main()
         if n and n >= 100 and n <= 200 then OPCODE = n end
     end)
     
-    local detectStatus = Instance.new("TextLabel")
-    detectStatus.Size = UDim2.new(0, 80, 1, 0); detectStatus.Position = UDim2.new(0, 185, 0, 0)
-    detectStatus.Text = "🔍 Auto"; detectStatus.TextColor3 = Color3.fromRGB(255, 200, 50)
-    detectStatus.Font = Enum.Font.Gotham; detectStatus.TextSize = 9
-    detectStatus.TextXAlignment = Enum.TextXAlignment.Left; detectStatus.BackgroundTransparency = 1; detectStatus.Parent = opRow
+    -- Opcode detect status display (AKAN DI-UPDATE)
+    local opDetectStatus = Instance.new("TextLabel")
+    opDetectStatus.Name = "OpDetectStatus"
+    opDetectStatus.Size = UDim2.new(0, 90, 1, 0)
+    opDetectStatus.Position = UDim2.new(0, 185, 0, 0)
+    opDetectStatus.Text = "🔍 Auto"
+    opDetectStatus.TextColor3 = Color3.fromRGB(255, 200, 50)
+    opDetectStatus.Font = Enum.Font.Gotham
+    opDetectStatus.TextSize = 9
+    opDetectStatus.TextXAlignment = Enum.TextXAlignment.Left
+    opDetectStatus.BackgroundTransparency = 1
+    opDetectStatus.Parent = opRow
     y += 34
     
+    -- Function to update opcode display (dipanggil setelah detect)
+    function updateOpcodeDisplay()
+        opInput.Text = tostring(OPCODE)
+        opDetectStatus.Text = opcodeDetected and "✅ Detected" or "🔍 Auto"
+        opDetectStatus.TextColor3 = opcodeDetected and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 200, 50)
+    end
+    
+    -- Timer
     local timerText = Instance.new("TextLabel")
     timerText.Size = UDim2.new(1, -20, 0, 22); timerText.Position = UDim2.new(0, 10, 0, y)
     timerText.Text = "Next scan: --:--:--"; timerText.TextColor3 = Color3.fromRGB(255, 200, 50)
@@ -632,6 +602,7 @@ local function main()
     countdownText.TextXAlignment = Enum.TextXAlignment.Left; countdownText.BackgroundTransparency = 1; countdownText.Parent = scroll
     y += 22
     
+    -- Checklist
     local checkLbl = Instance.new("TextLabel")
     checkLbl.Size = UDim2.new(1, -20, 0, 20); checkLbl.Position = UDim2.new(0, 10, 0, y)
     checkLbl.Text = "📋  Pilih Item:"; checkLbl.TextColor3 = C.textDim
@@ -666,6 +637,7 @@ local function main()
     end
     y += 6
     
+    -- Stats
     local statsText = Instance.new("TextLabel")
     statsText.Size = UDim2.new(1, -20, 0, 18); statsText.Position = UDim2.new(0, 10, 0, y)
     statsText.Text = "✅ 0  |  ❌ 0  |  🔄 0"; statsText.TextColor3 = C.textDim
@@ -673,6 +645,7 @@ local function main()
     statsText.TextXAlignment = Enum.TextXAlignment.Left; statsText.BackgroundTransparency = 1; statsText.Parent = scroll
     y += 26
     
+    -- Toggle button
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Size = UDim2.new(1, -20, 0, 40); toggleBtn.Position = UDim2.new(0, 10, 0, y)
     toggleBtn.Text = "▶  START"; toggleBtn.TextColor3 = C.text
@@ -689,8 +662,7 @@ local function main()
     end)
     
     function updateUI()
-        detectStatus.Text = opcodeDetected and "✅ Detected" or "🔍 Auto"
-        detectStatus.TextColor3 = opcodeDetected and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 200, 50)
+        updateOpcodeDisplay()
         
         if isRunning then
             statusText.Text = isBuying and "🛒  MEMBORONG..." or "⏰  MENUNGGU RESTOCK"
@@ -727,6 +699,8 @@ local function main()
     end)
     
     parent.Destroying:Connect(stopMonitoring)
+    
+    print("[AutoBuy] ✅ Tab AutoBuy loaded")
     
     -- ==================================================================
     -- PLACEHOLDER TABS
