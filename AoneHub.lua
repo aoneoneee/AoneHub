@@ -1,14 +1,20 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - COMPLETE GUI SYSTEM
+-- AONEHUB - COMPLETE GUI SYSTEM (FIXED)
 -- ──────────────────────────────────────────────────────────────────────
 
+-- Wait for services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 
+-- Wait for player
 local player = Players.LocalPlayer
+if not player then
+    player = Players.PlayerAdded:Wait()
+end
 local playerGui = player:WaitForChild("PlayerGui")
+
+print("[AoneHub] Starting...")
 
 -- ==================================================================
 -- CREATE MAIN GUI
@@ -49,6 +55,7 @@ minimizedCircle.BackgroundColor3 = C.accent
 minimizedCircle.BorderSizePixel = 0
 minimizedCircle.Visible = false
 minimizedCircle.ZIndex = 10
+minimizedCircle.AutoButtonColor = false
 minimizedCircle.Parent = screenGui
 
 local circCorner = Instance.new("UICorner")
@@ -72,9 +79,9 @@ mainCorner.CornerRadius = UDim.new(0, 10)
 mainCorner.Parent = mainFrame
 
 -- ==================================================================
--- TITLE BAR
+-- TITLE BAR (TextButton for drag)
 -- ==================================================================
-local titleBar = Instance.new("TextButton")  -- TextButton biar bisa drag
+local titleBar = Instance.new("TextButton")
 titleBar.Name = "TitleBar"
 titleBar.Size = UDim2.new(1, 0, 0, 38)
 titleBar.Text = ""
@@ -87,7 +94,7 @@ local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 10)
 titleCorner.Parent = titleBar
 
--- Title fill (biar corner cuma di atas)
+-- Title fill
 local titleFill = Instance.new("Frame")
 titleFill.Size = UDim2.new(1, 0, 0.5, 0)
 titleFill.Position = UDim2.new(0, 0, 0.5, 0)
@@ -116,6 +123,7 @@ minimizeBtn.Font = Enum.Font.GothamBold
 minimizeBtn.TextSize = 20
 minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
 minimizeBtn.BorderSizePixel = 0
+minimizeBtn.AutoButtonColor = false
 minimizeBtn.Parent = titleBar
 
 local minCorner = Instance.new("UICorner")
@@ -132,6 +140,7 @@ closeBtn.Font = Enum.Font.GothamBold
 closeBtn.TextSize = 15
 closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
 closeBtn.BorderSizePixel = 0
+closeBtn.AutoButtonColor = false
 closeBtn.Parent = titleBar
 
 local closeCorner = Instance.new("UICorner")
@@ -153,7 +162,6 @@ local sidebarCorner = Instance.new("UICorner")
 sidebarCorner.CornerRadius = UDim.new(0, 10)
 sidebarCorner.Parent = sidebar
 
--- Sidebar bottom fill
 local sidebarFill = Instance.new("Frame")
 sidebarFill.Size = UDim2.new(1, 0, 0.3, 0)
 sidebarFill.Position = UDim2.new(0, 0, 0.85, 0)
@@ -161,7 +169,6 @@ sidebarFill.BackgroundColor3 = C.sidebar
 sidebarFill.BorderSizePixel = 0
 sidebarFill.Parent = sidebar
 
--- Sidebar menu label
 local menuLabel = Instance.new("TextLabel")
 menuLabel.Size = UDim2.new(1, 0, 0, 22)
 menuLabel.Position = UDim2.new(0, 0, 0, 10)
@@ -173,7 +180,6 @@ menuLabel.TextXAlignment = Enum.TextXAlignment.Center
 menuLabel.BackgroundTransparency = 1
 menuLabel.Parent = sidebar
 
--- Separator line
 local sep = Instance.new("Frame")
 sep.Size = UDim2.new(0.7, 0, 0, 1)
 sep.Position = UDim2.new(0.15, 0, 0, 36)
@@ -212,7 +218,6 @@ for i, tab in ipairs(tabs) do
     btnCorner.CornerRadius = UDim.new(0, 7)
     btnCorner.Parent = btn
     
-    -- Hover
     btn.MouseEnter:Connect(function()
         if activeTab ~= tab.name then
             btn.BackgroundColor3 = C.hover
@@ -238,7 +243,7 @@ contentArea.ClipsDescendants = true
 contentArea.Parent = mainFrame
 
 -- ==================================================================
--- DEFAULT VIEW (AoneHub branding)
+-- DEFAULT VIEW
 -- ==================================================================
 local defaultView = Instance.new("Frame")
 defaultView.Size = UDim2.new(1, 0, 1, 0)
@@ -287,23 +292,20 @@ for _, tab in ipairs(tabs) do
 end
 
 -- ==================================================================
--- SWITCH TAB FUNCTION
+-- SWITCH TAB
 -- ==================================================================
 local function switchTab(tabName)
     defaultView.Visible = false
     
-    -- Hide all
     for _, f in pairs(tabFrames) do
         f.Visible = false
     end
     
-    -- Reset buttons
     for _, btn in pairs(tabBtns) do
         btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
         btn.TextColor3 = C.textDim
     end
     
-    -- Show selected
     if tabFrames[tabName] then
         tabFrames[tabName].Visible = true
         tabBtns[tabName].BackgroundColor3 = C.accent
@@ -312,7 +314,6 @@ local function switchTab(tabName)
     end
 end
 
--- Connect tab buttons
 for _, tab in ipairs(tabs) do
     tabBtns[tab.name].MouseButton1Click:Connect(function()
         switchTab(tab.name)
@@ -323,19 +324,19 @@ end
 -- DRAGGING SYSTEM
 -- ==================================================================
 local dragObj = nil
-local dragStart = nil
-local objStart = nil
+local dragStartPos = nil
+local objStartPos = nil
 
 local function startDrag(obj, input)
     dragObj = obj
-    dragStart = input.Position
-    objStart = obj.Position
+    dragStartPos = input.Position
+    objStartPos = obj.Position
 end
 
 local function stopDrag()
     dragObj = nil
-    dragStart = nil
-    objStart = nil
+    dragStartPos = nil
+    objStartPos = nil
 end
 
 titleBar.InputBegan:Connect(function(input)
@@ -351,13 +352,13 @@ minimizedCircle.InputBegan:Connect(function(input)
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if dragObj and dragStart and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStart
+    if dragObj and dragStartPos and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStartPos
         dragObj.Position = UDim2.new(
-            objStart.X.Scale,
-            objStart.X.Offset + delta.X,
-            objStart.Y.Scale,
-            objStart.Y.Offset + delta.Y
+            objStartPos.X.Scale,
+            objStartPos.X.Offset + delta.X,
+            objStartPos.Y.Scale,
+            objStartPos.Y.Offset + delta.Y
         )
     end
 end)
@@ -385,23 +386,39 @@ minimizeBtn.MouseButton1Click:Connect(minimizeGUI)
 minimizedCircle.MouseButton1Click:Connect(restoreGUI)
 
 -- ==================================================================
--- CLOSE / DESTROY
+-- CLOSE
 -- ==================================================================
 closeBtn.MouseButton1Click:Connect(function()
     screenGui:Destroy()
 end)
 
 -- ==================================================================
+-- SAFE REQUIRE: Get RemoteEvent
+-- ==================================================================
+local packetRemote = nil
+local function getPacketRemote()
+    if packetRemote then return true end
+    local success, result = pcall(function()
+        return ReplicatedStorage:WaitForChild("SharedModules", 5)
+            :WaitForChild("Packet", 5)
+            :WaitForChild("RemoteEvent", 5)
+    end)
+    if success and result then
+        packetRemote = result
+        print("[AoneHub] ✅ RemoteEvent found")
+        return true
+    end
+    warn("[AoneHub] ❌ RemoteEvent not found, retrying...")
+    return false
+end
+
+-- ==================================================================
 -- POPULATE TAB 1: AUTO BUY
 -- ==================================================================
-(function()
+local function setupAutoBuyTab()
     local parent = tabFrames["AutoBuy"]
     
-    -- Auto Buy Script Variables
-    local packetRemote = ReplicatedStorage:WaitForChild("SharedModules")
-        :WaitForChild("Packet")
-        :WaitForChild("RemoteEvent")
-    
+    -- Variables
     local OPCODE = 133
     local ALL_ITEMS = {"Hypno Bloom", "Dragon's Breath", "Sun Bloom", "Star Fruit"}
     local SELECTED_ITEMS = {}
@@ -420,7 +437,6 @@ end)
     local nextScanTime = 0
     local scanCount = 0
     
-    -- Initialize all items as selected
     for _, item in ipairs(ALL_ITEMS) do
         SELECTED_ITEMS[item] = true
     end
@@ -432,6 +448,7 @@ end)
     
     -- Buy item
     local function buyItem(itemName)
+        if not getPacketRemote() then return false end
         local packet = buildPacket(itemName)
         local success = pcall(function() packetRemote:FireServer(packet) end)
         buyStats.total += 1
@@ -470,7 +487,7 @@ end)
     -- Check availability
     local function isItemAvailable(itemName)
         local el = shopElements[itemName]
-        if not el then return false
+        if not el then return false end
         if not el.container.Visible then return false end
         local txt = ""
         pcall(function() txt = el.costText.Text end)
@@ -556,6 +573,10 @@ end)
     
     local function startMonitoring()
         if isRunning then return end
+        if not getPacketRemote() then
+            warn("[AoneHub] ❌ Cannot start: RemoteEvent not found")
+            return
+        end
         isRunning = true
         cacheShopElements()
         pcall(scanAndBuy)
@@ -570,10 +591,9 @@ end)
     end
     
     -- ==================================================================
-    -- BUILD UI IN TAB
+    -- BUILD UI
     -- ==================================================================
     
-    -- Scroll
     local scroll = Instance.new("ScrollingFrame")
     scroll.Size = UDim2.new(1, 0, 1, 0)
     scroll.CanvasSize = UDim2.new(0, 0, 0, 550)
@@ -651,6 +671,7 @@ end)
     opUpdate.TextSize = 11
     opUpdate.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
     opUpdate.BorderSizePixel = 0
+    opUpdate.AutoButtonColor = false
     opUpdate.Parent = opRow
     
     local opUpCorner = Instance.new("UICorner")
@@ -738,7 +759,7 @@ end)
             lbl.TextColor3 = SELECTED_ITEMS[itemName] and C.text or Color3.fromRGB(100, 100, 110)
         end)
         
-        itemChecks[itemName] = {btn = cb, lbl = lbl, status = nil}
+        itemChecks[itemName] = {btn = cb, lbl = lbl}
         y += 26
     end
     
@@ -776,7 +797,6 @@ end)
     tgCorner.CornerRadius = UDim.new(0, 8)
     tgCorner.Parent = toggleBtn
     
-    -- Toggle hover
     toggleBtn.MouseEnter:Connect(function()
         if not isRunning then
             toggleBtn.BackgroundColor3 = Color3.fromRGB(70, 220, 70)
@@ -792,7 +812,7 @@ end)
         end
     end)
     
-    -- Update UI function
+    -- Update UI
     function updateUI()
         if isRunning then
             statusText.Text = isBuying and "🛒  MEMBORONG..." or "⏰  MENUNGGU RESTOCK"
@@ -821,7 +841,6 @@ end)
             countdownText.Text = ""
         end
         
-        -- Update item status
         for itemName, data in pairs(itemChecks) do
             local st = itemStatus[itemName]
             if st == "stock" then
@@ -839,7 +858,7 @@ end)
         updateUI()
     end)
     
-    -- Periodic refresh
+    -- Periodic UI refresh
     task.spawn(function()
         while parent.Parent do
             task.wait(0.5)
@@ -847,22 +866,19 @@ end)
         end
     end)
     
-    -- Cleanup
     parent.Destroying:Connect(stopMonitoring)
-    
-end)()
+end
 
 -- ==================================================================
--- POPULATE TAB 2 & 3 (Placeholder)
+-- POPULATE TAB 2 & 3
 -- ==================================================================
-for _, tab in ipairs({"AutoMail", "Ekstra"}) do
-    local parent = tabFrames[tab]
-    local icons = {AutoMail = "📧", Ekstra = "⚙️"}
+local function setupPlaceholderTab(tabName, icon, title)
+    local parent = tabFrames[tabName]
     
     local iconLabel = Instance.new("TextLabel")
     iconLabel.Size = UDim2.new(1, 0, 0, 60)
     iconLabel.Position = UDim2.new(0, 0, 0.35, -30)
-    iconLabel.Text = icons[tab]
+    iconLabel.Text = icon
     iconLabel.Font = Enum.Font.Gotham
     iconLabel.TextSize = 50
     iconLabel.BackgroundTransparency = 1
@@ -871,7 +887,7 @@ for _, tab in ipairs({"AutoMail", "Ekstra"}) do
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(1, 0, 0, 30)
     titleLabel.Position = UDim2.new(0, 0, 0.45, 0)
-    titleLabel.Text = tab == "AutoMail" and "Auto Mail" or "Ekstra"
+    titleLabel.Text = title
     titleLabel.TextColor3 = C.text
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.TextSize = 20
@@ -890,10 +906,17 @@ for _, tab in ipairs({"AutoMail", "Ekstra"}) do
 end
 
 -- ==================================================================
--- FINAL SETUP
+-- INITIALIZE TABS
 -- ==================================================================
-print("[AoneHub] ✅ GUI Ready")
-print("[AoneHub] 📐 Drag: Title bar")
-print("[AoneHub] 🔵 Minimize: Lingkaran AH (klik untuk restore)")
-print("[AoneHub] ❌ Close: Tombol ✕")
-print("[AoneHub] 🛒 Tab Auto Buy: Checklist item + Toggle START/STOP")
+setupAutoBuyTab()
+setupPlaceholderTab("AutoMail", "📧", "Auto Mail")
+setupPlaceholderTab("Ekstra", "⚙️", "Ekstra")
+
+-- ==================================================================
+-- READY
+-- ==================================================================
+print("[AoneHub] ✅ GUI Ready!")
+print("[AoneHub] 📐 Drag title bar untuk memindahkan")
+print("[AoneHub] 🔵 Klik – untuk minimize ke lingkaran AH")
+print("[AoneHub] 🔵 Klik lingkaran AH untuk restore")
+print("[AoneHub] ❌ Klik ✕ untuk close")
