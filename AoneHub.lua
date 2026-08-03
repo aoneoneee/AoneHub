@@ -1,5 +1,5 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - GUI SYSTEM (DRAG FIX)
+-- AONEHUB - GUI SYSTEM (DRAG FINAL FIX)
 -- ──────────────────────────────────────────────────────────────────────
 
 local function main()
@@ -23,9 +23,6 @@ local function main()
         input = Color3.fromRGB(38, 38, 48),
     }
     
-    -- ==================================================================
-    -- SCREENGUI
-    -- ==================================================================
     local screenGui = Instance.new("ScreenGui")
     screenGui.Name = "AoneHub"
     screenGui.Parent = playerGui
@@ -78,59 +75,44 @@ local function main()
     titleBar.Parent = mainFrame
     
     -- ==================================================================
-    -- UNIFIED DRAG SYSTEM (pakai UserInputService)
+    -- DRAG SYSTEM - PAKAI MOUSE ABSOLUTE POSITION
     -- ==================================================================
-    local dragTarget = nil
-    local dragOffset = nil
-    
-    local function startDrag(obj)
-        dragTarget = obj
-        local mousePos = UserInputService:GetMouseLocation()
-        dragOffset = Vector2.new(
-            obj.AbsolutePosition.X - mousePos.X,
-            obj.AbsolutePosition.Y - mousePos.Y
-        )
+    local function makeDraggable(button, target)
+        local isDragging = false
+        local startMouseX = 0
+        local startMouseY = 0
+        local startPosX = 0
+        local startPosY = 0
+        
+        button.MouseButton1Down:Connect(function(x, y)
+            isDragging = true
+            -- x, y dari event adalah posisi mouse absolute di layar
+            startMouseX = x
+            startMouseY = y
+            startPosX = target.AbsolutePosition.X
+            startPosY = target.AbsolutePosition.Y
+        end)
+        
+        button.MouseMoved:Connect(function(x, y)
+            if isDragging then
+                local deltaX = x - startMouseX
+                local deltaY = y - startMouseY
+                target.Position = UDim2.new(0, startPosX + deltaX, 0, startPosY + deltaY)
+            end
+        end)
+        
+        button.MouseButton1Up:Connect(function(x, y)
+            isDragging = false
+        end)
+        
+        -- Safety: stop drag kalau mouse keluar button
+        button.MouseLeave:Connect(function()
+            isDragging = false
+        end)
     end
     
-    local function stopDrag()
-        dragTarget = nil
-        dragOffset = nil
-    end
-    
-    local function updateDrag()
-        if not dragTarget then return end
-        local mousePos = UserInputService:GetMouseLocation()
-        dragTarget.Position = UDim2.new(
-            0,
-            mousePos.X + dragOffset.X,
-            0,
-            mousePos.Y + dragOffset.Y
-        )
-    end
-    
-    titleBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            startDrag(mainFrame)
-        end
-    end)
-    
-    minimizedCircle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            startDrag(minimizedCircle)
-        end
-    end)
-    
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            stopDrag()
-        end
-    end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
-            updateDrag()
-        end
-    end)
+    makeDraggable(titleBar, mainFrame)
+    makeDraggable(minimizedCircle, minimizedCircle)
     
     -- Title bar UI
     local titleCorner = Instance.new("UICorner")
@@ -197,7 +179,6 @@ local function main()
     end)
     
     minimizedCircle.MouseButton1Click:Connect(function()
-        -- Hanya restore kalau gak drag (drag pakai InputBegan)
         mainFrame.Position = UDim2.new(0, minimizedCircle.AbsolutePosition.X, 0, minimizedCircle.AbsolutePosition.Y)
         minimizedCircle.Visible = false
         mainFrame.Visible = true
@@ -366,6 +347,7 @@ local function main()
     
     -- ==================================================================
     -- TAB 1: AUTO BUY WITH OPCODE DETECTION
+    -- (Sama seperti sebelumnya, tidak diubah)
     -- ==================================================================
     local parent = tabFrames["AutoBuy"]
     
@@ -390,7 +372,7 @@ local function main()
     local JITTER_MIN = 3
     local JITTER_MAX = 5
     local BUY_JITTER_MIN = 0.3
-    local BUY_JITTER_MAX = 0.8
+    local BUY_JITTER_MAX = 2.8
     
     local buyStats = {total = 0, success = 0, failed = 0}
     local buyHistory = {}
@@ -405,9 +387,6 @@ local function main()
         SELECTED_ITEMS[item] = true
     end
     
-    -- ==================================================================
-    -- DETEKSI OPCODE
-    -- ==================================================================
     local function getCarrotStock()
         local seedShop = playerGui:FindFirstChild("SeedShop")
         if not seedShop then return nil end
@@ -467,7 +446,6 @@ local function main()
         return OPCODE
     end
     
-    -- Build packet, buy, cache, check, timing functions (same as before)
     local function buildPacket(itemName)
         return buffer.fromstring(string.char(OPCODE, 0, #itemName) .. itemName)
     end
@@ -601,10 +579,9 @@ local function main()
     local y = 10
     
     local hdr = Instance.new("TextLabel")
-    hdr.Size = UDim2.new(1, -20, 0, 28)
-    hdr.Position = UDim2.new(0, 10, 0, y)
-    hdr.Text = "🛒  Auto Buy Borong"
-    hdr.TextColor3 = C.text; hdr.Font = Enum.Font.GothamBold; hdr.TextSize = 16
+    hdr.Size = UDim2.new(1, -20, 0, 28); hdr.Position = UDim2.new(0, 10, 0, y)
+    hdr.Text = "🛒  Auto Buy Borong"; hdr.TextColor3 = C.text
+    hdr.Font = Enum.Font.GothamBold; hdr.TextSize = 16
     hdr.TextXAlignment = Enum.TextXAlignment.Left; hdr.BackgroundTransparency = 1; hdr.Parent = scroll
     y += 34
     
@@ -615,7 +592,6 @@ local function main()
     statusText.TextXAlignment = Enum.TextXAlignment.Left; statusText.BackgroundTransparency = 1; statusText.Parent = scroll
     y += 26
     
-    -- Opcode row
     local opRow = Instance.new("Frame")
     opRow.Size = UDim2.new(1, -20, 0, 26); opRow.Position = UDim2.new(0, 10, 0, y)
     opRow.BackgroundTransparency = 1; opRow.Parent = scroll
@@ -640,7 +616,7 @@ local function main()
     
     opBtn.MouseButton1Click:Connect(function()
         local n = tonumber(opInput.Text)
-        if n and n >= 100 and n <= 200 then OPCODE = n; print("[AutoBuy] 🔢 Opcode:", OPCODE) end
+        if n and n >= 100 and n <= 200 then OPCODE = n end
     end)
     
     local detectStatus = Instance.new("TextLabel")
@@ -650,7 +626,6 @@ local function main()
     detectStatus.TextXAlignment = Enum.TextXAlignment.Left; detectStatus.BackgroundTransparency = 1; detectStatus.Parent = opRow
     y += 34
     
-    -- Timer
     local timerText = Instance.new("TextLabel")
     timerText.Size = UDim2.new(1, -20, 0, 22); timerText.Position = UDim2.new(0, 10, 0, y)
     timerText.Text = "Next scan: --:--:--"; timerText.TextColor3 = Color3.fromRGB(255, 200, 50)
@@ -664,7 +639,6 @@ local function main()
     countdownText.TextXAlignment = Enum.TextXAlignment.Left; countdownText.BackgroundTransparency = 1; countdownText.Parent = scroll
     y += 22
     
-    -- Checklist
     local checkLbl = Instance.new("TextLabel")
     checkLbl.Size = UDim2.new(1, -20, 0, 20); checkLbl.Position = UDim2.new(0, 10, 0, y)
     checkLbl.Text = "📋  Pilih Item:"; checkLbl.TextColor3 = C.textDim
@@ -699,7 +673,6 @@ local function main()
     end
     y += 6
     
-    -- Stats
     local statsText = Instance.new("TextLabel")
     statsText.Size = UDim2.new(1, -20, 0, 18); statsText.Position = UDim2.new(0, 10, 0, y)
     statsText.Text = "✅ 0  |  ❌ 0  |  🔄 0"; statsText.TextColor3 = C.textDim
@@ -707,7 +680,6 @@ local function main()
     statsText.TextXAlignment = Enum.TextXAlignment.Left; statsText.BackgroundTransparency = 1; statsText.Parent = scroll
     y += 26
     
-    -- Toggle
     local toggleBtn = Instance.new("TextButton")
     toggleBtn.Size = UDim2.new(1, -20, 0, 40); toggleBtn.Position = UDim2.new(0, 10, 0, y)
     toggleBtn.Text = "▶  START"; toggleBtn.TextColor3 = C.text
