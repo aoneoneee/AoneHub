@@ -1,5 +1,5 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - FULL SCRIPT (GUI + AUTO BUY SEED/GEAR/PROP)
+-- AONEHUB - FULL SCRIPT (OPCODE FROM NETWORKING MODULE)
 -- ──────────────────────────────────────────────────────────────────────
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,8 +15,6 @@ local playerGui = player:WaitForChild("PlayerGui")
 -- ==================================================================
 local SAVE_FILE = "AoneHub_Config.json"
 local config = {
-    opcodeSeed = 133, opcodeGear = 137, opcodeProp = 135,
-    opcodeDetected = false, lastScannedOpcode = 158,
     selectedSeeds = {}, selectedGears = {}, selectedProps = {},
     accordionSeedOpen = true, accordionGearOpen = false, accordionPropOpen = false,
     searchSeed = "", searchGear = "", searchProp = "",
@@ -40,6 +38,39 @@ end
 loadConfig()
 
 -- ==================================================================
+-- GET OPCODES FROM NETWORKING MODULE
+-- ==================================================================
+local function getOpcodes()
+    local s, Networking = pcall(require, ReplicatedStorage.SharedModules.Networking)
+    if not s then return 133, 137, 135 end
+    
+    local opSeed = 133
+    local opGear = 137
+    local opProp = 135
+    
+    pcall(function()
+        if Networking.SeedShop and Networking.SeedShop.PurchaseSeed then
+            opSeed = Networking.SeedShop.PurchaseSeed.Id
+        end
+    end)
+    pcall(function()
+        if Networking.GearShop and Networking.GearShop.PurchaseGear then
+            opGear = Networking.GearShop.PurchaseGear.Id
+        end
+    end)
+    pcall(function()
+        if Networking.CrateShop and Networking.CrateShop.PurchaseCrate then
+            opProp = Networking.CrateShop.PurchaseCrate.Id
+        end
+    end)
+    
+    return opSeed, opGear, opProp
+end
+
+local OPCODE_SEED, OPCODE_GEAR, OPCODE_PROP = getOpcodes()
+print("[AoneHub] 🔢 Seed:" .. OPCODE_SEED .. " Gear:" .. OPCODE_GEAR .. " Prop:" .. OPCODE_PROP)
+
+-- ==================================================================
 -- COLORS
 -- ==================================================================
 local C = {
@@ -51,8 +82,6 @@ local C = {
     green = Color3.fromRGB(50, 200, 50),
     red = Color3.fromRGB(200, 50, 50),
     orange = Color3.fromRGB(255, 150, 50),
-    input = Color3.fromRGB(38, 38, 48),
-    inputLocked = Color3.fromRGB(28, 28, 35),
     accordionSeed = Color3.fromRGB(35, 42, 35),
     accordionGear = Color3.fromRGB(42, 35, 35),
     accordionProp = Color3.fromRGB(40, 35, 45),
@@ -97,7 +126,6 @@ pcall(function()
     table.sort(ALL_PROPS)
 end)
 
--- Merge config
 local function mergeItems(saved, current)
     local merged = {}
     if type(saved) == "table" then for k, v in pairs(saved) do merged[k] = v end end
@@ -120,7 +148,6 @@ screenGui.Parent = playerGui
 screenGui.ResetOnSpawn = false
 screenGui.Destroying:Connect(saveConfig)
 
--- Minimized circle
 local minimizedCircle = Instance.new("TextButton")
 minimizedCircle.Size = UDim2.new(0, 50, 0, 50)
 minimizedCircle.Position = UDim2.new(0.5, -25, 0.5, -25)
@@ -136,7 +163,6 @@ minimizedCircle.Draggable = true
 minimizedCircle.Parent = screenGui
 Instance.new("UICorner", minimizedCircle).CornerRadius = UDim.new(1, 0)
 
--- Main frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 700, 0, 460)
 mainFrame.Position = UDim2.new(0.5, -350, 0.5, -230)
@@ -148,7 +174,6 @@ mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
--- Title bar
 local titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, 38)
 titleBar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
@@ -278,7 +303,6 @@ contentArea.BackgroundTransparency = 1
 contentArea.ClipsDescendants = true
 contentArea.Parent = mainFrame
 
--- Default view
 local defaultView = Instance.new("Frame")
 defaultView.Size = UDim2.new(1, 0, 1, 0)
 defaultView.BackgroundTransparency = 1
@@ -304,7 +328,6 @@ subLabel.TextSize = 13
 subLabel.BackgroundTransparency = 1
 subLabel.Parent = defaultView
 
--- Tab frames
 local tabFrames = {}
 for _, tab in ipairs(tabs) do
     local f = Instance.new("Frame")
@@ -348,11 +371,6 @@ print("[AoneHub] ✅ GUI Ready")
 -- AUTO BUY ENGINE
 -- ==================================================================
 local parent = tabFrames["AutoBuy"]
-local OPCODE_SEED = config.opcodeSeed or 133
-local OPCODE_GEAR = config.opcodeGear or 137
-local OPCODE_PROP = config.opcodeProp or 135
-local opcodeDetected = config.opcodeDetected or false
-local lastScannedOpcode = config.lastScannedOpcode or 158
 
 local buyStats = {total = 0, success = 0, failed = 0}
 local isRunning, isBuying = false, false
@@ -369,68 +387,6 @@ local function getRemote()
     if s and r then packetRemote = r; return true end; return false
 end
 
--- ==================================================================
--- OPCODE DETECTION
--- ==================================================================
-local function getWorldId()
-    local s, worldId = pcall(function() return Workspace.ActiveWorldId end)
-    if s and worldId then return worldId end; return "Main"
-end
-
-local function getTestItemName()
-    return getWorldId() == "FallHarvest" and "Maple Carrot" or "Carrot"
-end
-
-local function getStock(itemName)
-    local seedShop = playerGui:FindFirstChild("SeedShop")
-    if not seedShop then return nil end
-    local f = seedShop:FindFirstChild("Frame"); if not f then return nil end
-    local ns = f:FindFirstChild("NormalShop"); if not ns then return nil end
-    local item = ns:FindFirstChild(itemName); if not item then return nil end
-    local mf = item:FindFirstChild("Main_Frame") or item:FindFirstChild("MainFrame"); if not mf then return nil end
-    for _, child in ipairs(mf:GetChildren()) do
-        if child.Name:lower():find("stock") and (child:IsA("TextLabel") or child:IsA("TextButton")) then
-            local txt = ""; pcall(function() txt = child.Text end)
-            local num = string.match(txt, "(%d+)"); if num then return tonumber(num) end
-        end
-    end; return nil
-end
-
-local function detectOpcode()
-    if opcodeDetected then return true end
-    if not getRemote() then return false end
-    
-    local testItem = getTestItemName()
-    print("[Detect] 🔍 World: " .. getWorldId() .. " | Test: " .. testItem)
-    task.wait(1)
-    
-    local stockBefore = getStock(testItem)
-    if not stockBefore or stockBefore == 0 then
-        warn("[Detect] ❌ " .. testItem .. " NOT AVAILABLE! Detection FAILED!")
-        return false
-    end
-    
-    print("[Detect] 📦 " .. testItem .. " stock: " .. stockBefore)
-    for testOpcode = lastScannedOpcode, 200 do
-        pcall(function() packetRemote:FireServer(buffer.fromstring(string.char(testOpcode,0,#testItem)..testItem)) end)
-        task.wait(0.8)
-        local stockAfter = getStock(testItem)
-        if stockAfter and stockAfter < stockBefore then
-            OPCODE_SEED = testOpcode; OPCODE_GEAR = testOpcode+4; OPCODE_PROP = testOpcode+2
-            opcodeDetected = true; lastScannedOpcode = testOpcode
-            config.opcodeSeed = OPCODE_SEED; config.opcodeGear = OPCODE_GEAR; config.opcodeProp = OPCODE_PROP
-            config.opcodeDetected = true; config.lastScannedOpcode = lastScannedOpcode; saveConfig()
-            print("[Detect] 🎯 OPCODE: " .. OPCODE_SEED)
-            updateOpcodeDisplay(); return true
-        end; lastScannedOpcode = testOpcode; task.wait(0.15)
-    end
-    
-    warn("[Detect] ❌ Opcode NOT FOUND! Detection FAILED!")
-    config.lastScannedOpcode = 158; lastScannedOpcode = 158; saveConfig(); updateOpcodeDisplay()
-    return false
-end
-
--- Buy functions
 local function buyItem(itemName, opcode)
     if not getRemote() then return false end
     local s = pcall(function() packetRemote:FireServer(buffer.fromstring(string.char(opcode,0,#itemName)..itemName)) end)
@@ -531,14 +487,6 @@ end
 local function startMonitoring()
     if isRunning then return end
     if not getRemote() then return end
-    
-    local detectionSuccess = detectOpcode()
-    if not detectionSuccess then
-        statusText.Text = "❌ DETECT FAILED!"
-        statusText.TextColor3 = C.red
-        return
-    end
-    
     isRunning = true; cacheShop(); pcall(scanAndBuy); task.spawn(mainLoop); updateUI()
 end
 
@@ -550,7 +498,7 @@ end
 -- BUILD AUTO BUY UI
 -- ==================================================================
 local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, 0, 1, 0); scroll.CanvasSize = UDim2.new(0, 0, 0, 1600)
+scroll.Size = UDim2.new(1, 0, 1, 0); scroll.CanvasSize = UDim2.new(0, 0, 0, 1400)
 scroll.ScrollBarThickness = 3; scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0; scroll.Parent = parent
 
 local y = 10
@@ -560,45 +508,18 @@ hdr.Text = "🛒  Auto Buy (Seed + Gear + Prop)"; hdr.TextColor3 = C.text; hdr.F
 hdr.TextXAlignment = Enum.TextXAlignment.Left; hdr.BackgroundTransparency = 1; hdr.Parent = scroll; y += 28
 
 local statusText = Instance.new("TextLabel"); statusText.Size = UDim2.new(1, -20, 0, 18); statusText.Position = UDim2.new(0, 10, 0, y)
-statusText.Text = opcodeDetected and "⏹️  OFF" or "❌ NEED DETECT"; statusText.TextColor3 = opcodeDetected and C.red or C.orange
+statusText.Text = "⏹️  OFF"; statusText.TextColor3 = C.red
 statusText.Font = Enum.Font.GothamSemibold; statusText.TextSize = 12
 statusText.TextXAlignment = Enum.TextXAlignment.Left; statusText.BackgroundTransparency = 1; statusText.Parent = scroll; y += 22
 
--- Opcode row
-local opRow = Instance.new("Frame"); opRow.Size = UDim2.new(1, -20, 0, 55); opRow.Position = UDim2.new(0, 10, 0, y)
-opRow.BackgroundTransparency = 1; opRow.Parent = scroll
-
-local opl1 = Instance.new("TextLabel"); opl1.Size = UDim2.new(0, 35, 0, 15); opl1.Text = "Seed:"; opl1.TextColor3 = Color3.fromRGB(100,200,100); opl1.Font = Enum.Font.Gotham; opl1.TextSize = 10; opl1.BackgroundTransparency = 1; opl1.Parent = opRow
-local opInputSeed = Instance.new("TextBox"); opInputSeed.Size = UDim2.new(0, 40, 0, 15); opInputSeed.Position = UDim2.new(0, 37, 0, 0); opInputSeed.Text = tostring(OPCODE_SEED); opInputSeed.TextColor3 = C.text; opInputSeed.Font = Enum.Font.GothamBold; opInputSeed.TextSize = 10; opInputSeed.BackgroundColor3 = C.input; opInputSeed.BorderSizePixel = 0; opInputSeed.Parent = opRow; Instance.new("UICorner", opInputSeed).CornerRadius = UDim.new(0, 3)
-
-local opl2 = Instance.new("TextLabel"); opl2.Size = UDim2.new(0, 35, 0, 15); opl2.Position = UDim2.new(0, 85, 0, 0); opl2.Text = "Gear:"; opl2.TextColor3 = Color3.fromRGB(255,150,50); opl2.Font = Enum.Font.Gotham; opl2.TextSize = 10; opl2.BackgroundTransparency = 1; opl2.Parent = opRow
-local opDisplayGear = Instance.new("TextLabel"); opDisplayGear.Size = UDim2.new(0, 40, 0, 15); opDisplayGear.Position = UDim2.new(0, 122, 0, 0); opDisplayGear.Text = tostring(OPCODE_GEAR); opDisplayGear.TextColor3 = Color3.fromRGB(255,200,150); opDisplayGear.Font = Enum.Font.GothamBold; opDisplayGear.TextSize = 10; opDisplayGear.BackgroundColor3 = C.inputLocked; opDisplayGear.BorderSizePixel = 0; opDisplayGear.TextXAlignment = Enum.TextXAlignment.Center; opDisplayGear.Parent = opRow; Instance.new("UICorner", opDisplayGear).CornerRadius = UDim.new(0, 3)
-
-local opl3 = Instance.new("TextLabel"); opl3.Size = UDim2.new(0, 35, 0, 15); opl3.Position = UDim2.new(0, 170, 0, 0); opl3.Text = "Prop:"; opl3.TextColor3 = Color3.fromRGB(200,100,255); opl3.Font = Enum.Font.Gotham; opl3.TextSize = 10; opl3.BackgroundTransparency = 1; opl3.Parent = opRow
-local opDisplayProp = Instance.new("TextLabel"); opDisplayProp.Size = UDim2.new(0, 40, 0, 15); opDisplayProp.Position = UDim2.new(0, 207, 0, 0); opDisplayProp.Text = tostring(OPCODE_PROP); opDisplayProp.TextColor3 = Color3.fromRGB(220,180,255); opDisplayProp.Font = Enum.Font.GothamBold; opDisplayProp.TextSize = 10; opDisplayProp.BackgroundColor3 = C.inputLocked; opDisplayProp.BorderSizePixel = 0; opDisplayProp.TextXAlignment = Enum.TextXAlignment.Center; opDisplayProp.Parent = opRow; Instance.new("UICorner", opDisplayProp).CornerRadius = UDim.new(0, 3)
-
-local opSetBtn = Instance.new("TextButton"); opSetBtn.Size = UDim2.new(0, 32, 0, 15); opSetBtn.Position = UDim2.new(0, 255, 0, 0); opSetBtn.Text = "Set"; opSetBtn.TextColor3 = C.text; opSetBtn.Font = Enum.Font.GothamSemibold; opSetBtn.TextSize = 9; opSetBtn.BackgroundColor3 = Color3.fromRGB(55,55,65); opSetBtn.BorderSizePixel = 0; opSetBtn.AutoButtonColor = false; opSetBtn.Parent = opRow; Instance.new("UICorner", opSetBtn).CornerRadius = UDim.new(0, 3)
-opSetBtn.MouseButton1Click:Connect(function()
-    local n = tonumber(opInputSeed.Text); if n and n >= 100 and n <= 200 then
-        OPCODE_SEED = n; OPCODE_GEAR = n+4; OPCODE_PROP = n+2; opcodeDetected = true
-        config.opcodeSeed = OPCODE_SEED; config.opcodeGear = OPCODE_GEAR; config.opcodeProp = OPCODE_PROP; config.opcodeDetected = true; saveConfig(); updateUI()
-    end
-end)
-
-local detectBtn = Instance.new("TextButton"); detectBtn.Size = UDim2.new(0, 45, 0, 15); detectBtn.Position = UDim2.new(0, 292, 0, 0); detectBtn.Text = "Detect"; detectBtn.TextColor3 = C.text; detectBtn.Font = Enum.Font.GothamSemibold; detectBtn.TextSize = 9; detectBtn.BackgroundColor3 = Color3.fromRGB(70,70,80); detectBtn.BorderSizePixel = 0; detectBtn.AutoButtonColor = false; detectBtn.Parent = opRow; Instance.new("UICorner", detectBtn).CornerRadius = UDim.new(0, 3)
-detectBtn.MouseButton1Click:Connect(function()
-    detectBtn.Text = "..."; opcodeDetected = false; config.opcodeDetected = false; lastScannedOpcode = 158; config.lastScannedOpcode = 158
-    local result = detectOpcode(); detectBtn.Text = "Detect"
-    if not result then statusText.Text = "❌ DETECT FAILED!"; statusText.TextColor3 = C.red end; updateUI()
-end)
-
-local opDetectStatus = Instance.new("TextLabel"); opDetectStatus.Size = UDim2.new(1, 0, 0, 14); opDetectStatus.Position = UDim2.new(0, 0, 0, 22); opDetectStatus.TextColor3 = Color3.fromRGB(255,200,50); opDetectStatus.Font = Enum.Font.Gotham; opDetectStatus.TextSize = 9; opDetectStatus.TextXAlignment = Enum.TextXAlignment.Left; opDetectStatus.BackgroundTransparency = 1; opDetectStatus.Parent = opRow
-
-local worldText = Instance.new("TextLabel"); worldText.Size = UDim2.new(1, 0, 0, 14); worldText.Position = UDim2.new(0, 0, 0, 40); worldText.Text = "🌍 " .. getWorldId() .. " | Test: " .. getTestItemName(); worldText.TextColor3 = Color3.fromRGB(150,150,160); worldText.Font = Enum.Font.Gotham; worldText.TextSize = 8; worldText.TextXAlignment = Enum.TextXAlignment.Left; worldText.BackgroundTransparency = 1; worldText.Parent = opRow
-y += 60
-
-local timerText = Instance.new("TextLabel"); timerText.Size = UDim2.new(1, -20, 0, 18); timerText.Position = UDim2.new(0, 10, 0, y); timerText.Text = "Next scan: --:--:--"; timerText.TextColor3 = Color3.fromRGB(255,200,50); timerText.Font = Enum.Font.GothamBold; timerText.TextSize = 12; timerText.TextXAlignment = Enum.TextXAlignment.Left; timerText.BackgroundTransparency = 1; timerText.Parent = scroll; y += 18
-local statsText = Instance.new("TextLabel"); statsText.Size = UDim2.new(1, -20, 0, 14); statsText.Position = UDim2.new(0, 10, 0, y); statsText.Text = "✅ 0  |  ❌ 0  |  🔄 0"; statsText.TextColor3 = C.textDim; statsText.Font = Enum.Font.Gotham; statsText.TextSize = 10; statsText.TextXAlignment = Enum.TextXAlignment.Left; statsText.BackgroundTransparency = 1; statsText.Parent = scroll; y += 20
+local timerText = Instance.new("TextLabel"); timerText.Size = UDim2.new(1, -20, 0, 18); timerText.Position = UDim2.new(0, 10, 0, y)
+timerText.Text = "Next scan: --:--:--"; timerText.TextColor3 = Color3.fromRGB(255,200,50)
+timerText.Font = Enum.Font.GothamBold; timerText.TextSize = 12
+timerText.TextXAlignment = Enum.TextXAlignment.Left; timerText.BackgroundTransparency = 1; timerText.Parent = scroll; y += 18
+local statsText = Instance.new("TextLabel"); statsText.Size = UDim2.new(1, -20, 0, 14); statsText.Position = UDim2.new(0, 10, 0, y)
+statsText.Text = "✅ 0  |  ❌ 0  |  🔄 0"; statsText.TextColor3 = C.textDim
+statsText.Font = Enum.Font.Gotham; statsText.TextSize = 10
+statsText.TextXAlignment = Enum.TextXAlignment.Left; statsText.BackgroundTransparency = 1; statsText.Parent = scroll; y += 20
 
 -- ==================================================================
 -- ACCORDION BUILDER
@@ -689,23 +610,13 @@ local toggleBtn = Instance.new("TextButton"); toggleBtn.Size = UDim2.new(1, -20,
 toggleBtn.MouseEnter:Connect(function() toggleBtn.BackgroundColor3 = isRunning and Color3.fromRGB(220,70,70) or Color3.fromRGB(70,220,70) end)
 toggleBtn.MouseLeave:Connect(function() toggleBtn.BackgroundColor3 = isRunning and C.red or C.green end)
 
-function updateOpcodeDisplay()
-    opInputSeed.Text = tostring(OPCODE_SEED); opDisplayGear.Text = tostring(OPCODE_GEAR); opDisplayProp.Text = tostring(OPCODE_PROP)
-    if opcodeDetected then
-        opDetectStatus.Text = "✅ S:"..OPCODE_SEED.." G:"..OPCODE_GEAR.." P:"..OPCODE_PROP; opDetectStatus.TextColor3 = Color3.fromRGB(100,255,100)
-    else
-        opDetectStatus.Text = "❌ NOT DETECTED | Default S:"..OPCODE_SEED; opDetectStatus.TextColor3 = C.red
-    end
-end
-
 function updateUI()
-    updateOpcodeDisplay()
     if isRunning then
         statusText.Text = isBuying and "🛒  MEMBORONG..." or "⏰  MENUNGGU RESTOCK"; statusText.TextColor3 = isBuying and Color3.fromRGB(255,150,50) or Color3.fromRGB(100,200,255)
         toggleBtn.Text = "⏹  STOP"; toggleBtn.BackgroundColor3 = C.red
         if not isBuying and nextScanTime > 0 then timerText.Text = os.date("%H:%M:%S", nextScanTime) elseif isBuying then timerText.Text = "MEMBORONG..." end
     else
-        statusText.Text = opcodeDetected and "⏹️  OFF" or "❌ NEED DETECT"; statusText.TextColor3 = opcodeDetected and C.red or C.orange
+        statusText.Text = "⏹️  OFF"; statusText.TextColor3 = C.red
         toggleBtn.Text = "▶  START"; toggleBtn.BackgroundColor3 = C.green; timerText.Text = "Next scan: --:--:--"
     end
     statsText.Text = "✅ "..buyStats.success.."  |  ❌ "..buyStats.failed.."  |  🔄 "..scanCount
@@ -715,9 +626,6 @@ toggleBtn.MouseButton1Click:Connect(function() if isRunning then stopMonitoring(
 task.spawn(function() while parent.Parent do task.wait(0.5); pcall(updateUI) end end)
 parent.Destroying:Connect(function() stopMonitoring(); saveConfig() end)
 
-updateOpcodeDisplay()
 saveConfig()
-
 print("[AoneHub] ✅ Full Script Ready!")
-print("[AoneHub] 🌍 World: " .. getWorldId() .. " | Test: " .. getTestItemName())
 print("[AoneHub] 🚀 Complete! Execute & Enjoy!")
