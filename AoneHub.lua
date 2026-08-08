@@ -366,9 +366,9 @@ end
 local function buyAll()
     if isBuying then return end; isBuying=true
     while isRunning do local any=false
-        for _,itemName in ipairs(ALL_SEEDS) do if not isRunning then break end; if config.selectedSeeds[itemName] and isAvailable(itemName, shopElementsSeed) then if buyItem(itemName, OPCODE_SEED) then any=true; itemStatusSeed[itemName]="stock"; task.wait(0.25+math.random()*0.4) else itemStatusSeed[itemName]="nostock"; task.wait(0.15) end else itemStatusSeed[itemName]="nostock" end end
-        for _,itemName in ipairs(ALL_GEARS) do if not isRunning then break end; if config.selectedGears[itemName] and isAvailable(itemName, shopElementsGear) then if buyItem(itemName, OPCODE_GEAR) then any=true; itemStatusGear[itemName]="stock"; task.wait(0.25+math.random()*0.4) else itemStatusGear[itemName]="nostock"; task.wait(0.15) end else itemStatusGear[itemName]="nostock" end end
-        for _,itemName in ipairs(ALL_PROPS) do if not isRunning then break end; if config.selectedProps[itemName] and isAvailable(itemName, shopElementsProp) then if buyItem(itemName, OPCODE_PROP) then any=true; itemStatusProp[itemName]="stock"; task.wait(0.25+math.random()*0.4) else itemStatusProp[itemName]="nostock"; task.wait(0.15) end else itemStatusProp[itemName]="nostock" end end
+        for _,itemName in ipairs(ALL_SEEDS) do if not isRunning then break end; if config.selectedSeeds[itemName] and isAvailable(itemName, shopElementsSeed) then if buyItem(itemName, OPCODE_SEED) then any=true; itemStatusSeed[itemName]="stock"; task.wait(1.25+math.random()*3.4) else itemStatusSeed[itemName]="nostock"; task.wait(0.15) end else itemStatusSeed[itemName]="nostock" end end
+        for _,itemName in ipairs(ALL_GEARS) do if not isRunning then break end; if config.selectedGears[itemName] and isAvailable(itemName, shopElementsGear) then if buyItem(itemName, OPCODE_GEAR) then any=true; itemStatusGear[itemName]="stock"; task.wait(2.25+math.random()*4.4) else itemStatusGear[itemName]="nostock"; task.wait(0.15) end else itemStatusGear[itemName]="nostock" end end
+        for _,itemName in ipairs(ALL_PROPS) do if not isRunning then break end; if config.selectedProps[itemName] and isAvailable(itemName, shopElementsProp) then if buyItem(itemName, OPCODE_PROP) then any=true; itemStatusProp[itemName]="stock"; task.wait(3.25+math.random()*5.4) else itemStatusProp[itemName]="nostock"; task.wait(0.15) end else itemStatusProp[itemName]="nostock" end end
         if not any then break end; task.wait(0.15)
     end; isBuying=false; updateBuyUI()
 end
@@ -512,13 +512,13 @@ local function executeSell()
     -- Favoritkan buah yang TIDAK akan dijual
     for _, fruitName in ipairs(fruitsToFav) do
         setFruitFavorite(fruitName, true)
-        task.wait(0.1)
+        task.wait(0.5 + math.random() * 1.5)
     end
     
     -- Unfavoritkan buah yang AKAN dijual
     for _, fruitName in ipairs(fruitsToSell) do
         setFruitFavorite(fruitName, false)
-        task.wait(0.05)
+        task.wait(0.5 + math.random() * 1)
     end
     
     sellStatus.Text = "💰 Sell all " .. #fruitsToSell .. " buah (x" .. targetMult .. ")..."
@@ -542,7 +542,7 @@ local function executeSell()
     task.wait(1)
     for _, fruitName in ipairs(fruitsToFav) do
         setFruitFavorite(fruitName, false)
-        task.wait(0.05)
+        task.wait(0.5 + math.random() * 1)
     end
 end
 
