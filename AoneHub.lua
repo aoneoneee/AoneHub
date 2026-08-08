@@ -1,4 +1,4 @@
--- AONEHUB PART 2: AUTO BUY ENGINE + ACCORDIONS
+-- AONEHUB PART 2: AUTO BUY ENGINE (FIXED)
 if not _G.AoneHub_TabFrame then
     warn("[Part 2] ❌ Part 1 not loaded! Execute Part 1 first.")
     return
@@ -20,6 +20,7 @@ local C = {
     green = Color3.fromRGB(50, 200, 50),
     red = Color3.fromRGB(200, 50, 50),
     input = Color3.fromRGB(38, 38, 48),
+    inputLocked = Color3.fromRGB(28, 28, 35),
     accordionSeed = Color3.fromRGB(35, 42, 35),
     accordionGear = Color3.fromRGB(42, 35, 35),
     accordionProp = Color3.fromRGB(40, 35, 45),
@@ -169,7 +170,7 @@ opInputSeed.BorderSizePixel = 0
 opInputSeed.Parent = opRow
 Instance.new("UICorner", opInputSeed).CornerRadius = UDim.new(0, 3)
 
--- Gear opcode
+-- Gear opcode (READ-ONLY style, bukan TextBox)
 local opl2 = Instance.new("TextLabel")
 opl2.Size = UDim2.new(0, 35, 0, 15)
 opl2.Position = UDim2.new(0, 85, 0, 0)
@@ -180,20 +181,20 @@ opl2.TextSize = 10
 opl2.BackgroundTransparency = 1
 opl2.Parent = opRow
 
-local opInputGear = Instance.new("TextBox")
-opInputGear.Size = UDim2.new(0, 40, 0, 15)
-opInputGear.Position = UDim2.new(0, 122, 0, 0)
-opInputGear.Text = tostring(OPCODE_GEAR)
-opInputGear.TextColor3 = Color3.fromRGB(255, 200, 150)
-opInputGear.Font = Enum.Font.GothamBold
-opInputGear.TextSize = 10
-opInputGear.BackgroundColor3 = C.input
-opInputGear.BorderSizePixel = 0
-opInputGear.Editable = false
-opInputGear.Parent = opRow
-Instance.new("UICorner", opInputGear).CornerRadius = UDim.new(0, 3)
+local opDisplayGear = Instance.new("TextLabel")  -- Pakai TextLabel, bukan TextBox
+opDisplayGear.Size = UDim2.new(0, 40, 0, 15)
+opDisplayGear.Position = UDim2.new(0, 122, 0, 0)
+opDisplayGear.Text = tostring(OPCODE_GEAR)
+opDisplayGear.TextColor3 = Color3.fromRGB(255, 200, 150)
+opDisplayGear.Font = Enum.Font.GothamBold
+opDisplayGear.TextSize = 10
+opDisplayGear.BackgroundColor3 = C.inputLocked
+opDisplayGear.BorderSizePixel = 0
+opDisplayGear.TextXAlignment = Enum.TextXAlignment.Center
+opDisplayGear.Parent = opRow
+Instance.new("UICorner", opDisplayGear).CornerRadius = UDim.new(0, 3)
 
--- Prop opcode
+-- Prop opcode (READ-ONLY style)
 local opl3 = Instance.new("TextLabel")
 opl3.Size = UDim2.new(0, 35, 0, 15)
 opl3.Position = UDim2.new(0, 170, 0, 0)
@@ -204,18 +205,18 @@ opl3.TextSize = 10
 opl3.BackgroundTransparency = 1
 opl3.Parent = opRow
 
-local opInputProp = Instance.new("TextBox")
-opInputProp.Size = UDim2.new(0, 40, 0, 15)
-opInputProp.Position = UDim2.new(0, 207, 0, 0)
-opInputProp.Text = tostring(OPCODE_PROP)
-opInputProp.TextColor3 = Color3.fromRGB(220, 180, 255)
-opInputProp.Font = Enum.Font.GothamBold
-opInputProp.TextSize = 10
-opInputProp.BackgroundColor3 = C.input
-opInputProp.BorderSizePixel = 0
-opInputProp.Editable = false
-opInputProp.Parent = opRow
-Instance.new("UICorner", opInputProp).CornerRadius = UDim.new(0, 3)
+local opDisplayProp = Instance.new("TextLabel")  -- Pakai TextLabel
+opDisplayProp.Size = UDim2.new(0, 40, 0, 15)
+opDisplayProp.Position = UDim2.new(0, 207, 0, 0)
+opDisplayProp.Text = tostring(OPCODE_PROP)
+opDisplayProp.TextColor3 = Color3.fromRGB(220, 180, 255)
+opDisplayProp.Font = Enum.Font.GothamBold
+opDisplayProp.TextSize = 10
+opDisplayProp.BackgroundColor3 = C.inputLocked
+opDisplayProp.BorderSizePixel = 0
+opDisplayProp.TextXAlignment = Enum.TextXAlignment.Center
+opDisplayProp.Parent = opRow
+Instance.new("UICorner", opDisplayProp).CornerRadius = UDim.new(0, 3)
 
 -- Set button
 local opSetBtn = Instance.new("TextButton")
@@ -249,7 +250,7 @@ end)
 local opDetectStatus = Instance.new("TextLabel")
 opDetectStatus.Size = UDim2.new(1, 0, 0, 14)
 opDetectStatus.Position = UDim2.new(0, 0, 0, 24)
-opDetectStatus.Text = "🔍 Manual | S:" .. OPCODE_SEED .. " G:" .. OPCODE_GEAR .. " P:" .. OPCODE_PROP
+opDetectStatus.Text = "🔍 S:" .. OPCODE_SEED .. " G:" .. OPCODE_GEAR .. " P:" .. OPCODE_PROP
 opDetectStatus.TextColor3 = Color3.fromRGB(255, 200, 50)
 opDetectStatus.Font = Enum.Font.Gotham
 opDetectStatus.TextSize = 9
@@ -486,10 +487,10 @@ local function stopMonitoring()
     updateUI()
 end
 
--- Create simple item list (bukan accordion, lebih ringan)
+-- Create simple item list
 local function createSimpleList(title, items, selectedItems, itemStatus, headerColor, yStart)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, -20, 0, 28)
+    container.Size = UDim2.new(1, -20, 0, 180)
     container.Position = UDim2.new(0, 10, 0, yStart)
     container.BackgroundTransparency = 1
     container.Parent = scroll
@@ -515,7 +516,7 @@ local function createSimpleList(title, items, selectedItems, itemStatus, headerC
     
     -- Item list
     local itemList = Instance.new("ScrollingFrame")
-    itemList.Size = UDim2.new(1, 0, 0, 150)
+    itemList.Size = UDim2.new(1, 0, 0, 152)
     itemList.Position = UDim2.new(0, 0, 0, 28)
     itemList.BackgroundColor3 = C.accordionBody
     itemList.BorderSizePixel = 0
@@ -573,13 +574,13 @@ end
 
 -- Create 3 lists
 local seedList = createSimpleList("🌱 Seeds", ALL_SEEDS, config.selectedSeeds, itemStatusSeed, C.accordionSeed, y)
-local gearY = y + 180
+local gearY = y + 190
 local gearList = createSimpleList("⚙️ Gears", ALL_GEARS, config.selectedGears, itemStatusGear, C.accordionGear, gearY)
-local propY = gearY + 180
+local propY = gearY + 190
 local propList = createSimpleList("📦 Props", ALL_PROPS, config.selectedProps, itemStatusProp, C.accordionProp, propY)
 
 -- Toggle button
-local toggleY = propY + 180
+local toggleY = propY + 190
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(1, -20, 0, 36)
 toggleBtn.Position = UDim2.new(0, 10, 0, toggleY)
@@ -603,8 +604,8 @@ end)
 -- Update UI
 function updateUI()
     opInputSeed.Text = tostring(OPCODE_SEED)
-    opInputGear.Text = tostring(OPCODE_GEAR)
-    opInputProp.Text = tostring(OPCODE_PROP)
+    opDisplayGear.Text = tostring(OPCODE_GEAR)
+    opDisplayProp.Text = tostring(OPCODE_PROP)
     opDetectStatus.Text = "🔍 S:" .. OPCODE_SEED .. " G:" .. OPCODE_GEAR .. " P:" .. OPCODE_PROP
     
     if isRunning then
