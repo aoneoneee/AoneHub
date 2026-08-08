@@ -1,5 +1,5 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - ACCORDION FIX (FULL SCRIPT)
+-- AONEHUB - FULL SCRIPT (TAB 2: AUTO SELL ADVANCED)
 -- ──────────────────────────────────────────────────────────────────────
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,8 +15,11 @@ local playerGui = player:WaitForChild("PlayerGui")
 local SAVE_FILE = "AoneHub_Config.json"
 local config = {
     selectedSeeds = {}, selectedGears = {}, selectedProps = {},
+    selectedSellFruits = {},
     accordionSeedOpen = true, accordionGearOpen = false, accordionPropOpen = false,
-    searchSeed = "", searchGear = "", searchProp = "",
+    accordionSellOpen = true,
+    searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
+    sellMultiplier = "x4", -- "x2" atau "x4"
 }
 
 local function loadConfig()
@@ -59,8 +62,10 @@ local C = {
     accent = Color3.fromRGB(90, 140, 255), text = Color3.fromRGB(255, 255, 255),
     textDim = Color3.fromRGB(170, 170, 180), green = Color3.fromRGB(50, 200, 50),
     red = Color3.fromRGB(200, 50, 50), orange = Color3.fromRGB(255, 150, 50),
+    purple = Color3.fromRGB(180, 100, 255),
     accordionSeed = Color3.fromRGB(35, 42, 35), accordionGear = Color3.fromRGB(42, 35, 35),
-    accordionProp = Color3.fromRGB(40, 35, 45), accordionBody = Color3.fromRGB(30, 30, 36),
+    accordionProp = Color3.fromRGB(40, 35, 45), accordionSell = Color3.fromRGB(35, 35, 50),
+    accordionBody = Color3.fromRGB(30, 30, 36),
     itemRow = Color3.fromRGB(38, 38, 45), itemRowSelected = Color3.fromRGB(35, 55, 40),
     searchBg = Color3.fromRGB(32, 32, 38),
 }
@@ -100,6 +105,20 @@ pcall(function()
     table.sort(ALL_PROPS)
 end)
 
+-- Get all fruit names (dari SeedData, sama seperti seeds)
+local ALL_FRUITS = {}
+pcall(function()
+    local seen = {}
+    local seedData = safeRequire(ReplicatedStorage.SharedModules.SeedData)
+    if seedData then for _, seed in ipairs(seedData) do
+        if seed and seed.SeedName and not seen[seed.SeedName] then
+            table.insert(ALL_FRUITS, seed.SeedName)
+            seen[seed.SeedName] = true
+        end
+    end end
+    table.sort(ALL_FRUITS)
+end)
+
 local function mergeItems(saved, current)
     local merged = {}
     if type(saved) == "table" then for k, v in pairs(saved) do merged[k] = v end end
@@ -110,32 +129,33 @@ end
 config.selectedSeeds = mergeItems(config.selectedSeeds, ALL_SEEDS)
 config.selectedGears = mergeItems(config.selectedGears, ALL_GEARS)
 config.selectedProps = mergeItems(config.selectedProps, ALL_PROPS)
+config.selectedSellFruits = mergeItems(config.selectedSellFruits, ALL_FRUITS)
 
 -- ==================================================================
--- GUI SKELETON
+-- GUI SKELETON (LEBIH KECIL)
 -- ==================================================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AoneHub"; screenGui.Parent = playerGui
 screenGui.ResetOnSpawn = false; screenGui.Destroying:Connect(saveConfig)
 
 local minimizedCircle = Instance.new("TextButton")
-minimizedCircle.Size = UDim2.new(0, 50, 0, 50); minimizedCircle.Position = UDim2.new(0.5, -25, 0.5, -25)
+minimizedCircle.Size = UDim2.new(0, 44, 0, 44); minimizedCircle.Position = UDim2.new(0.5, -22, 0.5, -22)
 minimizedCircle.Text = "AH"; minimizedCircle.TextColor3 = C.text
-minimizedCircle.Font = Enum.Font.GothamBlack; minimizedCircle.TextSize = 20
+minimizedCircle.Font = Enum.Font.GothamBlack; minimizedCircle.TextSize = 18
 minimizedCircle.BackgroundColor3 = C.accent; minimizedCircle.BorderSizePixel = 0
 minimizedCircle.Visible = false; minimizedCircle.AutoButtonColor = false
 minimizedCircle.Draggable = true; minimizedCircle.Parent = screenGui
 Instance.new("UICorner", minimizedCircle).CornerRadius = UDim.new(1, 0)
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 700, 0, 460); mainFrame.Position = UDim2.new(0.5, -350, 0.5, -230)
+mainFrame.Size = UDim2.new(0, 580, 0, 380); mainFrame.Position = UDim2.new(0.5, -290, 0.5, -190)
 mainFrame.BackgroundColor3 = C.bg; mainFrame.BorderSizePixel = 0
 mainFrame.ClipsDescendants = true; mainFrame.Active = true; mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
 local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 38); titleBar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+titleBar.Size = UDim2.new(1, 0, 0, 32); titleBar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
 titleBar.BorderSizePixel = 0; titleBar.Parent = mainFrame
 Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 
@@ -144,26 +164,26 @@ titleFill.Size = UDim2.new(1, 0, 0.5, 0); titleFill.Position = UDim2.new(0, 0, 0
 titleFill.BackgroundColor3 = Color3.fromRGB(18, 18, 24); titleFill.BorderSizePixel = 0; titleFill.Parent = titleBar
 
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Size = UDim2.new(0.6, 0, 1, 0); titleLabel.Position = UDim2.new(0, 16, 0, 0)
+titleLabel.Size = UDim2.new(0.6, 0, 1, 0); titleLabel.Position = UDim2.new(0, 14, 0, 0)
 titleLabel.Text = "AoneHub"; titleLabel.TextColor3 = C.text
-titleLabel.Font = Enum.Font.GothamBold; titleLabel.TextSize = 14
+titleLabel.Font = Enum.Font.GothamBold; titleLabel.TextSize = 13
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left; titleLabel.BackgroundTransparency = 1; titleLabel.Parent = titleBar
 
 local minimizeBtn = Instance.new("TextButton")
-minimizeBtn.Size = UDim2.new(0, 28, 0, 28); minimizeBtn.Position = UDim2.new(1, -65, 0, 5)
+minimizeBtn.Size = UDim2.new(0, 24, 0, 24); minimizeBtn.Position = UDim2.new(1, -54, 0, 4)
 minimizeBtn.Text = "–"; minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-minimizeBtn.Font = Enum.Font.GothamBold; minimizeBtn.TextSize = 20
+minimizeBtn.Font = Enum.Font.GothamBold; minimizeBtn.TextSize = 16
 minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); minimizeBtn.BorderSizePixel = 0
 minimizeBtn.AutoButtonColor = false; minimizeBtn.Parent = titleBar
-Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 5)
+Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 4)
 
 local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 28, 0, 28); closeBtn.Position = UDim2.new(1, -32, 0, 5)
+closeBtn.Size = UDim2.new(0, 24, 0, 24); closeBtn.Position = UDim2.new(1, -26, 0, 4)
 closeBtn.Text = "✕"; closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120)
-closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 15
+closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 13
 closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); closeBtn.BorderSizePixel = 0
 closeBtn.AutoButtonColor = false; closeBtn.Parent = titleBar
-Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 5)
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
 
 minimizeBtn.MouseButton1Click:Connect(function()
     minimizedCircle.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
@@ -177,35 +197,40 @@ closeBtn.MouseButton1Click:Connect(function() saveConfig(); screenGui:Destroy() 
 
 -- Sidebar
 local sidebar = Instance.new("Frame")
-sidebar.Size = UDim2.new(0.21, 0, 1, -38); sidebar.Position = UDim2.new(0, 0, 0, 38)
+sidebar.Size = UDim2.new(0.22, 0, 1, -32); sidebar.Position = UDim2.new(0, 0, 0, 32)
 sidebar.BackgroundColor3 = C.sidebar; sidebar.BorderSizePixel = 0; sidebar.Parent = mainFrame
 Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 10)
 
 local sidebarFill = Instance.new("Frame")
-sidebarFill.Size = UDim2.new(1, 0, 0.3, 0); sidebarFill.Position = UDim2.new(0, 0, 0.85, 0)
+sidebarFill.Size = UDim2.new(1, 0, 0.3, 0); sidebarFill.Position = UDim2.new(0, 0, 0.88, 0)
 sidebarFill.BackgroundColor3 = C.sidebar; sidebarFill.BorderSizePixel = 0; sidebarFill.Parent = sidebar
 
 local menuLabel = Instance.new("TextLabel")
-menuLabel.Size = UDim2.new(1, 0, 0, 22); menuLabel.Position = UDim2.new(0, 0, 0, 10)
+menuLabel.Size = UDim2.new(1, 0, 0, 18); menuLabel.Position = UDim2.new(0, 0, 0, 8)
 menuLabel.Text = "MENU"; menuLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
-menuLabel.Font = Enum.Font.GothamBold; menuLabel.TextSize = 11
+menuLabel.Font = Enum.Font.GothamBold; menuLabel.TextSize = 10
 menuLabel.TextXAlignment = Enum.TextXAlignment.Center; menuLabel.BackgroundTransparency = 1; menuLabel.Parent = sidebar
 
 local sep = Instance.new("Frame")
-sep.Size = UDim2.new(0.7, 0, 0, 1); sep.Position = UDim2.new(0.15, 0, 0, 36)
+sep.Size = UDim2.new(0.7, 0, 0, 1); sep.Position = UDim2.new(0.15, 0, 0, 30)
 sep.BackgroundColor3 = Color3.fromRGB(60, 60, 70); sep.BorderSizePixel = 0; sep.Parent = sidebar
 
 -- Tab Buttons
-local tabs = {{name="AutoBuy", label="🛒  Auto Buy"}, {name="AutoMail", label="📧  Auto Mail"}, {name="Ekstra", label="⚙️  Ekstra"}}
+local tabs = {
+    {name="AutoBuy", label="🛒 Auto Buy"},
+    {name="AutoSell", label="💰 Auto Sell"},
+    {name="AutoMail", label="📧 Auto Mail"},
+    {name="Ekstra", label="⚙️ Ekstra"},
+}
 local tabBtns = {}; local activeTab = nil
 
 for i, tab in ipairs(tabs) do
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.82, 0, 0, 38); btn.Position = UDim2.new(0.09, 0, 0, 50 + (i-1)*46)
-    btn.Text = tab.label; btn.TextColor3 = C.textDim; btn.Font = Enum.Font.GothamSemibold; btn.TextSize = 13
+    btn.Size = UDim2.new(0.84, 0, 0, 32); btn.Position = UDim2.new(0.08, 0, 0, 40 + (i-1)*38)
+    btn.Text = tab.label; btn.TextColor3 = C.textDim; btn.Font = Enum.Font.GothamSemibold; btn.TextSize = 11
     btn.TextXAlignment = Enum.TextXAlignment.Left; btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
     btn.BorderSizePixel = 0; btn.AutoButtonColor = false; btn.Parent = sidebar
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 7)
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
     btn.MouseEnter:Connect(function() if activeTab ~= tab.name then btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55) end end)
     btn.MouseLeave:Connect(function() if activeTab ~= tab.name then btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40) end end)
     tabBtns[tab.name] = btn
@@ -213,21 +238,21 @@ end
 
 -- Content area
 local contentArea = Instance.new("Frame")
-contentArea.Size = UDim2.new(0.79, -10, 1, -48); contentArea.Position = UDim2.new(0.21, 5, 0, 43)
+contentArea.Size = UDim2.new(0.78, -8, 1, -40); contentArea.Position = UDim2.new(0.22, 4, 0, 36)
 contentArea.BackgroundTransparency = 1; contentArea.ClipsDescendants = true; contentArea.Parent = mainFrame
 
 local defaultView = Instance.new("Frame")
 defaultView.Size = UDim2.new(1, 0, 1, 0); defaultView.BackgroundTransparency = 1; defaultView.Parent = contentArea
 
 local logoLabel = Instance.new("TextLabel")
-logoLabel.Size = UDim2.new(1, 0, 0, 50); logoLabel.Position = UDim2.new(0, 0, 0.35, -25)
+logoLabel.Size = UDim2.new(1, 0, 0, 40); logoLabel.Position = UDim2.new(0, 0, 0.35, -20)
 logoLabel.Text = "AoneHub"; logoLabel.TextColor3 = C.accent
-logoLabel.Font = Enum.Font.GothamBlack; logoLabel.TextSize = 36; logoLabel.BackgroundTransparency = 1; logoLabel.Parent = defaultView
+logoLabel.Font = Enum.Font.GothamBlack; logoLabel.TextSize = 30; logoLabel.BackgroundTransparency = 1; logoLabel.Parent = defaultView
 
 local subLabel = Instance.new("TextLabel")
-subLabel.Size = UDim2.new(1, 0, 0, 20); subLabel.Position = UDim2.new(0, 0, 0.5, 0)
+subLabel.Size = UDim2.new(1, 0, 0, 16); subLabel.Position = UDim2.new(0, 0, 0.48, 0)
 subLabel.Text = "Pilih menu di samping"; subLabel.TextColor3 = C.textDim
-subLabel.Font = Enum.Font.Gotham; subLabel.TextSize = 13; subLabel.BackgroundTransparency = 1; subLabel.Parent = defaultView
+subLabel.Font = Enum.Font.Gotham; subLabel.TextSize = 11; subLabel.BackgroundTransparency = 1; subLabel.Parent = defaultView
 
 local tabFrames = {}
 for _, tab in ipairs(tabs) do
@@ -244,22 +269,23 @@ end
 
 for _, tab in ipairs(tabs) do tabBtns[tab.name].MouseButton1Click:Connect(function() switchTab(tab.name) end) end
 
+-- Placeholder tabs
 for _, tab in ipairs({"AutoMail", "Ekstra"}) do
     local f = tabFrames[tab]
-    local ic = Instance.new("TextLabel"); ic.Size = UDim2.new(1, 0, 0, 50); ic.Position = UDim2.new(0, 0, 0.35, -25)
-    ic.Text = tab=="AutoMail" and "📧" or "⚙️"; ic.Font = Enum.Font.Gotham; ic.TextSize = 45; ic.BackgroundTransparency = 1; ic.Parent = f
-    local tt = Instance.new("TextLabel"); tt.Size = UDim2.new(1, 0, 0, 28); tt.Position = UDim2.new(0, 0, 0.45, 0)
-    tt.Text = tab=="AutoMail" and "Auto Mail" or "Ekstra"; tt.TextColor3 = C.text; tt.Font = Enum.Font.GothamBold; tt.TextSize = 18; tt.BackgroundTransparency = 1; tt.Parent = f
-    local st = Instance.new("TextLabel"); st.Size = UDim2.new(1, 0, 0, 18); st.Position = UDim2.new(0, 0, 0.52, 0)
-    st.Text = "Coming soon..."; st.TextColor3 = C.textDim; st.Font = Enum.Font.Gotham; st.TextSize = 12; st.BackgroundTransparency = 1; st.Parent = f
+    local ic = Instance.new("TextLabel"); ic.Size = UDim2.new(1, 0, 0, 40); ic.Position = UDim2.new(0, 0, 0.35, -20)
+    ic.Text = tab=="AutoMail" and "📧" or "⚙️"; ic.Font = Enum.Font.Gotham; ic.TextSize = 36; ic.BackgroundTransparency = 1; ic.Parent = f
+    local tt = Instance.new("TextLabel"); tt.Size = UDim2.new(1, 0, 0, 22); tt.Position = UDim2.new(0, 0, 0.45, 0)
+    tt.Text = tab=="AutoMail" and "Auto Mail" or "Ekstra"; tt.TextColor3 = C.text; tt.Font = Enum.Font.GothamBold; tt.TextSize = 15; tt.BackgroundTransparency = 1; tt.Parent = f
+    local st = Instance.new("TextLabel"); st.Size = UDim2.new(1, 0, 0, 14); st.Position = UDim2.new(0, 0, 0.52, 0)
+    st.Text = "Coming soon..."; st.TextColor3 = C.textDim; st.Font = Enum.Font.Gotham; st.TextSize = 10; st.BackgroundTransparency = 1; st.Parent = f
 end
 
 print("[AoneHub] ✅ GUI Ready")
 
 -- ==================================================================
--- AUTO BUY ENGINE
+-- AUTO BUY ENGINE (TAB 1)
 -- ==================================================================
-local parent = tabFrames["AutoBuy"]
+local parent1 = tabFrames["AutoBuy"]
 
 local buyStats = {total = 0, success = 0, failed = 0}
 local isRunning, isBuying = false, false
@@ -284,8 +310,7 @@ end
 
 local function cacheShop()
     pcall(function()
-        local ss = playerGui:FindFirstChild("SeedShop")
-        if ss then local f = ss:FindFirstChild("Frame"); if f then local ns = f:FindFirstChild("NormalShop")
+        local ss = playerGui:FindFirstChild("SeedShop"); if ss then local f = ss:FindFirstChild("Frame"); if f then local ns = f:FindFirstChild("NormalShop")
             if ns then for _, ic in ipairs(ns:GetChildren()) do if config.selectedSeeds[ic.Name] then
                 local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
                 if mf then local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
@@ -295,8 +320,7 @@ local function cacheShop()
         end end
     end)
     pcall(function()
-        local gs = playerGui:FindFirstChild("GearShop")
-        if gs then local f = gs:FindFirstChild("Frame"); if f then local sf = f:FindFirstChild("ScrollingFrame")
+        local gs = playerGui:FindFirstChild("GearShop"); if gs then local f = gs:FindFirstChild("Frame"); if f then local sf = f:FindFirstChild("ScrollingFrame")
             if sf then for _, ic in ipairs(sf:GetChildren()) do if config.selectedGears[ic.Name] then
                 local ct = ic:FindFirstChild("Cost_Text") or ic:FindFirstChild("CostText")
                 if ct then shopElementsGear[ic.Name] = {container=ic, costText=ct} end
@@ -304,8 +328,7 @@ local function cacheShop()
         end end
     end)
     pcall(function()
-        local cs = playerGui:FindFirstChild("CrateShop")
-        if cs then local f = cs:FindFirstChild("Frame"); if f then local sf = f:FindFirstChild("ScrollingFrame")
+        local cs = playerGui:FindFirstChild("CrateShop"); if cs then local f = cs:FindFirstChild("Frame"); if f then local sf = f:FindFirstChild("ScrollingFrame")
             if sf then for _, ic in ipairs(sf:GetChildren()) do if config.selectedProps[ic.Name] then
                 local ct = ic:FindFirstChild("Cost_Text") or ic:FindFirstChild("CostText")
                 if ct then shopElementsProp[ic.Name] = {container=ic, costText=ct} end
@@ -343,7 +366,7 @@ local function buyAll()
             else itemStatusProp[itemName]="nostock" end
         end
         if not any then break end; task.wait(0.2)
-    end; isBuying = false; updateUI()
+    end; isBuying = false; updateBuyUI()
 end
 
 local function scanAndBuy()
@@ -357,7 +380,7 @@ local function scanAndBuy()
     for _, itemName in ipairs(ALL_PROPS) do if config.selectedProps[itemName] then
         if isAvailable(itemName, shopElementsProp) then any=true; itemStatusProp[itemName]="stock" else itemStatusProp[itemName]="nostock" end
     end end
-    updateUI(); if any then buyAll() end
+    updateBuyUI(); if any then buyAll() end
 end
 
 local function mainLoop()
@@ -366,130 +389,115 @@ local function mainLoop()
         local nrm = math.ceil(math.floor(now/60)/5)*5; local mutr = nrm - math.floor(now/60)
         local sutr = (mutr*60) - (now%60) + jitter
         if sutr <= 0 then sutr = sutr + 300 end
-        nextScanTime = os.time() + sutr; updateUI(); task.wait(sutr)
+        nextScanTime = os.time() + sutr; updateBuyUI(); task.wait(sutr)
         if not isRunning then break end; pcall(scanAndBuy); task.wait(1)
     end
 end
 
-local function startMonitoring()
+local function startBuy()
     if isRunning then return end; if not getRemote() then return end
-    isRunning = true; cacheShop(); pcall(scanAndBuy); task.spawn(mainLoop); updateUI()
+    isRunning = true; cacheShop(); pcall(scanAndBuy); task.spawn(mainLoop); updateBuyUI()
 end
 
-local function stopMonitoring()
-    isRunning = false; itemStatusSeed={}; itemStatusGear={}; itemStatusProp={}; updateUI()
+local function stopBuy()
+    isRunning = false; itemStatusSeed={}; itemStatusGear={}; itemStatusProp={}; updateBuyUI()
 end
 
 -- ==================================================================
--- BUILD AUTO BUY UI (WITH FIXED ACCORDION)
+-- AUTO BUY UI (TAB 1)
 -- ==================================================================
-local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, 0, 1, 0); scroll.CanvasSize = UDim2.new(0, 0, 0, 1500)
-scroll.ScrollBarThickness = 3; scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0; scroll.Parent = parent
+local scroll1 = Instance.new("ScrollingFrame")
+scroll1.Size = UDim2.new(1, 0, 1, 0); scroll1.CanvasSize = UDim2.new(0, 0, 0, 1200)
+scroll1.ScrollBarThickness = 3; scroll1.BackgroundTransparency = 1; scroll1.BorderSizePixel = 0; scroll1.Parent = parent1
 
--- UIListLayout untuk auto-posisi
-local mainLayout = Instance.new("UIListLayout")
-mainLayout.Padding = UDim.new(0, 8)
-mainLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
-mainLayout.Parent = scroll
+local buyLayout = Instance.new("UIListLayout")
+buyLayout.Padding = UDim.new(0, 6)
+buyLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+buyLayout.SortOrder = Enum.SortOrder.LayoutOrder
+buyLayout.Parent = scroll1
 
--- Header
-local hdr = Instance.new("TextLabel")
-hdr.Size = UDim2.new(1, -20, 0, 24); hdr.LayoutOrder = 1
-hdr.Text = "🛒  Auto Buy (Seed + Gear + Prop)"; hdr.TextColor3 = C.text
-hdr.Font = Enum.Font.GothamBold; hdr.TextSize = 14
-hdr.TextXAlignment = Enum.TextXAlignment.Left; hdr.BackgroundTransparency = 1; hdr.Parent = scroll
+local buyHdr = Instance.new("TextLabel")
+buyHdr.Size = UDim2.new(1, -16, 0, 22); buyHdr.LayoutOrder = 1
+buyHdr.Text = "🛒  Auto Buy"; buyHdr.TextColor3 = C.text
+buyHdr.Font = Enum.Font.GothamBold; buyHdr.TextSize = 13
+buyHdr.TextXAlignment = Enum.TextXAlignment.Left; buyHdr.BackgroundTransparency = 1; buyHdr.Parent = scroll1
 
--- Status
-local statusText = Instance.new("TextLabel")
-statusText.Size = UDim2.new(1, -20, 0, 18); statusText.LayoutOrder = 2
-statusText.Text = "⏹️  OFF"; statusText.TextColor3 = C.red
-statusText.Font = Enum.Font.GothamSemibold; statusText.TextSize = 12
-statusText.TextXAlignment = Enum.TextXAlignment.Left; statusText.BackgroundTransparency = 1; statusText.Parent = scroll
+local buyStatus = Instance.new("TextLabel")
+buyStatus.Size = UDim2.new(1, -16, 0, 16); buyStatus.LayoutOrder = 2
+buyStatus.Text = "⏹️  OFF"; buyStatus.TextColor3 = C.red
+buyStatus.Font = Enum.Font.GothamSemibold; buyStatus.TextSize = 11
+buyStatus.TextXAlignment = Enum.TextXAlignment.Left; buyStatus.BackgroundTransparency = 1; buyStatus.Parent = scroll1
 
--- Timer + Stats
-local timerText = Instance.new("TextLabel")
-timerText.Size = UDim2.new(1, -20, 0, 18); timerText.LayoutOrder = 3
-timerText.Text = "Next scan: --:--:--"; timerText.TextColor3 = Color3.fromRGB(255,200,50)
-timerText.Font = Enum.Font.GothamBold; timerText.TextSize = 12
-timerText.TextXAlignment = Enum.TextXAlignment.Left; timerText.BackgroundTransparency = 1; timerText.Parent = scroll
+local buyTimer = Instance.new("TextLabel")
+buyTimer.Size = UDim2.new(1, -16, 0, 16); buyTimer.LayoutOrder = 3
+buyTimer.Text = "Next scan: --:--:--"; buyTimer.TextColor3 = Color3.fromRGB(255,200,50)
+buyTimer.Font = Enum.Font.GothamBold; buyTimer.TextSize = 11
+buyTimer.TextXAlignment = Enum.TextXAlignment.Left; buyTimer.BackgroundTransparency = 1; buyTimer.Parent = scroll1
 
-local statsText = Instance.new("TextLabel")
-statsText.Size = UDim2.new(1, -20, 0, 14); statsText.LayoutOrder = 4
-statsText.Text = "✅ 0  |  ❌ 0  |  🔄 0"; statsText.TextColor3 = C.textDim
-statsText.Font = Enum.Font.Gotham; statsText.TextSize = 10
-statsText.TextXAlignment = Enum.TextXAlignment.Left; statsText.BackgroundTransparency = 1; statsText.Parent = scroll
+local buyStatsText = Instance.new("TextLabel")
+buyStatsText.Size = UDim2.new(1, -16, 0, 12); buyStatsText.LayoutOrder = 4
+buyStatsText.Text = "✅ 0 | ❌ 0 | 🔄 0"; buyStatsText.TextColor3 = C.textDim
+buyStatsText.Font = Enum.Font.Gotham; buyStatsText.TextSize = 9
+buyStatsText.TextXAlignment = Enum.TextXAlignment.Left; buyStatsText.BackgroundTransparency = 1; buyStatsText.Parent = scroll1
 
--- ==================================================================
--- FIXED ACCORDION BUILDER
--- ==================================================================
-local function createAccordion(title, items, selectedItems, itemStatus, headerColor, openKey, searchKey, layoutOrder)
+local function createAccordion(title, items, selectedItems, itemStatus, headerColor, openKey, searchKey, layoutOrder, scrollRef)
     local accordionOpen = config[openKey] or false
     
-    -- Container
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, -20, 0, accordionOpen and 230 or 28)
+    container.Size = UDim2.new(1, -16, 0, accordionOpen and 200 or 26)
     container.BackgroundTransparency = 1
     container.LayoutOrder = layoutOrder
-    container.Parent = scroll
+    container.Parent = scrollRef
     
-    -- Header
     local header = Instance.new("TextButton")
-    header.Size = UDim2.new(1, 0, 0, 28)
-    header.BackgroundColor3 = headerColor; header.BorderSizePixel = 0
+    header.Size = UDim2.new(1, 0, 0, 26); header.BackgroundColor3 = headerColor; header.BorderSizePixel = 0
     header.Text = ""; header.AutoButtonColor = false; header.Parent = container
-    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 5)
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 4)
     
     local arrow = Instance.new("TextLabel")
-    arrow.Size = UDim2.new(0, 18, 1, 0); arrow.Position = UDim2.new(0, 5, 0, 0)
+    arrow.Size = UDim2.new(0, 16, 1, 0); arrow.Position = UDim2.new(0, 4, 0, 0)
     arrow.Text = accordionOpen and "▼" or "▶"; arrow.TextColor3 = C.textDim
-    arrow.Font = Enum.Font.GothamBold; arrow.TextSize = 9; arrow.BackgroundTransparency = 1; arrow.Parent = header
+    arrow.Font = Enum.Font.GothamBold; arrow.TextSize = 8; arrow.BackgroundTransparency = 1; arrow.Parent = header
     
     local titleLbl = Instance.new("TextLabel")
-    titleLbl.Size = UDim2.new(1, -55, 1, 0); titleLbl.Position = UDim2.new(0, 24, 0, 0)
+    titleLbl.Size = UDim2.new(1, -50, 1, 0); titleLbl.Position = UDim2.new(0, 22, 0, 0)
     titleLbl.Text = title.." ("..#items..")"; titleLbl.TextColor3 = C.text
-    titleLbl.Font = Enum.Font.GothamSemibold; titleLbl.TextSize = 11
+    titleLbl.Font = Enum.Font.GothamSemibold; titleLbl.TextSize = 10
     titleLbl.TextXAlignment = Enum.TextXAlignment.Left; titleLbl.BackgroundTransparency = 1; titleLbl.Parent = header
     
     local selectAllBtn = Instance.new("TextButton")
-    selectAllBtn.Size = UDim2.new(0, 35, 0, 16); selectAllBtn.Position = UDim2.new(1, -40, 0.5, -8)
-    selectAllBtn.Text = "All"; selectAllBtn.TextColor3 = C.text
-    selectAllBtn.Font = Enum.Font.Gotham; selectAllBtn.TextSize = 8
+    selectAllBtn.Size = UDim2.new(0, 30, 0, 14); selectAllBtn.Position = UDim2.new(1, -34, 0.5, -7)
+    selectAllBtn.Text = "All"; selectAllBtn.TextColor3 = C.text; selectAllBtn.Font = Enum.Font.Gotham; selectAllBtn.TextSize = 7
     selectAllBtn.BackgroundColor3 = C.accent; selectAllBtn.BorderSizePixel = 0
     selectAllBtn.AutoButtonColor = false; selectAllBtn.Parent = header
-    Instance.new("UICorner", selectAllBtn).CornerRadius = UDim.new(0, 3)
+    Instance.new("UICorner", selectAllBtn).CornerRadius = UDim.new(0, 2)
     
-    -- Body
     local body = Instance.new("Frame")
-    body.Size = UDim2.new(1, 0, 0, 200)
-    body.Position = UDim2.new(0, 0, 0, 30)
+    body.Size = UDim2.new(1, 0, 0, 172); body.Position = UDim2.new(0, 0, 0, 28)
     body.BackgroundColor3 = C.accordionBody; body.BorderSizePixel = 0
     body.Visible = accordionOpen; body.Parent = container
-    Instance.new("UICorner", body).CornerRadius = UDim.new(0, 5)
+    Instance.new("UICorner", body).CornerRadius = UDim.new(0, 4)
     
-    -- Search
     local searchFrame = Instance.new("Frame")
-    searchFrame.Size = UDim2.new(1, -8, 0, 24); searchFrame.Position = UDim2.new(0, 4, 0, 4)
+    searchFrame.Size = UDim2.new(1, -6, 0, 20); searchFrame.Position = UDim2.new(0, 3, 0, 3)
     searchFrame.BackgroundColor3 = C.searchBg; searchFrame.BorderSizePixel = 0; searchFrame.Parent = body
-    Instance.new("UICorner", searchFrame).CornerRadius = UDim.new(0, 4)
+    Instance.new("UICorner", searchFrame).CornerRadius = UDim.new(0, 3)
     
     local searchIcon = Instance.new("TextLabel")
-    searchIcon.Size = UDim2.new(0, 16, 1, 0); searchIcon.Position = UDim2.new(0, 3, 0, 0)
-    searchIcon.Text = "🔍"; searchIcon.TextSize = 8; searchIcon.BackgroundTransparency = 1; searchIcon.Parent = searchFrame
+    searchIcon.Size = UDim2.new(0, 14, 1, 0); searchIcon.Position = UDim2.new(0, 2, 0, 0)
+    searchIcon.Text = "🔍"; searchIcon.TextSize = 7; searchIcon.BackgroundTransparency = 1; searchIcon.Parent = searchFrame
     
     local searchBox = Instance.new("TextBox")
-    searchBox.Size = UDim2.new(1, -20, 1, 0); searchBox.Position = UDim2.new(0, 20, 0, 0)
+    searchBox.Size = UDim2.new(1, -18, 1, 0); searchBox.Position = UDim2.new(0, 16, 0, 0)
     searchBox.PlaceholderText = "Cari..."; searchBox.PlaceholderColor3 = Color3.fromRGB(100,100,110)
     searchBox.Text = config[searchKey] or ""; searchBox.TextColor3 = C.text
-    searchBox.Font = Enum.Font.Gotham; searchBox.TextSize = 10
+    searchBox.Font = Enum.Font.Gotham; searchBox.TextSize = 9
     searchBox.BackgroundTransparency = 1; searchBox.BorderSizePixel = 0; searchBox.Parent = searchFrame
     
-    -- Item list
     local itemList = Instance.new("ScrollingFrame")
-    itemList.Size = UDim2.new(1, -8, 1, -32); itemList.Position = UDim2.new(0, 4, 0, 30)
+    itemList.Size = UDim2.new(1, -6, 1, -26); itemList.Position = UDim2.new(0, 3, 0, 25)
     itemList.BackgroundTransparency = 1; itemList.BorderSizePixel = 0
-    itemList.ScrollBarThickness = 3; itemList.Parent = body
+    itemList.ScrollBarThickness = 2; itemList.Parent = body
     
     local itemRows = {}; local selectAllState = false
     
@@ -497,154 +505,234 @@ local function createAccordion(title, items, selectedItems, itemStatus, headerCo
         local query = searchBox.Text:lower(); config[searchKey] = query; saveConfig()
         for _, row in pairs(itemRows) do row.frame:Destroy() end; itemRows = {}
         
-        -- Gabung available + saved
         local allDisplay, seen = {}, {}
         for _, name in ipairs(items) do if not seen[name] then table.insert(allDisplay, name); seen[name] = true end end
         for name in pairs(selectedItems) do if not seen[name] then table.insert(allDisplay, name); seen[name] = true end end
         
-        -- Filter
         local filtered = {}
-        for _, name in ipairs(allDisplay) do
-            if query == "" or name:lower():find(query) then table.insert(filtered, name) end
-        end
+        for _, name in ipairs(allDisplay) do if query == "" or name:lower():find(query) then table.insert(filtered, name) end end
         
-        -- Sort
         table.sort(filtered, function(a, b)
-            local aA = table.find(items, a) ~= nil
-            local bA = table.find(items, b) ~= nil
-            if aA and not bA then return true
-            elseif not aA and bA then return false
-            else return a < b end
+            local aA = table.find(items, a) ~= nil; local bA = table.find(items, b) ~= nil
+            if aA and not bA then return true; elseif not aA and bA then return false; else return a < b end
         end)
         
-        -- Set canvas size
-        local rowHeight = 20
-        itemList.CanvasSize = UDim2.new(0, 0, 0, #filtered * rowHeight + 4)
+        local rh = 17
+        itemList.CanvasSize = UDim2.new(0, 0, 0, #filtered * rh + 2)
         titleLbl.Text = title.." ("..#filtered..")"
         
-        -- Buat rows
         for i, itemName in ipairs(filtered) do
             local isAvailable = table.find(items, itemName) ~= nil
             local isSelected = selectedItems[itemName] or false
             
             local row = Instance.new("Frame")
-            row.Size = UDim2.new(1, -4, 0, rowHeight - 2)
-            row.Position = UDim2.new(0, 2, 0, (i-1) * rowHeight + 1)
+            row.Size = UDim2.new(1, -2, 0, rh - 1); row.Position = UDim2.new(0, 1, 0, (i-1) * rh + 1)
             row.BackgroundColor3 = isSelected and C.itemRowSelected or C.itemRow
             row.BorderSizePixel = 0; row.Parent = itemList
             Instance.new("UICorner", row).CornerRadius = UDim.new(0, 2)
             
             local cb = Instance.new("TextButton")
-            cb.Size = UDim2.new(0, 14, 0, 14); cb.Position = UDim2.new(0, 3, 0.5, -7)
-            cb.Text = isSelected and "✅" or "⬜"; cb.TextSize = 9
-            cb.BackgroundTransparency = 1; cb.BorderSizePixel = 0
-            cb.AutoButtonColor = false; cb.Parent = row
+            cb.Size = UDim2.new(0, 12, 0, 12); cb.Position = UDim2.new(0, 2, 0.5, -6)
+            cb.Text = isSelected and "✅" or "⬜"; cb.TextSize = 7
+            cb.BackgroundTransparency = 1; cb.BorderSizePixel = 0; cb.AutoButtonColor = false; cb.Parent = row
             
             local icon = Instance.new("TextLabel")
-            icon.Size = UDim2.new(0, 14, 1, 0); icon.Position = UDim2.new(0, 18, 0, 0)
-            icon.Text = isAvailable and "🟢" or "🔒"; icon.TextSize = 7
-            icon.BackgroundTransparency = 1; icon.Parent = row
+            icon.Size = UDim2.new(0, 12, 1, 0); icon.Position = UDim2.new(0, 15, 0, 0)
+            icon.Text = isAvailable and "🟢" or "🔒"; icon.TextSize = 6; icon.BackgroundTransparency = 1; icon.Parent = row
             
             local lbl = Instance.new("TextLabel")
-            lbl.Size = UDim2.new(1, -36, 1, 0); lbl.Position = UDim2.new(0, 34, 0, 0)
+            lbl.Size = UDim2.new(1, -30, 1, 0); lbl.Position = UDim2.new(0, 29, 0, 0)
             lbl.Text = isAvailable and itemName or itemName.." (off)"
             lbl.TextColor3 = isAvailable and (isSelected and Color3.fromRGB(100,255,100) or C.textDim) or Color3.fromRGB(120,120,130)
-            lbl.Font = Enum.Font.Gotham; lbl.TextSize = 9
+            lbl.Font = Enum.Font.Gotham; lbl.TextSize = 8
             lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.BackgroundTransparency = 1; lbl.Parent = row
             
-            -- Stock status
             local st = itemStatus[itemName]
-            if isAvailable and st == "stock" then lbl.TextColor3 = Color3.fromRGB(100,255,100)
-            elseif isAvailable and st == "nostock" then lbl.TextColor3 = Color3.fromRGB(255,100,100) end
+            if isAvailable and st=="stock" then lbl.TextColor3 = Color3.fromRGB(100,255,100)
+            elseif isAvailable and st=="nostock" then lbl.TextColor3 = Color3.fromRGB(255,100,100) end
             
             local function toggleItem()
                 if not isAvailable then return end
                 selectedItems[itemName] = not (selectedItems[itemName] or false)
                 saveConfig(); rebuildList()
             end
-            
             cb.MouseButton1Click:Connect(toggleItem)
-            row.InputBegan:Connect(function(inp)
-                if inp.UserInputType == Enum.UserInputType.MouseButton1 then toggleItem() end
-            end)
-            
-            itemRows[itemName] = {frame = row, lbl = lbl}
+            row.InputBegan:Connect(function(inp) if inp.UserInputType == Enum.UserInputType.MouseButton1 then toggleItem() end end)
+            itemRows[itemName] = {frame=row, lbl=lbl}
         end
         
-        -- Update body & container size
-        local itemH = math.min(#filtered * rowHeight + 34, 180)
+        local itemH = math.min(#filtered * rh + 28, 150)
         body.Size = UDim2.new(1, 0, 0, itemH)
-        if accordionOpen then
-            container.Size = UDim2.new(1, -20, 0, itemH + 32)
-        end
+        if accordionOpen then container.Size = UDim2.new(1, -16, 0, itemH + 28) end
     end
     
     searchBox:GetPropertyChangedSignal("Text"):Connect(rebuildList)
     
-    -- Select All
     selectAllBtn.MouseButton1Click:Connect(function()
-        selectAllState = not selectAllState
-        selectAllBtn.Text = selectAllState and "None" or "All"
+        selectAllState = not selectAllState; selectAllBtn.Text = selectAllState and "None" or "All"
         selectAllBtn.BackgroundColor3 = selectAllState and C.red or C.accent
         for _, name in ipairs(items) do selectedItems[name] = not selectAllState end
         saveConfig(); rebuildList()
     end)
     
-    -- Toggle accordion
     header.MouseButton1Click:Connect(function()
-        accordionOpen = not accordionOpen
-        body.Visible = accordionOpen
-        arrow.Text = accordionOpen and "▼" or "▶"
-        config[openKey] = accordionOpen
-        saveConfig()
-        
-        if accordionOpen then
-            container.Size = UDim2.new(1, -20, 0, body.Size.Y.Offset + 32)
-        else
-            container.Size = UDim2.new(1, -20, 0, 28)
-        end
+        accordionOpen = not accordionOpen; body.Visible = accordionOpen; arrow.Text = accordionOpen and "▼" or "▶"
+        config[openKey] = accordionOpen; saveConfig()
+        container.Size = UDim2.new(1, -16, 0, accordionOpen and (body.Size.Y.Offset + 28) or 26)
     end)
     
-    rebuildList()
-    return container
+    rebuildList(); return container
 end
 
--- Create accordions
-createAccordion("🌱 Seeds", ALL_SEEDS, config.selectedSeeds, itemStatusSeed, C.accordionSeed, "accordionSeedOpen", "searchSeed", 10)
-createAccordion("⚙️ Gears", ALL_GEARS, config.selectedGears, itemStatusGear, C.accordionGear, "accordionGearOpen", "searchGear", 20)
-createAccordion("📦 Props", ALL_PROPS, config.selectedProps, itemStatusProp, C.accordionProp, "accordionPropOpen", "searchProp", 30)
+createAccordion("🌱 Seeds", ALL_SEEDS, config.selectedSeeds, itemStatusSeed, C.accordionSeed, "accordionSeedOpen", "searchSeed", 10, scroll1)
+createAccordion("⚙️ Gears", ALL_GEARS, config.selectedGears, itemStatusGear, C.accordionGear, "accordionGearOpen", "searchGear", 20, scroll1)
+createAccordion("📦 Props", ALL_PROPS, config.selectedProps, itemStatusProp, C.accordionProp, "accordionPropOpen", "searchProp", 30, scroll1)
 
--- Toggle button
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(1, -20, 0, 38); toggleBtn.LayoutOrder = 100
-toggleBtn.Text = "▶  START"; toggleBtn.TextColor3 = C.text
-toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextSize = 13
-toggleBtn.BackgroundColor3 = C.green; toggleBtn.BorderSizePixel = 0
-toggleBtn.AutoButtonColor = false; toggleBtn.Parent = scroll
-Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+local buyToggle = Instance.new("TextButton")
+buyToggle.Size = UDim2.new(1, -16, 0, 32); buyToggle.LayoutOrder = 100
+buyToggle.Text = "▶  START"; buyToggle.TextColor3 = C.text
+buyToggle.Font = Enum.Font.GothamBold; buyToggle.TextSize = 12
+buyToggle.BackgroundColor3 = C.green; buyToggle.BorderSizePixel = 0
+buyToggle.AutoButtonColor = false; buyToggle.Parent = scroll1
+Instance.new("UICorner", buyToggle).CornerRadius = UDim.new(0, 6)
 
-toggleBtn.MouseEnter:Connect(function() toggleBtn.BackgroundColor3 = isRunning and Color3.fromRGB(220,70,70) or Color3.fromRGB(70,220,70) end)
-toggleBtn.MouseLeave:Connect(function() toggleBtn.BackgroundColor3 = isRunning and C.red or C.green end)
+buyToggle.MouseEnter:Connect(function() buyToggle.BackgroundColor3 = isRunning and Color3.fromRGB(220,70,70) or Color3.fromRGB(70,220,70) end)
+buyToggle.MouseLeave:Connect(function() buyToggle.BackgroundColor3 = isRunning and C.red or C.green end)
 
-function updateUI()
+function updateBuyUI()
     if isRunning then
-        statusText.Text = isBuying and "🛒  MEMBORONG..." or "⏰  MENUNGGU RESTOCK"
-        statusText.TextColor3 = isBuying and Color3.fromRGB(255,150,50) or Color3.fromRGB(100,200,255)
-        toggleBtn.Text = "⏹  STOP"; toggleBtn.BackgroundColor3 = C.red
-        if not isBuying and nextScanTime > 0 then timerText.Text = os.date("%H:%M:%S", nextScanTime)
-        elseif isBuying then timerText.Text = "MEMBORONG..." end
+        buyStatus.Text = isBuying and "🛒  MEMBORONG..." or "⏰  MENUNGGU RESTOCK"
+        buyStatus.TextColor3 = isBuying and C.orange or Color3.fromRGB(100,200,255)
+        buyToggle.Text = "⏹  STOP"; buyToggle.BackgroundColor3 = C.red
+        if not isBuying and nextScanTime > 0 then buyTimer.Text = os.date("%H:%M:%S", nextScanTime)
+        elseif isBuying then buyTimer.Text = "MEMBORONG..." end
     else
-        statusText.Text = "⏹️  OFF"; statusText.TextColor3 = C.red
-        toggleBtn.Text = "▶  START"; toggleBtn.BackgroundColor3 = C.green
-        timerText.Text = "Next scan: --:--:--"
+        buyStatus.Text = "⏹️  OFF"; buyStatus.TextColor3 = C.red
+        buyToggle.Text = "▶  START"; buyToggle.BackgroundColor3 = C.green
+        buyTimer.Text = "Next scan: --:--:--"
     end
-    statsText.Text = "✅ "..buyStats.success.."  |  ❌ "..buyStats.failed.."  |  🔄 "..scanCount
+    buyStatsText.Text = "✅ "..buyStats.success.." | ❌ "..buyStats.failed.." | 🔄 "..scanCount
 end
 
-toggleBtn.MouseButton1Click:Connect(function() if isRunning then stopMonitoring() else startMonitoring() end; updateUI() end)
-task.spawn(function() while parent.Parent do task.wait(0.5); pcall(updateUI) end end)
-parent.Destroying:Connect(function() stopMonitoring(); saveConfig() end)
+buyToggle.MouseButton1Click:Connect(function() if isRunning then stopBuy() else startBuy() end; updateBuyUI() end)
+task.spawn(function() while parent1.Parent do task.wait(0.5); pcall(updateBuyUI) end end)
+parent1.Destroying:Connect(function() stopBuy(); saveConfig() end)
 
-saveConfig()
+-- ==================================================================
+-- AUTO SELL ADVANCED (TAB 2)
+-- ==================================================================
+local parent2 = tabFrames["AutoSell"]
+
+local scroll2 = Instance.new("ScrollingFrame")
+scroll2.Size = UDim2.new(1, 0, 1, 0); scroll2.CanvasSize = UDim2.new(0, 0, 0, 800)
+scroll2.ScrollBarThickness = 3; scroll2.BackgroundTransparency = 1; scroll2.BorderSizePixel = 0; scroll2.Parent = parent2
+
+local sellLayout = Instance.new("UIListLayout")
+sellLayout.Padding = UDim.new(0, 6)
+sellLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+sellLayout.SortOrder = Enum.SortOrder.LayoutOrder
+sellLayout.Parent = scroll2
+
+local sellHdr = Instance.new("TextLabel")
+sellHdr.Size = UDim2.new(1, -16, 0, 22); sellHdr.LayoutOrder = 1
+sellHdr.Text = "💰  Auto Sell Advanced"; sellHdr.TextColor3 = C.text
+sellHdr.Font = Enum.Font.GothamBold; sellHdr.TextSize = 13
+sellHdr.TextXAlignment = Enum.TextXAlignment.Left; sellHdr.BackgroundTransparency = 1; sellHdr.Parent = scroll2
+
+local sellDesc = Instance.new("TextLabel")
+sellDesc.Size = UDim2.new(1, -16, 0, 28); sellDesc.LayoutOrder = 2
+sellDesc.Text = "Favoritkan buah selain multiplier,\nlalu sell all buah dengan multiplier"
+sellDesc.TextColor3 = C.textDim; sellDesc.Font = Enum.Font.Gotham; sellDesc.TextSize = 9
+sellDesc.TextXAlignment = Enum.TextXAlignment.Left; sellDesc.BackgroundTransparency = 1; sellDesc.Parent = scroll2
+
+-- Multiplier selector
+local multFrame = Instance.new("Frame")
+multFrame.Size = UDim2.new(1, -16, 0, 28); multFrame.LayoutOrder = 3
+multFrame.BackgroundTransparency = 1; multFrame.Parent = scroll2
+
+local multLabel = Instance.new("TextLabel")
+multLabel.Size = UDim2.new(0, 55, 1, 0); multLabel.Text = "Multiplier:"; multLabel.TextColor3 = C.textDim
+multLabel.Font = Enum.Font.Gotham; multLabel.TextSize = 10; multLabel.BackgroundTransparency = 1; multLabel.Parent = multFrame
+
+local multBtnX2 = Instance.new("TextButton")
+multBtnX2.Size = UDim2.new(0, 35, 0, 22); multBtnX2.Position = UDim2.new(0, 58, 0, 3)
+multBtnX2.Text = "x2"; multBtnX2.TextColor3 = C.text; multBtnX2.Font = Enum.Font.GothamBold; multBtnX2.TextSize = 10
+multBtnX2.BackgroundColor3 = config.sellMultiplier == "x2" and C.accent or Color3.fromRGB(50,50,55)
+multBtnX2.BorderSizePixel = 0; multBtnX2.AutoButtonColor = false; multBtnX2.Parent = multFrame
+Instance.new("UICorner", multBtnX2).CornerRadius = UDim.new(0, 3)
+
+local multBtnX4 = Instance.new("TextButton")
+multBtnX4.Size = UDim2.new(0, 35, 0, 22); multBtnX4.Position = UDim2.new(0, 97, 0, 3)
+multBtnX4.Text = "x4"; multBtnX4.TextColor3 = C.text; multBtnX4.Font = Enum.Font.GothamBold; multBtnX4.TextSize = 10
+multBtnX4.BackgroundColor3 = config.sellMultiplier == "x4" and C.accent or Color3.fromRGB(50,50,55)
+multBtnX4.BorderSizePixel = 0; multBtnX4.AutoButtonColor = false; multBtnX4.Parent = multFrame
+Instance.new("UICorner", multBtnX4).CornerRadius = UDim.new(0, 3)
+
+local function updateMultButtons()
+    multBtnX2.BackgroundColor3 = config.sellMultiplier == "x2" and C.accent or Color3.fromRGB(50,50,55)
+    multBtnX4.BackgroundColor3 = config.sellMultiplier == "x4" and C.accent or Color3.fromRGB(50,50,55)
+end
+
+multBtnX2.MouseButton1Click:Connect(function() config.sellMultiplier = "x2"; saveConfig(); updateMultButtons() end)
+multBtnX4.MouseButton1Click:Connect(function() config.sellMultiplier = "x4"; saveConfig(); updateMultButtons() end)
+
+-- Fruit checklist accordion
+createAccordion("🍎 Fruits", ALL_FRUITS, config.selectedSellFruits, {}, C.purple, "accordionSellOpen", "searchSell", 10, scroll2)
+
+-- Sell status
+local sellStatus = Instance.new("TextLabel")
+sellStatus.Size = UDim2.new(1, -16, 0, 16); sellStatus.LayoutOrder = 50
+sellStatus.Text = "Ready"; sellStatus.TextColor3 = C.textDim
+sellStatus.Font = Enum.Font.Gotham; sellStatus.TextSize = 10
+sellStatus.TextXAlignment = Enum.TextXAlignment.Left; sellStatus.BackgroundTransparency = 1; sellStatus.Parent = scroll2
+
+-- Execute Sell button
+local sellBtn = Instance.new("TextButton")
+sellBtn.Size = UDim2.new(1, -16, 0, 32); sellBtn.LayoutOrder = 100
+sellBtn.Text = "💰  EXECUTE SELL"; sellBtn.TextColor3 = C.text
+sellBtn.Font = Enum.Font.GothamBold; sellBtn.TextSize = 12
+sellBtn.BackgroundColor3 = C.purple; sellBtn.BorderSizePixel = 0
+sellBtn.AutoButtonColor = false; sellBtn.Parent = scroll2
+Instance.new("UICorner", sellBtn).CornerRadius = UDim.new(0, 6)
+
+sellBtn.MouseButton1Click:Connect(function()
+    sellBtn.Text = "⏳ Processing..."
+    sellStatus.Text = "🔍 Memeriksa multiplier..."
+    sellStatus.TextColor3 = C.orange
+    
+    task.spawn(function()
+        -- Simulasi: cek multiplier, favoritkan, sell
+        local targetMult = config.sellMultiplier == "x4" and 4 or 2
+        local fruitsToSell = {}
+        local fruitsToFav = {}
+        
+        -- Cek semua buah di backpack
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then
+            for _, item in ipairs(backpack:GetChildren()) do
+                if item:IsA("Tool") and config.selectedSellFruits[item.Name] then
+                    -- Di sini kamu perlu cek multiplier buah
+                    -- Untuk sekarang, kita anggap semua buah dengan multiplier target
+                    table.insert(fruitsToSell, item.Name)
+                end
+            end
+        end
+        
+        if #fruitsToSell == 0 then
+            sellStatus.Text = "❌ Tidak ada buah dengan multiplier x" .. targetMult
+            sellStatus.TextColor3 = C.red
+        else
+            sellStatus.Text = "✅ Siap menjual " .. #fruitsToSell .. " buah (x" .. targetMult .. ")"
+            sellStatus.TextColor3 = C.green
+            -- Di sini tambahkan logika favorit + sell
+            print("[Sell] Buah yang akan dijual:", table.concat(fruitsToSell, ", "))
+        end
+        
+        sellBtn.Text = "💰  EXECUTE SELL"
+    end)
+end)
+
 print("[AoneHub] ✅ Full Script Ready!")
 print("[AoneHub] 🚀 Complete!")
+
+saveConfig()
