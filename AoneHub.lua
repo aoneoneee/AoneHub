@@ -272,7 +272,7 @@ local function main()
             end
         end)
     
-        -- Gears (ScrollingFrame > Sheckles_Shelf > items)
+        -- Gears (ScrollingFrame > Sheckles_Shelf > ItemName > Main_Frame > Cost_Text)
         pcall(function()
             local gs = playerGui:FindFirstChild("GearShop")
             if gs then local f = gs:FindFirstChild("Frame")
@@ -282,9 +282,13 @@ local function main()
                         if shelf then
                             for _, ic in ipairs(shelf:GetChildren()) do
                                 if ic:IsA("Frame") or ic:IsA("TextButton") then
-                                    local ct = ic:FindFirstChild("Cost_Text")
-                                    if ct then 
-                                        shopElementsGear[ic.Name] = {container = ic, costText = ct}
+                                    -- MASUK KE Main_Frame DULU
+                                    local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
+                                    if mf then 
+                                        local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
+                                        if ct then 
+                                            shopElementsGear[ic.Name] = {container = ic, costText = ct}
+                                        end
                                     end
                                 end
                             end
@@ -294,7 +298,7 @@ local function main()
             end
         end)
     
-        -- Props/Crates (ScrollingFrame > Sheckles_Shelf > items)
+        -- Props/Crates (ScrollingFrame > Sheckles_Shelf > ItemName > Main_Frame > Cost_Text)
         pcall(function()
             local cs = playerGui:FindFirstChild("CrateShop")
             if cs then local f = cs:FindFirstChild("Frame")
@@ -304,9 +308,13 @@ local function main()
                         if shelf then
                             for _, ic in ipairs(shelf:GetChildren()) do
                                 if ic:IsA("Frame") or ic:IsA("TextButton") then
-                                    local ct = ic:FindFirstChild("Cost_Text")
-                                    if ct then 
-                                        shopElementsProp[ic.Name] = {container = ic, costText = ct}
+                                    -- MASUK KE Main_Frame DULU
+                                    local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
+                                    if mf then 
+                                        local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
+                                        if ct then 
+                                            shopElementsProp[ic.Name] = {container = ic, costText = ct}
+                                        end
                                     end
                                 end
                             end
@@ -316,21 +324,37 @@ local function main()
             end
         end)
     end
+    
     local function isAvailable(itemName, elements)
         local el = elements[itemName]
         if not el then return false end
     
+        -- Cek container visible
         if el.container:IsA("GuiObject") then
             if not el.container.Visible then return false end
         end
     
+        -- Cek Cost_Text
         local txt = ""
         pcall(function() txt = el.costText.Text end)
+        txt = txt:gsub("¢", "")  -- Hapus simbol ¢
+        if txt:upper():find("NO STOCK") or txt:upper():find("SOLD") or txt == "" then 
+            return false 
+        end
     
-        -- Hapus simbol ¢ dulu
-        txt = txt:gsub("¢", "")
+        -- Cek Stock_Text (kalau ada di Main_Frame)
+        local mf = el.container:FindFirstChild("Main_Frame") or el.container:FindFirstChild("MainFrame")
+        if mf then
+            local stockText = mf:FindFirstChild("Stock_Text")
+            if stockText then
+                local st = ""
+                pcall(function() st = stockText.Text end)
+                local num = string.match(st, "(%d+)")
+                if num and tonumber(num) == 0 then return false end
+            end
+        end
     
-        return not (txt:upper():find("NO STOCK") or txt:upper():find("SOLD") or txt == "")
+        return true
     end
 
     local function buyAll()
