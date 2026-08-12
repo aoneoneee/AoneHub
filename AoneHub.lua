@@ -255,13 +255,13 @@ local function main()
         buyStats.total=buyStats.total+1; if s then buyStats.success=buyStats.success+1; return true else buyStats.failed=buyStats.failed+1; return false end
     end
     local function cacheBuyShop()
-        -- Seeds (NormalShop)
+        -- Seeds (NormalShop > NamaItem > Main_Frame > Cost_Text)
         pcall(function()
             local ss = playerGui:FindFirstChild("SeedShop")
             if ss then local f = ss:FindFirstChild("Frame")
                 if f then local ns = f:FindFirstChild("NormalShop")
                     if ns then for _, ic in ipairs(ns:GetChildren()) do
-                        if ic:IsA("Frame") or ic:IsA("TextButton") then
+                        if ic:IsA("Frame") then
                             local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
                             if mf then local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
                                 if ct then shopElementsSeed[ic.Name] = {container = ic, costText = ct} end
@@ -272,54 +272,45 @@ local function main()
             end
         end)
     
-        -- Gears (ScrollingFrame > Sheckles_Shelf > ItemName > Main_Frame > Cost_Text)
+        -- Gears (ScrollingFrame > NamaItem > Main_Frame > Cost_Text) — SAMA PERSIS
         pcall(function()
             local gs = playerGui:FindFirstChild("GearShop")
             if gs then local f = gs:FindFirstChild("Frame")
                 if f then local sf = f:FindFirstChild("ScrollingFrame")
-                    if sf then 
-                        local shelf = sf:FindFirstChild("Sheckles_Shelf")
-                        if shelf then
-                            for _, ic in ipairs(shelf:GetChildren()) do
-                                if ic:IsA("Frame") or ic:IsA("TextButton") then
-                                    -- MASUK KE Main_Frame DULU
-                                    local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
-                                    if mf then 
-                                        local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
-                                        if ct then 
-                                            shopElementsGear[ic.Name] = {container = ic, costText = ct}
-                                        end
-                                    end
-                                end
+                    if sf then for _, ic in ipairs(sf:GetChildren()) do
+                        -- Skip UIListLayout, Padding, ItemTemplate, GenerateItems, Robux_Shelf, Sheckles_Shelf
+                        if ic:IsA("Frame") and ic.Name ~= "UIListLayout" 
+                            and ic.Name ~= "Padding" and ic.Name ~= "ItemTemplate"
+                            and ic.Name ~= "Robux_Shelf" and ic.Name ~= "Sheckles_Shelf"
+                            and ic.Name ~= "GenerateItems" and ic.Name ~= "Item_Size" then
+                        
+                            local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
+                            if mf then local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
+                                if ct then shopElementsGear[ic.Name] = {container = ic, costText = ct} end
                             end
                         end
-                    end
+                    end end
                 end
             end
         end)
     
-        -- Props/Crates (ScrollingFrame > Sheckles_Shelf > ItemName > Main_Frame > Cost_Text)
+        -- Props (ScrollingFrame > NamaItem > Main_Frame > Cost_Text) — SAMA PERSIS
         pcall(function()
             local cs = playerGui:FindFirstChild("CrateShop")
             if cs then local f = cs:FindFirstChild("Frame")
                 if f then local sf = f:FindFirstChild("ScrollingFrame")
-                    if sf then
-                        local shelf = sf:FindFirstChild("Sheckles_Shelf")
-                        if shelf then
-                            for _, ic in ipairs(shelf:GetChildren()) do
-                                if ic:IsA("Frame") or ic:IsA("TextButton") then
-                                    -- MASUK KE Main_Frame DULU
-                                    local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
-                                    if mf then 
-                                        local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
-                                        if ct then 
-                                            shopElementsProp[ic.Name] = {container = ic, costText = ct}
-                                        end
-                                    end
-                                end
+                    if sf then for _, ic in ipairs(sf:GetChildren()) do
+                        if ic:IsA("Frame") and ic.Name ~= "UIListLayout" 
+                            and ic.Name ~= "Padding" and ic.Name ~= "ItemTemplate"
+                            and ic.Name ~= "Robux_Shelf" and ic.Name ~= "Sheckles_Shelf"
+                            and ic.Name ~= "GenerateItems" and ic.Name ~= "Item_Size" then
+                        
+                            local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
+                            if mf then local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
+                                if ct then shopElementsProp[ic.Name] = {container = ic, costText = ct} end
                             end
                         end
-                    end
+                    end end
                 end
             end
         end)
