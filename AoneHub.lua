@@ -207,46 +207,9 @@ local function main()
     local isAfkRunning = config.isRunningAfk
     local isEspRunning = config.isRunningEsp
     
-    local function antiAfkLoop()
-        while isAfkRunning do
-            local waitTime = math.random(960, 1080)
-            for i = waitTime, 1, -1 do
-                if not isAfkRunning then break end
-                if i % 60 == 0 then updateAfkUI(i) end
-                task.wait(1)
-            end
-            if not isAfkRunning then break end
-            pcall(function()
-                local bp = player:FindFirstChild("Backpack")
-                local char = player.Character
-                if bp and char then
-                    local build = bp:FindFirstChild("Build")
-                    local hum = char:FindFirstChildOfClass("Humanoid")
-                    if build and hum then
-                        hum:EquipTool(build)
-                        task.wait(1)
-                        hum:UnequipTools()
-                    end
-                end
-            end)
-        end
-    end
-
-    local function startAfk()
-        if isAfkRunning then return end
-        isAfkRunning = true; config.isRunningAfk = true; saveConfig()
-        task.spawn(antiAfkLoop); updateAfkUI()
-    end
-
-    local function stopAfk()
-        isAfkRunning = false; config.isRunningAfk = false; saveConfig(); updateAfkUI()
-    end
-
     -- ESP variables
     local espFrame, espLabel = nil, nil
     local espUpdater = nil
-
-    local afkScroll = Instance.new("ScrollingFrame")
 
     -- UI
     local afkScroll = Instance.new("ScrollingFrame")
@@ -340,7 +303,42 @@ local function main()
 
     -- Update CanvasSize
     afkScroll.CanvasSize = UDim2.new(0, 0, 0, y + 40)
-    
+
+    local function antiAfkLoop()
+        while isAfkRunning do
+            local waitTime = math.random(960, 1080)
+            for i = waitTime, 1, -1 do
+                if not isAfkRunning then break end
+                if i % 60 == 0 then updateAfkUI(i) end
+                task.wait(1)
+            end
+            if not isAfkRunning then break end
+            pcall(function()
+                local bp = player:FindFirstChild("Backpack")
+                local char = player.Character
+                if bp and char then
+                    local build = bp:FindFirstChild("Build")
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if build and hum then
+                        hum:EquipTool(build)
+                        task.wait(1)
+                        hum:UnequipTools()
+                    end
+                end
+            end)
+        end
+    end
+
+    local function startAfk()
+        if isAfkRunning then return end
+        isAfkRunning = true; config.isRunningAfk = true; saveConfig()
+        task.spawn(antiAfkLoop); updateAfkUI()
+    end
+
+    local function stopAfk()
+        isAfkRunning = false; config.isRunningAfk = false; saveConfig(); updateAfkUI()
+    end
+
     function updateAfkUI(secondsLeft)
         if isAfkRunning then
             afkStatusText.Text = "🟢 ANTI AFK ON"; afkStatusText.TextColor3 = C.green
@@ -356,24 +354,6 @@ local function main()
         end
     end
 
-    afkToggleBtn.MouseButton1Click:Connect(function()
-        if isAfkRunning then stopAfk() else startAfk() end; updateAfkUI()
-    end)
-
-    updateAfkUI()
-
-    -- Auto-start dari config
-    if config.isRunningAfk then
-        task.delay(2, function() isAfkRunning=true; task.spawn(antiAfkLoop); updateAfkUI() end)
-    end
-
-    -- ==================================================================
-    -- ESP FUNCTIONS
-    -- ==================================================================
-    local espFrame, espLabel = nil, nil
-    local espUpdater = nil
-
-    local function createEspUI()
         if espFrame and espFrame.Parent then return espFrame, espLabel end
     
         local hud = playerGui:FindFirstChild("HUD")
@@ -421,6 +401,25 @@ local function main()
         return espFrame, espLabel
     end
 
+    afkToggleBtn.MouseButton1Click:Connect(function()
+        if isAfkRunning then stopAfk() else startAfk() end; updateAfkUI()
+    end)
+
+    updateAfkUI()
+
+    -- Auto-start dari config
+    if config.isRunningAfk then
+        task.delay(2, function() isAfkRunning=true; task.spawn(antiAfkLoop); updateAfkUI() end)
+    end
+
+    -- ==================================================================
+    -- ESP FUNCTIONS
+    -- ==================================================================
+    local espFrame, espLabel = nil, nil
+    local espUpdater = nil
+
+    local function createEspUI()
+    
     local function getTotalFruitValue()
         local total = 0
         local bp = player:FindFirstChild("Backpack")
