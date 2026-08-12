@@ -225,10 +225,29 @@ local function main()
         end); return a
     end
     local function getItemPrice(itemName, elements)
-        local el = elements[itemName]; if not el then return nil end; local t = ""; pcall(function() t=el.costText.Text end)
-        if t:upper():find("NO STOCK")or t=="" then return nil end; local n = string.match(t,"([%d,.]+)"); if not n then return nil end
-        n=n:gsub(",",""); local p=tonumber(n); if not p then return nil end; local l=t:lower()
-        if l:find("k")then p=p*1000 elseif l:find("m")then p=p*1000000 elseif l:find("b")then p=p*1000000000 end; return p
+        local el = elements[itemName]
+        if not el then return nil end
+    
+        local txt = ""
+        pcall(function() txt = el.costText.Text end)
+    
+        -- Hapus simbol ¢
+        txt = txt:gsub("¢", "")
+    
+        if txt:upper():find("NO STOCK") or txt:upper():find("SOLD") or txt == "" then return nil end
+    
+        local num = string.match(txt, "([%d,.]+)")
+        if not num then return nil end
+        num = num:gsub(",", "")
+        local price = tonumber(num)
+        if not price then return nil end
+    
+        local lower = txt:lower()
+        if lower:find("k") then price = price * 1000
+        elseif lower:find("m") then price = price * 1000000
+        elseif lower:find("b") then price = price * 1000000000 end
+    
+        return price
     end
     local function buyItem(itemName, opcode)
         if not getRemote() then return false end
@@ -236,7 +255,7 @@ local function main()
         buyStats.total=buyStats.total+1; if s then buyStats.success=buyStats.success+1; return true else buyStats.failed=buyStats.failed+1; return false end
     end
     local function cacheBuyShop()
-    -- Seeds (NormalShop)
+        -- Seeds (NormalShop)
         pcall(function()
             local ss = playerGui:FindFirstChild("SeedShop")
             if ss then local f = ss:FindFirstChild("Frame")
@@ -253,32 +272,46 @@ local function main()
             end
         end)
     
-        -- Gears (ScrollingFrame - skip UIListLayout)
+        -- Gears (ScrollingFrame > Sheckles_Shelf > items)
         pcall(function()
             local gs = playerGui:FindFirstChild("GearShop")
             if gs then local f = gs:FindFirstChild("Frame")
                 if f then local sf = f:FindFirstChild("ScrollingFrame")
-                    if sf then for _, ic in ipairs(sf:GetChildren()) do
-                        if (ic:IsA("Frame") or ic:IsA("TextButton")) and ic.Name ~= "UIListLayout" then
-                            local ct = ic:FindFirstChild("Cost_Text") or ic:FindFirstChild("CostText")
-                            if ct then shopElementsGear[ic.Name] = {container = ic, costText = ct} end
+                    if sf then 
+                        local shelf = sf:FindFirstChild("Sheckles_Shelf")
+                        if shelf then
+                            for _, ic in ipairs(shelf:GetChildren()) do
+                                if ic:IsA("Frame") or ic:IsA("TextButton") then
+                                    local ct = ic:FindFirstChild("Cost_Text")
+                                    if ct then 
+                                        shopElementsGear[ic.Name] = {container = ic, costText = ct}
+                                    end
+                                end
+                            end
                         end
-                    end end
+                    end
                 end
             end
         end)
     
-        -- Props/Crates (ScrollingFrame - skip UIListLayout)
+        -- Props/Crates (ScrollingFrame > Sheckles_Shelf > items)
         pcall(function()
             local cs = playerGui:FindFirstChild("CrateShop")
             if cs then local f = cs:FindFirstChild("Frame")
                 if f then local sf = f:FindFirstChild("ScrollingFrame")
-                    if sf then for _, ic in ipairs(sf:GetChildren()) do
-                        if (ic:IsA("Frame") or ic:IsA("TextButton")) and ic.Name ~= "UIListLayout" then
-                            local ct = ic:FindFirstChild("Cost_Text") or ic:FindFirstChild("CostText")
-                            if ct then shopElementsProp[ic.Name] = {container = ic, costText = ct} end
+                    if sf then
+                        local shelf = sf:FindFirstChild("Sheckles_Shelf")
+                        if shelf then
+                            for _, ic in ipairs(shelf:GetChildren()) do
+                                if ic:IsA("Frame") or ic:IsA("TextButton") then
+                                    local ct = ic:FindFirstChild("Cost_Text")
+                                    if ct then 
+                                        shopElementsProp[ic.Name] = {container = ic, costText = ct}
+                                    end
+                                end
+                            end
                         end
-                    end end
+                    end
                 end
             end
         end)
@@ -287,15 +320,19 @@ local function main()
         local el = elements[itemName]
         if not el then return false end
     
-        -- Cek container visible (hanya kalau GuiObject)
         if el.container:IsA("GuiObject") then
             if not el.container.Visible then return false end
         end
     
-        local t = ""
-        pcall(function() t = el.costText.Text end)
-        return not (t:upper():find("NO STOCK") or t:upper():find("SOLD") or t == "")
+        local txt = ""
+        pcall(function() txt = el.costText.Text end)
+    
+        -- Hapus simbol ¢ dulu
+        txt = txt:gsub("¢", "")
+    
+        return not (txt:upper():find("NO STOCK") or txt:upper():find("SOLD") or txt == "")
     end
+
     local function buyAll()
         if isBuying then return end; isBuying=true
         while isRunningBuy do local any=false; local bal=getSheckles()
