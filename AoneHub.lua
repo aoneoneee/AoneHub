@@ -353,7 +353,8 @@ local function main()
             afkCountdownText.Text = ""
         end
     end
-
+    
+    local function createEspUI()
         if espFrame and espFrame.Parent then return espFrame, espLabel end
     
         local hud = playerGui:FindFirstChild("HUD")
@@ -401,6 +402,8 @@ local function main()
         return espFrame, espLabel
     end
 
+    
+
     afkToggleBtn.MouseButton1Click:Connect(function()
         if isAfkRunning then stopAfk() else startAfk() end; updateAfkUI()
     end)
@@ -417,8 +420,6 @@ local function main()
     -- ==================================================================
     local espFrame, espLabel = nil, nil
     local espUpdater = nil
-
-    local function createEspUI()
     
     local function getTotalFruitValue()
         local total = 0
