@@ -291,7 +291,6 @@ local function main()
 
     -- ESP Toggle
     if config.isRunningEsp == nil then config.isRunningEsp = false end
-    local isEspRunning = config.isRunningEsp
 
     local espToggleBtn = Instance.new("TextButton")
     espToggleBtn.Size = UDim2.new(1, -12, 0, 28); espToggleBtn.Position = UDim2.new(0, 6, 0, y)
@@ -493,8 +492,6 @@ local function main()
     -- ==================================================================
     -- ESP FUNCTIONS
     -- ==================================================================
-    local espFrame, espLabel = nil, nil
-    local espUpdater = nil
 
     -- Auto-start ESP
     if config.isRunningEsp then
