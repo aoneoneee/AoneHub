@@ -1328,8 +1328,8 @@ print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
     -- ==================================================================
     if config.isRunningBuy then task.delay(2,function() if getRemote() then isRunningBuy=true; cacheBuyShop(); pcall(scanAndBuy); task.spawn(buyMainLoop); updateBuyUI() end end) end
     if config.isRunningSell then task.delay(3,function() if net and net.NPCS and net.NPCS.SellAll then isRunningSell=true; task.spawn(sellLoop); updateSellUI() end end) end
-    if config.isRunningAfk then task.delay(2, function() isAfkRunning=true; task.spawn(antiAfkLoop); updateAfkUI() end) end
-    if config.isRunningEsp then task.delay(3, function() startEsp() end) end
+    if config.isRunningAfk then task.delay(10, function() isAfkRunning=true; task.spawn(antiAfkLoop); updateAfkUI() end) end
+    if config.isRunningEsp then task.delay(10, function() startEsp() end) end
 
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
