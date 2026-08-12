@@ -599,33 +599,6 @@ local function main()
     if config.isAutoMailRunning then task.delay(4,function() if config.mailTargetUsername~="" then isAutoRunning=true; userBox.Text=config.mailTargetUsername; updatePlayerInfo(config.mailTargetUsername); autoBtn.Text="⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(180,50,50); autoStatusLabel.Text="🔄 Auto Mail: ON"; autoStatusLabel.TextColor3=C.green end end) end
     if config.isAutoClaimRunning then task.delay(5,function() isClaimRunning=true; claimBtn.Text="⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3=Color3.fromRGB(180,50,120); claimStatusLabel.Text="📬 Auto Claim: ON"; claimStatusLabel.TextColor3=Color3.fromRGB(200,100,255) end) end
 
-    task.spawn(function()
-        while wait(math.random(960, 1080)) do -- 16-18 menit acak
-            pcall(function()
-                local backpack = player:FindFirstChild("Backpack")
-                local character = player.Character
-        
-                if backpack and character then
-                    local build = backpack:FindFirstChild("Build")
-                    local humanoid = character:FindFirstChildOfClass("Humanoid")
-            
-                    if build and humanoid then
-                        -- Pegang build
-                        humanoid:EquipTool(build)
-                
-                        wait(1) -- 1 detik
-                
-                        -- Lepaskan
-                        humanoid:UnequipTools()
-                    else
-                        print("[Anti AFK] Shovel tidak ditemukan di backpack!")
-                        print("[Anti AFK] Cek apakah nama item persis 'Shovel'")
-                    end
-                end
-            end)
-        end
-    end) 
-
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
 end
