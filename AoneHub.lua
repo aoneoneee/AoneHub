@@ -402,25 +402,6 @@ local function main()
         return espFrame, espLabel
     end
 
-    
-
-    afkToggleBtn.MouseButton1Click:Connect(function()
-        if isAfkRunning then stopAfk() else startAfk() end; updateAfkUI()
-    end)
-
-    updateAfkUI()
-
-    -- Auto-start dari config
-    if config.isRunningAfk then
-        task.delay(2, function() isAfkRunning=true; task.spawn(antiAfkLoop); updateAfkUI() end)
-    end
-
-    -- ==================================================================
-    -- ESP FUNCTIONS
-    -- ==================================================================
-    local espFrame, espLabel = nil, nil
-    local espUpdater = nil
-    
     local function getTotalFruitValue()
         local total = 0
         local bp = player:FindFirstChild("Backpack")
@@ -445,6 +426,20 @@ local function main()
         elseif v >= 1e6 then return string.format("%.1fM", v/1e6)
         elseif v >= 1e3 then return string.format("%.1fK", v/1e3)
         else return tostring(v) end
+    end
+
+    function updateEspUI()
+        if isEspRunning then
+            espStatusText.Text = "🟢 ESP ON"
+            espStatusText.TextColor3 = C.green
+            espToggleBtn.Text = "⏹ STOP ESP"
+            espToggleBtn.BackgroundColor3 = C.red
+        else
+            espStatusText.Text = "⏹️ OFF"
+            espStatusText.TextColor3 = C.red
+            espToggleBtn.Text = "▶ START ESP"
+            espToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 200)
+        end
     end
 
     local function startEsp()
@@ -490,26 +485,16 @@ local function main()
         updateEspUI()
     end
 
-    function updateEspUI()
-        if isEspRunning then
-            espStatusText.Text = "🟢 ESP ON"
-            espStatusText.TextColor3 = C.green
-            espToggleBtn.Text = "⏹ STOP ESP"
-            espToggleBtn.BackgroundColor3 = C.red
-        else
-            espStatusText.Text = "⏹️ OFF"
-            espStatusText.TextColor3 = C.red
-            espToggleBtn.Text = "▶ START ESP"
-            espToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 200)
-        end
+    -- Auto-start dari config
+    if config.isRunningAfk then
+        task.delay(2, function() isAfkRunning=true; task.spawn(antiAfkLoop); updateAfkUI() end)
     end
 
-    espToggleBtn.MouseButton1Click:Connect(function()
-        if isEspRunning then stopEsp() else startEsp() end
-        updateEspUI()
-    end)
-
-    updateEspUI()
+    -- ==================================================================
+    -- ESP FUNCTIONS
+    -- ==================================================================
+    local espFrame, espLabel = nil, nil
+    local espUpdater = nil
 
     -- Auto-start ESP
     if config.isRunningEsp then
@@ -1238,6 +1223,15 @@ end
 -- ==================================================================
 -- BUTTON HANDLERS
 -- ==================================================================
+    afkToggleBtn.MouseButton1Click:Connect(function()
+        if isAfkRunning then stopAfk() else startAfk() end; updateAfkUI()
+    end)
+
+    espToggleBtn.MouseButton1Click:Connect(function()
+        if isEspRunning then stopEsp() else startEsp() end
+        updateEspUI()
+    end)
+    
 addBtn.MouseButton1Click:Connect(function() addUsername(addBox.Text); addBox.Text="" end)
 
 refreshStockBtn.MouseButton1Click:Connect(function()
@@ -1329,11 +1323,16 @@ end)
 
 print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
 
+    updateAfkUI()
+    updateEspUI()
+
     -- ==================================================================
     -- AUTO-START
     -- ==================================================================
     if config.isRunningBuy then task.delay(2,function() if getRemote() then isRunningBuy=true; cacheBuyShop(); pcall(scanAndBuy); task.spawn(buyMainLoop); updateBuyUI() end end) end
     if config.isRunningSell then task.delay(3,function() if net and net.NPCS and net.NPCS.SellAll then isRunningSell=true; task.spawn(sellLoop); updateSellUI() end end) end
+    if config.isRunningAfk then task.delay(2, function() isAfkRunning=true; task.spawn(antiAfkLoop); updateAfkUI() end) end
+    if config.isRunningEsp then task.delay(3, function() startEsp() end) end
 
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
