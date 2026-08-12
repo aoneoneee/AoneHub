@@ -23,11 +23,13 @@ local function main()
 
     local config = {
         selectedSeeds = {}, selectedGears = {}, selectedProps = {},
-        accordionSeedOpen = true, accordionGearOpen = false, accordionPropOpen = false,
+        accordionSeedOpen = false, accordionGearOpen = false, accordionPropOpen = false,
         searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
         isRunningBuy = false, isRunningSell = false,
         selectedSellFruits = {}, sellTargets = {},
         mailFruitUsers = {},
+        isRunningAfk = true,
+        isRunningEsp = true,
     }
 
     local function loadConfig()
@@ -113,7 +115,7 @@ local function main()
     -- GUI SKELETON
     -- ==================================================================
     local screenGui = Instance.new("ScreenGui"); screenGui.Name = "AoneHub"; screenGui.Parent = playerGui; screenGui.ResetOnSpawn = false
-    screenGui.Destroying:Connect(function() config.isRunningBuy = isRunningBuy; config.isRunningSell = isRunningSell; saveConfig() end)
+    screenGui.Destroying:Connect(function() config.isRunningBuy = isRunningBuy; config.isRunningSell = isRunningSell; config.isRunningAfk = isRunningAfk; config.isRunningEsp = isRunningEsp; saveConfig() end)
 
     local minimizedCircle = Instance.new("TextButton"); minimizedCircle.Size = UDim2.new(0, 50, 0, 50); minimizedCircle.Position = UDim2.new(0.5, -25, 0.5, -25)
     minimizedCircle.Text = "AH"; minimizedCircle.TextColor3 = C.text; minimizedCircle.Font = Enum.Font.GothamBlack; minimizedCircle.TextSize = 20
@@ -189,16 +191,323 @@ local function main()
     end
     for _, tab in ipairs(tabs) do tabBtns[tab.name].MouseButton1Click:Connect(function() switchTab(tab.name) end) end
 
-    -- Placeholder Tab 5
-    do local f = tabFrames["Ekstra"]
-        local ic = Instance.new("TextLabel"); ic.Size = UDim2.new(1, 0, 0, 32); ic.Position = UDim2.new(0, 0, 0.35, -16)
-        ic.Text = "⚙️"; ic.Font = Enum.Font.Gotham; ic.TextSize = 28; ic.BackgroundTransparency = 1; ic.Parent = f
-        local tt = Instance.new("TextLabel"); tt.Size = UDim2.new(1, 0, 0, 18); tt.Position = UDim2.new(0, 0, 0.45, 0)
-        tt.Text = "Ekstra"; tt.TextColor3 = C.text; tt.Font = Enum.Font.GothamBold; tt.TextSize = 12; tt.BackgroundTransparency = 1; tt.Parent = f
-        local st = Instance.new("TextLabel"); st.Size = UDim2.new(1, 0, 0, 12); st.Position = UDim2.new(0, 0, 0.52, 0)
-        st.Text = "Coming soon..."; st.TextColor3 = C.textDim; st.Font = Enum.Font.Gotham; st.TextSize = 9; st.BackgroundTransparency = 1; st.Parent = f
+    -- ==================================================================
+    -- TAB 5: EKSTRA (ANTI AFK - HOLD BUILD)
+    -- ==================================================================
+    local parentEkstra = tabFrames["Ekstra"]
+
+    -- Hapus placeholder lama
+    for _, child in ipairs(parentEkstra:GetChildren()) do
+        child:Destroy()
     end
 
+    -- State
+    if config.isRunningAfk == nil then config.isRunningAfk = false end
+    local isAfkRunning = config.isRunningAfk
+
+    local function antiAfkLoop()
+        while isAfkRunning do
+            local waitTime = math.random(960, 1080)
+            for i = waitTime, 1, -1 do
+                if not isAfkRunning then break end
+                if i % 60 == 0 then updateAfkUI(i) end
+                task.wait(1)
+            end
+            if not isAfkRunning then break end
+            pcall(function()
+                local bp = player:FindFirstChild("Backpack")
+                local char = player.Character
+                if bp and char then
+                    local build = bp:FindFirstChild("Build")
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if build and hum then
+                        hum:EquipTool(build)
+                        task.wait(1)
+                        hum:UnequipTools()
+                    end
+                end
+            end)
+        end
+    end
+
+    local function startAfk()
+        if isAfkRunning then return end
+        isAfkRunning = true; config.isRunningAfk = true; saveConfig()
+        task.spawn(antiAfkLoop); updateAfkUI()
+    end
+
+    local function stopAfk()
+        isAfkRunning = false; config.isRunningAfk = false; saveConfig(); updateAfkUI()
+    end
+
+    -- UI
+    local afkScroll = Instance.new("ScrollingFrame")
+    afkScroll.Size = UDim2.new(1, 0, 1, 0); afkScroll.CanvasSize = UDim2.new(0, 0, 0, 200)
+    afkScroll.ScrollBarThickness = 3; afkScroll.BackgroundTransparency = 1; afkScroll.BorderSizePixel = 0
+    afkScroll.Parent = parentEkstra
+
+    local y = 4
+    local afkHdr = Instance.new("TextLabel")
+    afkHdr.Size = UDim2.new(1, -12, 0, 20); afkHdr.Position = UDim2.new(0, 6, 0, y)
+    afkHdr.Text = "⚙️  Anti AFK (Hold Build)"; afkHdr.TextColor3 = C.text
+    afkHdr.Font = Enum.Font.GothamBold; afkHdr.TextSize = 11
+    afkHdr.TextXAlignment = Enum.TextXAlignment.Left; afkHdr.BackgroundTransparency = 1; afkHdr.Parent = afkScroll
+    y += 24
+
+    local afkStatusText = Instance.new("TextLabel")
+    afkStatusText.Size = UDim2.new(1, -12, 0, 14); afkStatusText.Position = UDim2.new(0, 6, 0, y)
+    afkStatusText.Text = isAfkRunning and "🟢 ON" or "⏹️ OFF"
+    afkStatusText.TextColor3 = isAfkRunning and C.green or C.red
+    afkStatusText.Font = Enum.Font.GothamSemibold; afkStatusText.TextSize = 9
+    afkStatusText.TextXAlignment = Enum.TextXAlignment.Left; afkStatusText.BackgroundTransparency = 1; afkStatusText.Parent = afkScroll
+    y += 18
+
+    local afkCountdownText = Instance.new("TextLabel")
+    afkCountdownText.Size = UDim2.new(1, -12, 0, 14); afkCountdownText.Position = UDim2.new(0, 6, 0, y)
+    afkCountdownText.Text = ""; afkCountdownText.TextColor3 = C.yellow
+    afkCountdownText.Font = Enum.Font.Gotham; afkCountdownText.TextSize = 9
+    afkCountdownText.TextXAlignment = Enum.TextXAlignment.Left; afkCountdownText.BackgroundTransparency = 1; afkCountdownText.Parent = afkScroll
+    y += 20
+
+    local afkInfoText = Instance.new("TextLabel")
+    afkInfoText.Size = UDim2.new(1, -12, 0, 36); afkInfoText.Position = UDim2.new(0, 6, 0, y)
+    afkInfoText.Text = "🔧 Equip 'Build' tiap 16-18 menit\n⏱️  Waktu acak (natural)"
+    afkInfoText.TextColor3 = C.textDim; afkInfoText.Font = Enum.Font.Gotham; afkInfoText.TextSize = 8
+    afkInfoText.TextXAlignment = Enum.TextXAlignment.Left; afkInfoText.BackgroundTransparency = 1
+    afkInfoText.TextWrapped = true; afkInfoText.Parent = afkScroll
+    y += 42
+
+    local afkToggleBtn = Instance.new("TextButton")
+    afkToggleBtn.Size = UDim2.new(1, -12, 0, 28); afkToggleBtn.Position = UDim2.new(0, 6, 0, y)
+    afkToggleBtn.Text = isAfkRunning and "⏹ STOP" or "▶ START"
+    afkToggleBtn.TextColor3 = C.text; afkToggleBtn.Font = Enum.Font.GothamBold; afkToggleBtn.TextSize = 10
+    afkToggleBtn.BackgroundColor3 = isAfkRunning and C.red or C.green
+    afkToggleBtn.BorderSizePixel = 0; afkToggleBtn.AutoButtonColor = false; afkToggleBtn.Parent = afkScroll
+    Instance.new("UICorner", afkToggleBtn).CornerRadius = UDim.new(0, 5)
+    y += 32  -- Jarak setelah tombol AFK
+
+    -- Separator
+    local afkSep = Instance.new("Frame")
+    afkSep.Size = UDim2.new(1, -12, 0, 1); afkSep.Position = UDim2.new(0, 6, 0, y)
+    afkSep.BackgroundColor3 = Color3.fromRGB(50, 50, 55); afkSep.BorderSizePixel = 0; afkSep.Parent = afkScroll
+    y += 6
+
+    -- ESP Header
+    local espHdr = Instance.new("TextLabel")
+    espHdr.Size = UDim2.new(1, -12, 0, 16); espHdr.Position = UDim2.new(0, 6, 0, y)
+    espHdr.Text = "📊 Inventory Value (ESP)"; espHdr.TextColor3 = C.text
+    espHdr.Font = Enum.Font.GothamBold; espHdr.TextSize = 10
+    espHdr.TextXAlignment = Enum.TextXAlignment.Left; espHdr.BackgroundTransparency = 1; espHdr.Parent = afkScroll
+    y += 18
+
+    -- ESP Status
+    local espStatusText = Instance.new("TextLabel")
+    espStatusText.Size = UDim2.new(1, -12, 0, 14); espStatusText.Position = UDim2.new(0, 6, 0, y)
+    espStatusText.Text = "Status: ⏹️ OFF"
+    espStatusText.TextColor3 = C.red
+    espStatusText.Font = Enum.Font.GothamSemibold; espStatusText.TextSize = 9
+    espStatusText.TextXAlignment = Enum.TextXAlignment.Left; espStatusText.BackgroundTransparency = 1; espStatusText.Parent = afkScroll
+    y += 18
+
+    -- ESP Info
+    local espInfoText = Instance.new("TextLabel")
+    espInfoText.Size = UDim2.new(1, -12, 0, 24); espInfoText.Position = UDim2.new(0, 6, 0, y)
+    espInfoText.Text = "📦 Tampil total nilai fruit di backpack\n📍 Posisi di atas FriendBoost"
+    espInfoText.TextColor3 = C.textDim; espInfoText.Font = Enum.Font.Gotham; espInfoText.TextSize = 8
+    espInfoText.TextXAlignment = Enum.TextXAlignment.Left; espInfoText.BackgroundTransparency = 1
+    espInfoText.TextWrapped = true; espInfoText.Parent = afkScroll
+    y += 30
+
+    -- ESP Toggle
+    if config.isRunningEsp == nil then config.isRunningEsp = false end
+    local isEspRunning = config.isRunningEsp
+
+    local espToggleBtn = Instance.new("TextButton")
+    espToggleBtn.Size = UDim2.new(1, -12, 0, 28); espToggleBtn.Position = UDim2.new(0, 6, 0, y)
+    espToggleBtn.Text = isEspRunning and "⏹ STOP ESP" or "▶ START ESP"
+    espToggleBtn.TextColor3 = C.text; espToggleBtn.Font = Enum.Font.GothamBold; espToggleBtn.TextSize = 10
+    espToggleBtn.BackgroundColor3 = isEspRunning and C.red or Color3.fromRGB(0, 140, 200)
+    espToggleBtn.BorderSizePixel = 0; espToggleBtn.AutoButtonColor = false; espToggleBtn.Parent = afkScroll
+    Instance.new("UICorner", espToggleBtn).CornerRadius = UDim.new(0, 5)
+
+    -- Update CanvasSize
+    afkScroll.CanvasSize = UDim2.new(0, 0, 0, y + 40)
+    
+    function updateAfkUI(secondsLeft)
+        if isAfkRunning then
+            afkStatusText.Text = "🟢 ANTI AFK ON"; afkStatusText.TextColor3 = C.green
+            afkToggleBtn.Text = "⏹ STOP"; afkToggleBtn.BackgroundColor3 = C.red
+            if secondsLeft then
+                local m = math.floor(secondsLeft/60); local s = secondsLeft%60
+                afkCountdownText.Text = string.format("⏳ Next: %02d:%02d", m, s)
+            end
+        else
+            afkStatusText.Text = "⏹️ OFF"; afkStatusText.TextColor3 = C.red
+            afkToggleBtn.Text = "▶ START"; afkToggleBtn.BackgroundColor3 = C.green
+            afkCountdownText.Text = ""
+        end
+    end
+
+    afkToggleBtn.MouseButton1Click:Connect(function()
+        if isAfkRunning then stopAfk() else startAfk() end; updateAfkUI()
+    end)
+
+    updateAfkUI()
+
+    -- Auto-start dari config
+    if config.isRunningAfk then
+        task.delay(2, function() isAfkRunning=true; task.spawn(antiAfkLoop); updateAfkUI() end)
+    end
+
+    -- ==================================================================
+    -- ESP FUNCTIONS
+    -- ==================================================================
+    local espFrame, espLabel = nil, nil
+    local espUpdater = nil
+
+    local function createEspUI()
+        if espFrame and espFrame.Parent then return espFrame, espLabel end
+    
+        local hud = playerGui:FindFirstChild("HUD")
+        if not hud then return nil, nil end
+        local currencies = hud:FindFirstChild("Currencies")
+        if not currencies then return nil, nil end
+        local friendBoost = currencies:FindFirstChild("FriendBoost")
+        if not friendBoost then return nil, nil end
+        local coinsCounter = currencies:FindFirstChild("CoinsCounter")
+        if not coinsCounter then return nil, nil end
+    
+        -- Clone CoinsCounter
+        espFrame = coinsCounter:Clone()
+        espFrame.Name = "TotalFruitValue"
+    
+        -- Cari TextLabel
+        for _, child in espFrame:GetDescendants() do
+            if child:IsA("TextLabel") then
+                espLabel = child
+                break
+            end
+        end
+    
+        if not espLabel then
+            espFrame:Destroy(); espFrame = nil
+            return nil, nil
+        end
+    
+        -- Hapus FriendButton kalau ada
+        local fb = espFrame:FindFirstChild("FriendButton")
+        if fb then fb:Destroy() end
+    
+        espLabel.Text = "Inventory: Calculating..."
+        espLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+    
+        -- Posisi di atas FriendBoost
+        espFrame.Position = UDim2.new(
+            friendBoost.Position.X.Scale,
+            friendBoost.Position.X.Offset,
+            friendBoost.Position.Y.Scale,
+            friendBoost.Position.Y.Offset - espFrame.Size.Y.Offset - 5
+        )
+    
+        espFrame.Parent = currencies
+        return espFrame, espLabel
+    end
+
+    local function getTotalFruitValue()
+        local total = 0
+        local bp = player:FindFirstChild("Backpack")
+        if not bp then return 0 end
+    
+        for _, item in ipairs(bp:GetChildren()) do
+            if item:IsA("Configuration") then
+                local fruitName = item:GetAttribute("FruitName")
+                if fruitName then
+                    local sizeMultiplier = item:GetAttribute("SizeMultiplier") or 1
+                    local mutation = item:GetAttribute("Mutation") or ""
+                    -- Simple value calculation
+                    total = total + math.floor(sizeMultiplier * 1000)
+                end
+            end
+        end
+        return total
+    end
+
+    local function formatEspValue(v)
+        if v >= 1e9 then return string.format("%.1fB", v/1e9)
+        elseif v >= 1e6 then return string.format("%.1fM", v/1e6)
+        elseif v >= 1e3 then return string.format("%.1fK", v/1e3)
+        else return tostring(v) end
+    end
+
+    local function startEsp()
+        if isEspRunning then return end
+    
+        -- Buat UI
+        local frame, label = createEspUI()
+        if not frame then
+            espStatusText.Text = "❌ Gagal buat ESP UI!"
+            return
+        end
+        espFrame, espLabel = frame, label
+    
+        isEspRunning = true
+        config.isRunningEsp = true
+        saveConfig()
+    
+        -- Update loop
+        espUpdater = task.spawn(function()
+            while isEspRunning and espFrame and espFrame.Parent do
+                pcall(function()
+                    local total = getTotalFruitValue()
+                    espLabel.Text = "Inventory: " .. formatEspValue(total)
+                end)
+                task.wait(1)
+            end
+        end)
+    
+        updateEspUI()
+    end
+
+    local function stopEsp()
+        if not isEspRunning then return end
+    
+        isEspRunning = false
+        config.isRunningEsp = false
+        saveConfig()
+    
+        if espUpdater then task.cancel(espUpdater); espUpdater = nil end
+        if espFrame and espFrame.Parent then espFrame:Destroy() end
+        espFrame, espLabel = nil, nil
+    
+        updateEspUI()
+    end
+
+    function updateEspUI()
+        if isEspRunning then
+            espStatusText.Text = "🟢 ESP ON"
+            espStatusText.TextColor3 = C.green
+            espToggleBtn.Text = "⏹ STOP ESP"
+            espToggleBtn.BackgroundColor3 = C.red
+        else
+            espStatusText.Text = "⏹️ OFF"
+            espStatusText.TextColor3 = C.red
+            espToggleBtn.Text = "▶ START ESP"
+            espToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 200)
+        end
+    end
+
+    espToggleBtn.MouseButton1Click:Connect(function()
+        if isEspRunning then stopEsp() else startEsp() end
+        updateEspUI()
+    end)
+
+    updateEspUI()
+
+    -- Auto-start ESP
+    if config.isRunningEsp then
+        task.delay(3, function() startEsp() end)
+    end
+    
     -- ==================================================================
     -- TAB 1: AUTO BUY
     -- ==================================================================
