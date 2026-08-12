@@ -1,5 +1,5 @@
 -- ──────────────────────────────────────────────────────────────────────
--- AONEHUB - FULL SCRIPT (ALL 5 TABS - WITH MAIL CONFIG SAVE)
+-- AONEHUB - FULL SCRIPT (ALL 5 TABS - FINAL)
 -- ──────────────────────────────────────────────────────────────────────
 
 local function main()
@@ -28,34 +28,18 @@ local function main()
         isRunningBuy = false, isRunningSell = false,
         selectedSellFruits = {}, sellTargets = {},
         mailFruitUsers = {},
-        mailTargetUsername = "",
-        mailSelectedItems = {},
-        isAutoMailRunning = false,
-        isAutoClaimRunning = false,
     }
 
     local function loadConfig()
         local s, d = pcall(readfile, SAVE_FILE)
-        if s and d then
-            local s2, loaded = pcall(HttpService.JSONDecode, HttpService, d)
-            if s2 and loaded then
-                for k, v in pairs(loaded) do config[k] = v end
-                if config.mailTargetUsername == nil then config.mailTargetUsername = "" end
-                if config.mailSelectedItems == nil then config.mailSelectedItems = {} end
-                if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end
-                if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end
-                print("[AoneHub] 📂 Config loaded")
-                return true
-            end
-        end
-        return false
+        if s and d then local s2, loaded = pcall(HttpService.JSONDecode, HttpService, d)
+            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; return true end
+        end; return false
     end
-
     local function saveConfig()
         local s, json = pcall(HttpService.JSONEncode, HttpService, config)
         if s then pcall(writefile, SAVE_FILE, json) end
     end
-
     loadConfig()
 
     local function safeRequire(path)
@@ -241,12 +225,29 @@ local function main()
         end); return a
     end
     local function getItemPrice(itemName, elements)
-        local el = elements[itemName]; if not el then return nil end; local t = ""; pcall(function() t=el.costText.Text end)
-        t = t:gsub("¢", ""):gsub("%s", "")
-        if t:upper():find("NOSTOCK") or t:upper():find("SOLD") or t=="" then return nil end
-        local n = string.match(t,"([%d,.]+)"); if not n then return nil end
-        n=n:gsub(",",""); local p=tonumber(n); if not p then return nil end; local l=t:lower()
-        if l:find("k")then p=p*1000 elseif l:find("m")then p=p*1000000 elseif l:find("b")then p=p*1000000000 end; return p
+        local el = elements[itemName]
+        if not el then return nil end
+    
+        local txt = ""
+        pcall(function() txt = el.costText.Text end)
+    
+        -- Hapus simbol ¢
+        txt = txt:gsub("¢", "")
+    
+        if txt:upper():find("NO STOCK") or txt:upper():find("SOLD") or txt == "" then return nil end
+    
+        local num = string.match(txt, "([%d,.]+)")
+        if not num then return nil end
+        num = num:gsub(",", "")
+        local price = tonumber(num)
+        if not price then return nil end
+    
+        local lower = txt:lower()
+        if lower:find("k") then price = price * 1000
+        elseif lower:find("m") then price = price * 1000000
+        elseif lower:find("b") then price = price * 1000000000 end
+    
+        return price
     end
     local function buyItem(itemName, opcode)
         if not getRemote() then return false end
@@ -254,25 +255,99 @@ local function main()
         buyStats.total=buyStats.total+1; if s then buyStats.success=buyStats.success+1; return true else buyStats.failed=buyStats.failed+1; return false end
     end
     local function cacheBuyShop()
-        pcall(function() local ss=playerGui:FindFirstChild("SeedShop"); if ss then local f=ss:FindFirstChild("Frame"); if f then local ns=f:FindFirstChild("NormalShop")
-        if ns then for _, ic in ipairs(ns:GetChildren()) do if ic:IsA("Frame") then local mf=ic:FindFirstChild("Main_Frame")or ic:FindFirstChild("MainFrame")
-        if mf then local ct=mf:FindFirstChild("Cost_Text")or mf:FindFirstChild("CostText"); if ct then shopElementsSeed[ic.Name]={container=ic,costText=ct} end end end end end end end end)
-        pcall(function() local gs=playerGui:FindFirstChild("GearShop"); if gs then local f=gs:FindFirstChild("Frame"); if f then local sf=f:FindFirstChild("ScrollingFrame")
-        if sf then for _, ic in ipairs(sf:GetChildren()) do if ic:IsA("Frame") and ic.Name~="UIListLayout" and ic.Name~="Padding" and ic.Name~="ItemTemplate" and ic.Name~="Robux_Shelf" and ic.Name~="Sheckles_Shelf" and ic.Name~="GenerateItems" and ic.Name~="Item_Size" then local mf=ic:FindFirstChild("Main_Frame")or ic:FindFirstChild("MainFrame")
-        if mf then local ct=mf:FindFirstChild("Cost_Text")or mf:FindFirstChild("CostText"); if ct then shopElementsGear[ic.Name]={container=ic,costText=ct} end end end end end end end end end)
-        pcall(function() local cs=playerGui:FindFirstChild("CrateShop"); if cs then local f=cs:FindFirstChild("Frame"); if f then local sf=f:FindFirstChild("ScrollingFrame")
-        if sf then for _, ic in ipairs(sf:GetChildren()) do if ic:IsA("Frame") and ic.Name~="UIListLayout" and ic.Name~="Padding" and ic.Name~="ItemTemplate" and ic.Name~="Robux_Shelf" and ic.Name~="Sheckles_Shelf" and ic.Name~="GenerateItems" and ic.Name~="Item_Size" then local mf=ic:FindFirstChild("Main_Frame")or ic:FindFirstChild("MainFrame")
-        if mf then local ct=mf:FindFirstChild("Cost_Text")or mf:FindFirstChild("CostText"); if ct then shopElementsProp[ic.Name]={container=ic,costText=ct} end end end end end end end end end)
+        -- Seeds (NormalShop > NamaItem > Main_Frame > Cost_Text)
+        pcall(function()
+            local ss = playerGui:FindFirstChild("SeedShop")
+            if ss then local f = ss:FindFirstChild("Frame")
+                if f then local ns = f:FindFirstChild("NormalShop")
+                    if ns then for _, ic in ipairs(ns:GetChildren()) do
+                        if ic:IsA("Frame") then
+                            local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
+                            if mf then local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
+                                if ct then shopElementsSeed[ic.Name] = {container = ic, costText = ct} end
+                            end
+                        end
+                    end end
+                end
+            end
+        end)
+    
+        -- Gears (ScrollingFrame > NamaItem > Main_Frame > Cost_Text) — SAMA PERSIS
+        pcall(function()
+            local gs = playerGui:FindFirstChild("GearShop")
+            if gs then local f = gs:FindFirstChild("Frame")
+                if f then local sf = f:FindFirstChild("ScrollingFrame")
+                    if sf then for _, ic in ipairs(sf:GetChildren()) do
+                        -- Skip UIListLayout, Padding, ItemTemplate, GenerateItems, Robux_Shelf, Sheckles_Shelf
+                        if ic:IsA("Frame") and ic.Name ~= "UIListLayout" 
+                            and ic.Name ~= "Padding" and ic.Name ~= "ItemTemplate"
+                            and ic.Name ~= "Robux_Shelf" and ic.Name ~= "Sheckles_Shelf"
+                            and ic.Name ~= "GenerateItems" and ic.Name ~= "Item_Size" then
+                        
+                            local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
+                            if mf then local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
+                                if ct then shopElementsGear[ic.Name] = {container = ic, costText = ct} end
+                            end
+                        end
+                    end end
+                end
+            end
+        end)
+    
+        -- Props (ScrollingFrame > NamaItem > Main_Frame > Cost_Text) — SAMA PERSIS
+        pcall(function()
+            local cs = playerGui:FindFirstChild("CrateShop")
+            if cs then local f = cs:FindFirstChild("Frame")
+                if f then local sf = f:FindFirstChild("ScrollingFrame")
+                    if sf then for _, ic in ipairs(sf:GetChildren()) do
+                        if ic:IsA("Frame") and ic.Name ~= "UIListLayout" 
+                            and ic.Name ~= "Padding" and ic.Name ~= "ItemTemplate"
+                            and ic.Name ~= "Robux_Shelf" and ic.Name ~= "Sheckles_Shelf"
+                            and ic.Name ~= "GenerateItems" and ic.Name ~= "Item_Size" then
+                        
+                            local mf = ic:FindFirstChild("Main_Frame") or ic:FindFirstChild("MainFrame")
+                            if mf then local ct = mf:FindFirstChild("Cost_Text") or mf:FindFirstChild("CostText")
+                                if ct then shopElementsProp[ic.Name] = {container = ic, costText = ct} end
+                            end
+                        end
+                    end end
+                end
+            end
+        end)
     end
+    
     local function isAvailable(itemName, elements)
-        local el=elements[itemName]; if not el then return false end
-        if el.container:IsA("GuiObject") then if not el.container.Visible then return false end end
-        local t=""; pcall(function() t=el.costText.Text end); t=t:gsub("¢",""):gsub("%s","")
-        if t:upper():find("NOSTOCK") or t:upper():find("SOLD") or t=="" then return false end
-        local stockText = el.container:FindFirstChild("Stock_Text") or (el.container:FindFirstChild("Main_Frame") and el.container.Main_Frame:FindFirstChild("Stock_Text"))
-        if stockText then local st=""; pcall(function() st=stockText.Text end); local num=string.match(st,"(%d+)"); if num and tonumber(num)==0 then return false end end
+        local el = elements[itemName]
+        if not el then return false end
+    
+        -- Cek container visible
+        if el.container:IsA("GuiObject") then
+            if not el.container.Visible then return false end
+        end
+    
+        -- Cek Cost_Text
+        local txt = ""
+        pcall(function() txt = el.costText.Text end)
+        txt = txt:gsub("¢", "")  -- Hapus simbol ¢
+        if txt:upper():find("NO STOCK") or txt:upper():find("SOLD") or txt == "" then 
+            return false 
+        end
+    
+        -- Cek Stock_Text (kalau ada di Main_Frame)
+        local mf = el.container:FindFirstChild("Main_Frame") or el.container:FindFirstChild("MainFrame")
+        if mf then
+            local stockText = mf:FindFirstChild("Stock_Text")
+            if stockText then
+                local st = ""
+                pcall(function() st = stockText.Text end)
+                local num = string.match(st, "(%d+)")
+                if num and tonumber(num) == 0 then return false end
+            end
+        end
+    
         return true
     end
+
     local function buyAll()
         if isBuying then return end; isBuying=true
         while isRunningBuy do local any=false; local bal=getSheckles()
@@ -359,11 +434,18 @@ local function main()
                 local ic=Instance.new("TextLabel"); ic.Size=UDim2.new(0,10,1,0); ic.Position=UDim2.new(0,13,0,0); ic.Text=ia and "🟢" or "🔒"; ic.TextSize=5; ic.BackgroundTransparency=1; ic.Parent=r
                 local lb=Instance.new("TextLabel"); lb.Size=UDim2.new(1,-26,1,0); lb.Position=UDim2.new(0,24,0,0); lb.Font=Enum.Font.Gotham; lb.TextSize=7; lb.TextXAlignment=Enum.TextXAlignment.Left; lb.BackgroundTransparency=1; lb.Parent=r
                 if ia then local ps=p and " ("..(p>=1000 and string.format("%.1fk",p/1000) or tostring(p))..")" or ""
-                    if st=="stock" then lb.Text=n..ps; lb.TextColor3=Color3.fromRGB(100,255,100)
-                    elseif st=="expensive" then lb.Text=n..ps.." 💸"; lb.TextColor3=C.yellow
-                    elseif st=="nostock" then lb.Text=n..ps; lb.TextColor3=C.red
-                    else lb.Text=n..ps; lb.TextColor3=is and Color3.fromRGB(100,255,100) or C.textDim end
-                else lb.Text=n.." (off)"; lb.TextColor3=Color3.fromRGB(120,120,130) end
+                    if st=="stock" then 
+                        lb.Text=n..ps; lb.TextColor3=Color3.fromRGB(100,255,100)       -- Hijau = available
+                    elseif st=="expensive" then 
+                        lb.Text=n..ps.." 💸"; lb.TextColor3=C.yellow                     -- Kuning = gak cukup uang
+                    elseif st=="nostock" then 
+                        lb.Text=n..ps; lb.TextColor3=Color3.fromRGB(255,255,255)        -- PUTIH = no stock
+                    else 
+                        lb.Text=n..ps; lb.TextColor3=is and Color3.fromRGB(100,255,100) or C.textDim 
+                    end
+                else 
+                    lb.Text=n.." (off)"; lb.TextColor3=Color3.fromRGB(120,120,130)      -- Abu-abu = unavailable
+                end
                 local function ti() if not ia then return end; selItems[n]=not(selItems[n] or false); saveConfig(); rb() end
                 cb.MouseButton1Click:Connect(ti); r.InputBegan:Connect(function(inp) if inp.UserInputType==Enum.UserInputType.MouseButton1 then ti() end end); ir[n]={frame=r,lbl=lb}
             end
@@ -415,7 +497,7 @@ local function main()
     local function startSell() if isRunningSell then return end; if not net or not net.NPCS or not net.NPCS.SellAll then return end; isRunningSell=true; config.isRunningSell=true; saveConfig(); nextSellScanTime=os.time()+getSecUntilSell(); task.spawn(function() updateMults(); checkAndSell(); updateSellUI() end); task.spawn(sellLoop); updateSellUI() end
     local function stopSell() isRunningSell=false; config.isRunningSell=false; saveConfig(); updateSellUI() end
 
-    -- Sell UI (sama seperti sebelumnya)
+    -- Sell UI
     local sellScroll=Instance.new("ScrollingFrame"); sellScroll.Size=UDim2.new(1,0,1,0); sellScroll.CanvasSize=UDim2.new(0,0,0,900); sellScroll.ScrollBarThickness=3; sellScroll.BackgroundTransparency=1; sellScroll.BorderSizePixel=0; sellScroll.Parent=parentSell
     local sellLayout=Instance.new("UIListLayout"); sellLayout.Padding=UDim.new(0,4); sellLayout.HorizontalAlignment=Enum.HorizontalAlignment.Center; sellLayout.SortOrder=Enum.SortOrder.LayoutOrder; sellLayout.Parent=sellScroll
     local sellHdr=Instance.new("TextLabel"); sellHdr.Size=UDim2.new(1,-12,0,16); sellHdr.LayoutOrder=1; sellHdr.Text="💰  Auto Sell"; sellHdr.TextColor3=C.text; sellHdr.Font=Enum.Font.GothamBold; sellHdr.TextSize=10; sellHdr.TextXAlignment=Enum.TextXAlignment.Left; sellHdr.BackgroundTransparency=1; sellHdr.Parent=sellScroll
@@ -463,7 +545,7 @@ local function main()
     parentSell.Destroying:Connect(function() stopSell(); saveConfig() end)
 
     -- ==================================================================
-    -- TAB 3: AUTO MAIL (DENGAN CONFIG SAVE)
+    -- TAB 3: AUTO MAIL
     -- ==================================================================
     local parentMail = tabFrames["AutoMail"]
     local SharedModules = ReplicatedStorage.SharedModules
@@ -477,20 +559,20 @@ local function main()
     do local mod=safeRequire(SharedModules.EggData); if mod and mod.Data then for _,d in ipairs(mod.Data) do if d.EggName then table.insert(ALL_DATA.Eggs.items,d.EggName) end end end end
     do local mod=safeRequire(SharedModules.PropData); if mod and mod.Data then for _,d in ipairs(mod.Data) do if d.PropName then table.insert(ALL_DATA.Props.items,d.PropName) end end end end
     do local pm=SharedModules:FindFirstChild("PetModules"); local pn={}; if pm then for _,c in ipairs(pm:GetChildren()) do if c:IsA("ModuleScript") then table.insert(pn,c.Name) end end end; local bp=getBackpackPets(); local bm={}; for _,p in ipairs(bp) do bm[p.name]=p end; local it={}; for _,n in ipairs(pn) do local d=bm[n]; table.insert(it,{name=n,count=d and d.count or 0,id=d and d.id or nil}) end; ALL_DATA.Pets.items=it end
-    local selectedCat="Seeds"; local selMailItems=config.mailSelectedItems or {}; local searchMailText=""; local catNames={"Seeds","Sprinklers","WateringCans","Pets","Crates","Eggs","Props"}; local isAutoRunning=config.isAutoMailRunning or false; local isClaimRunning=config.isAutoClaimRunning or false; local autoScanMin,autoScanMax=60,120; local lastAutoScan,currentScanInterval=0,60; local lastClaimScan,currentClaimInterval=0,30; local claimScanMin,claimScanMax=30,60; local cachedUserId,cachedUsername=nil,nil
+    local selectedCat="Seeds"; local selMailItems={}; local searchMailText=""; local catNames={"Seeds","Sprinklers","WateringCans","Pets","Crates","Eggs","Props"}; local isAutoRunning=false; local isClaimRunning=false; local autoScanMin,autoScanMax=60,120; local lastAutoScan,currentScanInterval=0,60; local lastClaimScan,currentClaimInterval=0,30; local claimScanMin,claimScanMax=30,60; local cachedUserId,cachedUsername=nil,nil
     local function countMailSelected() local c=0; for _,s in pairs(selMailItems) do if s.selected then c=c+(s.isPet and math.min(s.count,20)or 1) end end; return c end
     local function claimAllGifts() if not isClaimRunning then return false,"Claim OFF" end; local s,inbox=pcall(function() return net.Mailbox.OpenInbox:Fire() end); if not s or type(inbox)~="table" then return false,"Inbox kosong" end; local Worlds=require(ReplicatedStorage.SharedModules.Worlds); local cw=Worlds.CurrentId; local claimed,skipped=0,0; for id,gift in pairs(inbox) do if not isClaimRunning then break end; local gw=gift.FromWorld or"Main"; if gw==cw then pcall(function() net.Mailbox.Claim:Fire(id) end); claimed=claimed+1 else skipped=skipped+1 end; if claimed>0 then task.wait(math.random(10,30)/10) end end; if claimed==0 and skipped==0 then return false,"Tidak ada gift" end; local msg="Claimed "..claimed; if skipped>0 then msg=msg.." | Skip "..skipped end; return true,msg end
 
     local mailScroll=Instance.new("ScrollingFrame"); mailScroll.Size=UDim2.new(1,0,1,0); mailScroll.CanvasSize=UDim2.new(0,0,0,800); mailScroll.ScrollBarThickness=3; mailScroll.BackgroundTransparency=1; mailScroll.BorderSizePixel=0; mailScroll.Parent=parentMail
     local mailLayout=Instance.new("UIListLayout"); mailLayout.Padding=UDim.new(0,4); mailLayout.HorizontalAlignment=Enum.HorizontalAlignment.Center; mailLayout.SortOrder=Enum.SortOrder.LayoutOrder; mailLayout.Parent=mailScroll
     local mailHdr=Instance.new("TextLabel"); mailHdr.Size=UDim2.new(1,-12,0,16); mailHdr.LayoutOrder=1; mailHdr.Text="📦  Auto Mail & Claim"; mailHdr.TextColor3=C.text; mailHdr.Font=Enum.Font.GothamBold; mailHdr.TextSize=10; mailHdr.TextXAlignment=Enum.TextXAlignment.Left; mailHdr.BackgroundTransparency=1; mailHdr.Parent=mailScroll
-    local userBox=Instance.new("TextBox"); userBox.Size=UDim2.new(1,-12,0,22); userBox.LayoutOrder=2; userBox.BackgroundColor3=C.input; userBox.TextColor3=C.text; userBox.PlaceholderText="Username target..."; userBox.PlaceholderColor3=Color3.fromRGB(100,100,110); userBox.Font=Enum.Font.Gotham; userBox.TextSize=10; userBox.Text=config.mailTargetUsername or ""; userBox.BorderSizePixel=0; userBox.Parent=mailScroll; Instance.new("UICorner",userBox).CornerRadius=UDim.new(0,4)
+    local userBox=Instance.new("TextBox"); userBox.Size=UDim2.new(1,-12,0,22); userBox.LayoutOrder=2; userBox.BackgroundColor3=C.input; userBox.TextColor3=C.text; userBox.PlaceholderText="Username target..."; userBox.PlaceholderColor3=Color3.fromRGB(100,100,110); userBox.Font=Enum.Font.Gotham; userBox.TextSize=10; userBox.Text=""; userBox.BorderSizePixel=0; userBox.Parent=mailScroll; Instance.new("UICorner",userBox).CornerRadius=UDim.new(0,4)
     local playerInfoFrame=Instance.new("Frame"); playerInfoFrame.Size=UDim2.new(1,-12,0,30); playerInfoFrame.LayoutOrder=3; playerInfoFrame.BackgroundColor3=Color3.fromRGB(30,30,36); playerInfoFrame.BorderSizePixel=0; playerInfoFrame.Visible=false; playerInfoFrame.Parent=mailScroll; Instance.new("UICorner",playerInfoFrame).CornerRadius=UDim.new(0,4)
     local playerImage=Instance.new("ImageLabel"); playerImage.Size=UDim2.new(0,22,0,22); playerImage.Position=UDim2.new(0,4,0.5,-11); playerImage.BackgroundColor3=Color3.fromRGB(40,40,45); playerImage.Image="rbxasset://textures/ui/GuiImagePlaceholder.png"; playerImage.Parent=playerInfoFrame; Instance.new("UICorner",playerImage).CornerRadius=UDim.new(1,0)
     local playerDisplayLabel=Instance.new("TextLabel"); playerDisplayLabel.Size=UDim2.new(1,-30,0,14); playerDisplayLabel.Position=UDim2.new(0,30,0,0); playerDisplayLabel.BackgroundTransparency=1; playerDisplayLabel.Text=""; playerDisplayLabel.TextColor3=C.text; playerDisplayLabel.Font=Enum.Font.GothamBold; playerDisplayLabel.TextSize=10; playerDisplayLabel.TextXAlignment=Enum.TextXAlignment.Left; playerDisplayLabel.Parent=playerInfoFrame
     local playerNameLabel=Instance.new("TextLabel"); playerNameLabel.Size=UDim2.new(1,-30,0,10); playerNameLabel.Position=UDim2.new(0,30,0,14); playerNameLabel.BackgroundTransparency=1; playerNameLabel.Text=""; playerNameLabel.TextColor3=Color3.fromRGB(150,150,160); playerNameLabel.Font=Enum.Font.Gotham; playerNameLabel.TextSize=8; playerNameLabel.TextXAlignment=Enum.TextXAlignment.Left; playerNameLabel.Parent=playerInfoFrame
     local function updatePlayerInfo(un) if not un or un=="" then playerInfoFrame.Visible=false; cachedUserId=nil; cachedUsername=nil; return end; playerInfoFrame.Visible=true; playerNameLabel.Text="@"..un; playerDisplayLabel.Text="Loading..."; playerImage.Image="rbxasset://textures/ui/GuiImagePlaceholder.png"; task.spawn(function() local uid,dn=net.Mailbox.LookupPlayer:Fire(un); if uid and uid>0 then cachedUserId=uid; cachedUsername=un; if MailboxItemCatalog then local hs=MailboxItemCatalog.GetCachedHeadshot(uid); if hs and hs~="" then playerImage.Image=hs else task.spawn(function() local img=MailboxItemCatalog.GetHeadshot(uid); if img~="" then playerImage.Image=img end end) end end; playerDisplayLabel.Text=(dn and dn~="" and dn or un) else cachedUserId=nil; cachedUsername=nil; playerDisplayLabel.Text="User tidak ditemukan"; playerNameLabel.Text="" end end) end
-    userBox.FocusLost:Connect(function() if userBox.Text~="" then config.mailTargetUsername=userBox.Text; saveConfig(); updatePlayerInfo(userBox.Text) end end)
+    userBox.FocusLost:Connect(function() if userBox.Text~="" then updatePlayerInfo(userBox.Text) end end)
     local selMailLabel=Instance.new("TextLabel"); selMailLabel.Size=UDim2.new(1,-12,0,12); selMailLabel.LayoutOrder=4; selMailLabel.BackgroundTransparency=1; selMailLabel.Text="📋 Terpilih: 0/20"; selMailLabel.TextColor3=C.yellow; selMailLabel.Font=Enum.Font.GothamBold; selMailLabel.TextSize=9; selMailLabel.TextXAlignment=Enum.TextXAlignment.Left; selMailLabel.Parent=mailScroll
     local searchBox=Instance.new("TextBox"); searchBox.Size=UDim2.new(1,-12,0,20); searchBox.LayoutOrder=5; searchBox.BackgroundColor3=C.input; searchBox.TextColor3=C.text; searchBox.PlaceholderText="🔍 Cari item..."; searchBox.PlaceholderColor3=Color3.fromRGB(100,100,110); searchBox.Font=Enum.Font.Gotham; searchBox.TextSize=9; searchBox.Text=""; searchBox.ClearTextOnFocus=false; searchBox.BorderSizePixel=0; searchBox.Parent=mailScroll; Instance.new("UICorner",searchBox).CornerRadius=UDim.new(0,4)
     searchBox:GetPropertyChangedSignal("Text"):Connect(function() searchMailText=searchBox.Text:lower(); refreshMailList() end)
@@ -501,11 +583,11 @@ local function main()
     local mailItemList=Instance.new("ScrollingFrame"); mailItemList.Size=UDim2.new(1,-12,0,120); mailItemList.LayoutOrder=7; mailItemList.BackgroundColor3=Color3.fromRGB(24,24,30); mailItemList.BorderSizePixel=0; mailItemList.ScrollBarThickness=3; mailItemList.Parent=mailScroll; Instance.new("UICorner",mailItemList).CornerRadius=UDim.new(0,4)
     local mailItemLayout=Instance.new("UIListLayout"); mailItemLayout.Padding=UDim.new(0,2); mailItemLayout.HorizontalAlignment=Enum.HorizontalAlignment.Center; mailItemLayout.Parent=mailItemList
     local mailStatusText=Instance.new("TextLabel"); mailStatusText.Size=UDim2.new(1,-12,0,12); mailStatusText.LayoutOrder=8; mailStatusText.BackgroundTransparency=1; mailStatusText.Text="✅ SIAP"; mailStatusText.TextColor3=C.green; mailStatusText.Font=Enum.Font.GothamBold; mailStatusText.TextSize=9; mailStatusText.TextXAlignment=Enum.TextXAlignment.Left; mailStatusText.Parent=mailScroll
-    local autoStatusLabel=Instance.new("TextLabel"); autoStatusLabel.Size=UDim2.new(1,-12,0,10); autoStatusLabel.LayoutOrder=9; autoStatusLabel.BackgroundTransparency=1; autoStatusLabel.Text=isAutoRunning and "🔄 Auto Mail: ON" or "🔄 Auto Mail: OFF"; autoStatusLabel.TextColor3=isAutoRunning and C.green or Color3.fromRGB(150,150,150); autoStatusLabel.Font=Enum.Font.Gotham; autoStatusLabel.TextSize=8; autoStatusLabel.TextXAlignment=Enum.TextXAlignment.Left; autoStatusLabel.Parent=mailScroll
-    local claimStatusLabel=Instance.new("TextLabel"); claimStatusLabel.Size=UDim2.new(1,-12,0,10); claimStatusLabel.LayoutOrder=10; claimStatusLabel.BackgroundTransparency=1; claimStatusLabel.Text=isClaimRunning and "📬 Auto Claim: ON" or "📬 Auto Claim: OFF"; claimStatusLabel.TextColor3=isClaimRunning and Color3.fromRGB(200,100,255) or Color3.fromRGB(150,150,150); claimStatusLabel.Font=Enum.Font.Gotham; claimStatusLabel.TextSize=8; claimStatusLabel.TextXAlignment=Enum.TextXAlignment.Left; claimStatusLabel.Parent=mailScroll
+    local autoStatusLabel=Instance.new("TextLabel"); autoStatusLabel.Size=UDim2.new(1,-12,0,10); autoStatusLabel.LayoutOrder=9; autoStatusLabel.BackgroundTransparency=1; autoStatusLabel.Text="🔄 Auto Mail: OFF"; autoStatusLabel.TextColor3=Color3.fromRGB(150,150,150); autoStatusLabel.Font=Enum.Font.Gotham; autoStatusLabel.TextSize=8; autoStatusLabel.TextXAlignment=Enum.TextXAlignment.Left; autoStatusLabel.Parent=mailScroll
+    local claimStatusLabel=Instance.new("TextLabel"); claimStatusLabel.Size=UDim2.new(1,-12,0,10); claimStatusLabel.LayoutOrder=10; claimStatusLabel.BackgroundTransparency=1; claimStatusLabel.Text="📬 Auto Claim: OFF"; claimStatusLabel.TextColor3=Color3.fromRGB(150,150,150); claimStatusLabel.Font=Enum.Font.Gotham; claimStatusLabel.TextSize=8; claimStatusLabel.TextXAlignment=Enum.TextXAlignment.Left; claimStatusLabel.Parent=mailScroll
     local sendBtn=Instance.new("TextButton"); sendBtn.Size=UDim2.new(1,-12,0,24); sendBtn.LayoutOrder=11; sendBtn.BackgroundColor3=Color3.fromRGB(0,160,100); sendBtn.Text="📤 KIRIM SEKARANG"; sendBtn.TextColor3=C.text; sendBtn.Font=Enum.Font.GothamBold; sendBtn.TextSize=10; sendBtn.BorderSizePixel=0; sendBtn.AutoButtonColor=false; sendBtn.Parent=mailScroll; Instance.new("UICorner",sendBtn).CornerRadius=UDim.new(0,4)
-    local autoBtn=Instance.new("TextButton"); autoBtn.Size=UDim2.new(1,-12,0,24); autoBtn.LayoutOrder=12; autoBtn.BackgroundColor3=isAutoRunning and Color3.fromRGB(180,50,50) or Color3.fromRGB(0,120,180); autoBtn.Text=isAutoRunning and "⏸ STOP AUTO MAIL" or "🔄 MULAI AUTO MAIL"; autoBtn.TextColor3=C.text; autoBtn.Font=Enum.Font.GothamBold; autoBtn.TextSize=10; autoBtn.BorderSizePixel=0; autoBtn.AutoButtonColor=false; autoBtn.Parent=mailScroll; Instance.new("UICorner",autoBtn).CornerRadius=UDim.new(0,4)
-    local claimBtn=Instance.new("TextButton"); claimBtn.Size=UDim2.new(1,-12,0,24); claimBtn.LayoutOrder=13; claimBtn.BackgroundColor3=isClaimRunning and Color3.fromRGB(180,50,120) or Color3.fromRGB(120,60,160); claimBtn.Text=isClaimRunning and "⏸ STOP AUTO CLAIM" or "📬 MULAI AUTO CLAIM"; claimBtn.TextColor3=C.text; claimBtn.Font=Enum.Font.GothamBold; claimBtn.TextSize=10; claimBtn.BorderSizePixel=0; claimBtn.AutoButtonColor=false; claimBtn.Parent=mailScroll; Instance.new("UICorner",claimBtn).CornerRadius=UDim.new(0,4)
+    local autoBtn=Instance.new("TextButton"); autoBtn.Size=UDim2.new(1,-12,0,24); autoBtn.LayoutOrder=12; autoBtn.BackgroundColor3=Color3.fromRGB(0,120,180); autoBtn.Text="🔄 MULAI AUTO MAIL"; autoBtn.TextColor3=C.text; autoBtn.Font=Enum.Font.GothamBold; autoBtn.TextSize=10; autoBtn.BorderSizePixel=0; autoBtn.AutoButtonColor=false; autoBtn.Parent=mailScroll; Instance.new("UICorner",autoBtn).CornerRadius=UDim.new(0,4)
+    local claimBtn=Instance.new("TextButton"); claimBtn.Size=UDim2.new(1,-12,0,24); claimBtn.LayoutOrder=13; claimBtn.BackgroundColor3=Color3.fromRGB(120,60,160); claimBtn.Text="📬 MULAI AUTO CLAIM"; claimBtn.TextColor3=C.text; claimBtn.Font=Enum.Font.GothamBold; claimBtn.TextSize=10; claimBtn.BorderSizePixel=0; claimBtn.AutoButtonColor=false; claimBtn.Parent=mailScroll; Instance.new("UICorner",claimBtn).CornerRadius=UDim.new(0,4)
 
     local function updateMailSelLabel() local c=countMailSelected(); selMailLabel.Text="📋 Terpilih: "..c.."/20"; selMailLabel.TextColor3=c>20 and C.red or(c>0 and C.green or C.yellow) end
     function refreshMailList()
@@ -520,84 +602,421 @@ local function main()
             local lb=Instance.new("TextLabel",fr); lb.Size=UDim2.new(1,-100,1,0); lb.Position=UDim2.new(0,22,0,0); lb.BackgroundTransparency=1; lb.Text=#name>18 and name:sub(1,16)..".." or name; lb.TextColor3=Color3.fromRGB(220,220,220); lb.Font=Enum.Font.Gotham; lb.TextSize=8; lb.TextXAlignment=Enum.TextXAlignment.Left
             local sl=Instance.new("TextLabel",fr); sl.Size=UDim2.new(0,28,1,0); sl.Position=UDim2.new(1,-68,0,0); sl.BackgroundTransparency=1; sl.Text="x"..itemCount; sl.TextColor3=itemCount>0 and Color3.fromRGB(0,255,150) or Color3.fromRGB(120,120,120); sl.Font=Enum.Font.GothamBold; sl.TextSize=7; sl.TextXAlignment=Enum.TextXAlignment.Right
             local ci=Instance.new("TextBox",fr); ci.Size=UDim2.new(0,32,0,14); ci.Position=UDim2.new(1,-36,0.5,-7); ci.BackgroundColor3=Color3.fromRGB(50,50,55); ci.TextColor3=C.text; ci.Font=Enum.Font.Gotham; ci.TextSize=7; ci.Text=tostring(sel.count); ci.BorderSizePixel=0; Instance.new("UICorner",ci).CornerRadius=UDim.new(0,2)
-            ci.FocusLost:Connect(function() local v=tonumber(ci.Text); if v and v>0 then sel.count=math.min(v,data.maxInput); ci.Text=tostring(sel.count) else ci.Text=tostring(sel.count) end; config.mailSelectedItems=selMailItems; saveConfig(); updateMailSelLabel() end)
-            local function ti() if not sel.selected then if countMailSelected()+(data.isUUID and math.min(sel.count,20)or 1)>20 then mailStatusText.Text="❌ Max 20!"; mailStatusText.TextColor3=C.red; return end end; sel.selected=not sel.selected; cb.BackgroundColor3=sel.selected and Color3.fromRGB(0,160,80) or Color3.fromRGB(55,55,60); cm.Visible=sel.selected; fr.BackgroundColor3=sel.selected and Color3.fromRGB(40,60,45) or Color3.fromRGB(38,38,44); config.mailSelectedItems=selMailItems; saveConfig(); updateMailSelLabel() end
+            ci.FocusLost:Connect(function() local v=tonumber(ci.Text); if v and v>0 then sel.count=math.min(v,data.maxInput); ci.Text=tostring(sel.count) else ci.Text=tostring(sel.count) end; updateMailSelLabel() end)
+            local function ti() if not sel.selected then if countMailSelected()+(data.isUUID and math.min(sel.count,20)or 1)>20 then mailStatusText.Text="❌ Max 20!"; mailStatusText.TextColor3=C.red; return end end; sel.selected=not sel.selected; cb.BackgroundColor3=sel.selected and Color3.fromRGB(0,160,80) or Color3.fromRGB(55,55,60); cm.Visible=sel.selected; fr.BackgroundColor3=sel.selected and Color3.fromRGB(40,60,45) or Color3.fromRGB(38,38,44); updateMailSelLabel() end
             cb.MouseButton1Click:Connect(ti)
         end; updateMailSelLabel()
     end
     local function doSend(forceSend) local un=userBox.Text; if un=="" then return false,"ISI USERNAME!" end; if countMailSelected()>20 then return false,"Max 20!" end; local uid; if cachedUsername==un and cachedUserId then uid=cachedUserId else updatePlayerInfo(un); task.wait(1); uid=cachedUserId end; if not uid or uid<=0 then return false,"User tidak ditemukan!" end; local bp=getBackpackPets(); local bm={}; for _,p in ipairs(bp) do bm[p.name]=p end; for _,item in ipairs(ALL_DATA.Pets.items) do local d=bm[item.name]; item.count=d and d.count or 0; item.id=d and d.id or nil end; local sb={}; for cat,data in pairs(ALL_DATA) do for _,id in ipairs(data.items) do local name=type(id)=="table" and(id.name or"?")or tostring(id); sb[name]=data.getStock(name) end end; local pib={}; local its={}; local ar=true; for cat,data in pairs(ALL_DATA) do for _,id in ipairs(data.items) do local name=type(id)=="table" and(id.name or"?")or tostring(id); local iid=type(id)=="table" and id.id or nil; local key=iid or name; local sel=selMailItems[key]; if sel and sel.selected then local c=sel.count; if c<=0 then c=type(id)=="table" and(id.count or 1)or data.getStock(name) end; local st=type(id)=="table" and(id.count or data.getStock(name))or data.getStock(name); if forceSend then c=math.min(c,st,data.maxInput or 9999); if c>0 then table.insert(its,{Category=cat,ItemKey=data.isUUID and(iid or name)or name,Count=c}); if data.isUUID and iid then pib[iid]=true end end else if st<c then ar=false else c=math.min(c,data.maxInput or 9999); if c>0 then table.insert(its,{Category=cat,ItemKey=data.isUUID and(iid or name)or name,Count=c}); if data.isUUID and iid then pib[iid]=true end end end end end end end; if not forceSend and not ar then return false,"Menunggu stok..." end; if #its==0 then return false,"Stok kosong!" end; if #its>20 then return false,"Max 20 jenis!" end; net.Mailbox.SendBatch:Fire(uid,its,""); task.wait(2); local ar2=false; for _,item in ipairs(its) do if not ALL_DATA[item.Category].isUUID then local as=ALL_DATA[item.Category].getStock(item.ItemKey); if as<(sb[item.ItemKey]or 0) then ar2=true; break end end end; if next(pib) then local cp=getBackpackPets(); local ci={}; for _,p in ipairs(cp) do if p.id then ci[p.id]=true end end; for pid,_ in pairs(pib) do if not ci[pid] then ar2=true; break end end end; if not ar2 then return false,"Gagal terkirim" end; return true,"TERKIRIM! "..#its.." jenis" end
     sendBtn.MouseButton1Click:Connect(function() updatePlayerInfo(userBox.Text); mailStatusText.Text="📤 Mengirim..."; mailStatusText.TextColor3=Color3.fromRGB(0,200,255); local ok,msg=doSend(true); mailStatusText.Text=(ok and"✅ "or"❌ ")..msg; mailStatusText.TextColor3=ok and C.green or C.red; if ok then task.delay(5,refreshMailList) end end)
-    autoBtn.MouseButton1Click:Connect(function() isAutoRunning=not isAutoRunning; config.isAutoMailRunning=isAutoRunning; saveConfig(); if isAutoRunning then if userBox.Text=="" then mailStatusText.Text="❌ ISI USERNAME!"; mailStatusText.TextColor3=C.red; isAutoRunning=false; config.isAutoMailRunning=false; saveConfig(); return end; updatePlayerInfo(userBox.Text); autoBtn.Text="⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(180,50,50); lastAutoScan=0; currentScanInterval=math.random(autoScanMin,autoScanMax); autoStatusLabel.Text="🔄 Auto Mail: ON (scan "..currentScanInterval.."s)"; autoStatusLabel.TextColor3=C.green else autoBtn.Text="🔄 MULAI AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(0,120,180); autoStatusLabel.Text="🔄 Auto Mail: OFF"; autoStatusLabel.TextColor3=Color3.fromRGB(150,150,150) end end)
-    claimBtn.MouseButton1Click:Connect(function() isClaimRunning=not isClaimRunning; config.isAutoClaimRunning=isClaimRunning; saveConfig(); if isClaimRunning then claimBtn.Text="⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3=Color3.fromRGB(180,50,120); lastClaimScan=0; currentClaimInterval=math.random(claimScanMin,claimScanMax); claimStatusLabel.Text="📬 Auto Claim: ON (scan "..currentClaimInterval.."s)"; claimStatusLabel.TextColor3=Color3.fromRGB(200,100,255); local ok,msg=claimAllGifts(); if ok then mailStatusText.Text="✅ "..msg; mailStatusText.TextColor3=C.green end else claimBtn.Text="📬 MULAI AUTO CLAIM"; claimBtn.BackgroundColor3=Color3.fromRGB(120,60,160); claimStatusLabel.Text="📬 Auto Claim: OFF"; claimStatusLabel.TextColor3=Color3.fromRGB(150,150,150) end end)
+    autoBtn.MouseButton1Click:Connect(function() isAutoRunning=not isAutoRunning; if isAutoRunning then if userBox.Text=="" then mailStatusText.Text="❌ ISI USERNAME!"; mailStatusText.TextColor3=C.red; isAutoRunning=false; return end; updatePlayerInfo(userBox.Text); autoBtn.Text="⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(180,50,50); lastAutoScan=0; currentScanInterval=math.random(autoScanMin,autoScanMax); autoStatusLabel.Text="🔄 Auto Mail: ON (scan "..currentScanInterval.."s)"; autoStatusLabel.TextColor3=C.green else autoBtn.Text="🔄 MULAI AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(0,120,180); autoStatusLabel.Text="🔄 Auto Mail: OFF"; autoStatusLabel.TextColor3=Color3.fromRGB(150,150,150) end end)
+    claimBtn.MouseButton1Click:Connect(function() isClaimRunning=not isClaimRunning; if isClaimRunning then claimBtn.Text="⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3=Color3.fromRGB(180,50,120); lastClaimScan=0; currentClaimInterval=math.random(claimScanMin,claimScanMax); claimStatusLabel.Text="📬 Auto Claim: ON (scan "..currentClaimInterval.."s)"; claimStatusLabel.TextColor3=Color3.fromRGB(200,100,255); local ok,msg=claimAllGifts(); if ok then mailStatusText.Text="✅ "..msg; mailStatusText.TextColor3=C.green end else claimBtn.Text="📬 MULAI AUTO CLAIM"; claimBtn.BackgroundColor3=Color3.fromRGB(120,60,160); claimStatusLabel.Text="📬 Auto Claim: OFF"; claimStatusLabel.TextColor3=Color3.fromRGB(150,150,150) end end)
     task.spawn(function() while parentMail.Parent do task.wait(1); if isAutoRunning then lastAutoScan=lastAutoScan+1; autoStatusLabel.Text="🔄 Auto Mail: ON (scan "..(currentScanInterval-lastAutoScan).."s)"; if lastAutoScan>=currentScanInterval then lastAutoScan=0; currentScanInterval=math.random(autoScanMin,autoScanMax); local bp=getBackpackPets(); local bm={}; for _,p in ipairs(bp) do bm[p.name]=p end; for _,item in ipairs(ALL_DATA.Pets.items) do local d=bm[item.name]; item.count=d and d.count or 0; item.id=d and d.id or nil end; refreshMailList(); local ok,msg=doSend(false); if ok then mailStatusText.Text="✅ "..msg; mailStatusText.TextColor3=C.green; task.delay(5,refreshMailList) end end end; if isClaimRunning then lastClaimScan=lastClaimScan+1; claimStatusLabel.Text="📬 Auto Claim: ON (scan "..(currentClaimInterval-lastClaimScan).."s)"; if lastClaimScan>=currentClaimInterval then lastClaimScan=0; currentClaimInterval=math.random(claimScanMin,claimScanMax); local ok,msg=claimAllGifts(); if ok then mailStatusText.Text="✅ "..msg; mailStatusText.TextColor3=C.green end end end end end)
     refreshMailList()
-    parentMail.Destroying:Connect(function() config.mailTargetUsername=userBox.Text; config.mailSelectedItems=selMailItems; config.isAutoMailRunning=isAutoRunning; config.isAutoClaimRunning=isClaimRunning; saveConfig() end)
 
     -- ==================================================================
-    -- TAB 4: MAIL FRUIT (POSITION ABSOLUTE)
-    -- ==================================================================
-    local parentFruit = tabFrames["MailFruit"]
-    local netFruit = safeRequire(ReplicatedStorage.SharedModules.Networking)
-    local FruitValueCalc = safeRequire(ReplicatedStorage.SharedModules.FruitValueCalc)
-    local SellFlags = safeRequire(ReplicatedStorage.SharedModules.Flags.SellFlags)
-    local MAX_ITEMS_PER_BATCH = 20; local BATCH_DELAY = 21; local DEFAULT_TOLERANCE = 10
-    local usernameList = config.mailFruitUsers or {}; local selectedUserIndex = nil; local isFruitAutoRunning = false; local lastFailedIndex = nil
+-- TAB 4: MAIL FRUIT (FULL FIX - UI DULU, FUNGSI BELAKANGAN)
+-- ==================================================================
+-- ==================================================================
+-- TAB 4: MAIL FRUIT (FULL FIX - POSITION ABSOLUTE)
+-- ==================================================================
+local parentFruit = tabFrames["MailFruit"]
+local netFruit = safeRequire(ReplicatedStorage.SharedModules.Networking)
+local FruitValueCalc = safeRequire(ReplicatedStorage.SharedModules.FruitValueCalc)
+local SellFlags = safeRequire(ReplicatedStorage.SharedModules.Flags.SellFlags)
 
-    local function getFruitValues() local fruits={}; local bp=player:FindFirstChild("Backpack"); if not bp then return fruits end; for _,i in ipairs(bp:GetChildren()) do if i:IsA("Configuration")or i:IsA("Tool") then local fid=i:GetAttribute("Id"); local fn=i:GetAttribute("FruitName")or i.Name; local sm=i:GetAttribute("SizeMultiplier")or 1; local mut=i:GetAttribute("Mutation")or""; if fid and fn then local fv=0; if FruitValueCalc and SellFlags then pcall(function() local bv=FruitValueCalc(fn,sm,mut,player,nil); local vwb=SellFlags.Apply(fn,bv); fv=math.floor(vwb/1.10) end) end; if fv==0 then fv=math.floor(sm*1000) end; table.insert(fruits,{name=fn,id=fid,value=fv,size=sm,mutation=mut}) end end end; table.sort(fruits,function(a,b) return a.value>b.value end); return fruits end
-    local function formatValue(v) if v>=1e12 then return string.format("%.2fT",v/1e12) elseif v>=1e9 then return string.format("%.2fB",v/1e9) elseif v>=1e6 then return string.format("%.2fM",v/1e6) elseif v>=1e3 then return string.format("%.1fK",v/1e3) else return tostring(v) end end
-    local function sendToUser(un,tv,tol) local fruits=getFruitValues(); if #fruits==0 then return false,"Tidak ada fruit!" end; local uid=netFruit.Mailbox.LookupPlayer:Fire(un); if not uid or uid<=0 then return false,"User tidak ditemukan!" end; local mv=tv*(1-tol/100); local maxv=tv*(1+tol/100); local sel={}; local total=0; for _,f in ipairs(fruits) do if total+f.value<=maxv then table.insert(sel,f); total=total+f.value; if total>=mv then break end end end; if total<mv then return false,"Stok kurang! Maks: "..formatValue(total) end; if #sel>60 then return false,"Terlalu banyak! "..#sel.." items" end; local ib={}; for _,f in ipairs(sel) do ib[f.id]=true end; local bn=math.ceil(#sel/MAX_ITEMS_PER_BATCH); for b=1,bn do local si=(b-1)*MAX_ITEMS_PER_BATCH+1; local ei=math.min(b*MAX_ITEMS_PER_BATCH,#sel); local its={}; for i=si,ei do table.insert(its,{Category="HarvestedFruits",ItemKey=sel[i].id,Count=1}) end; pcall(function() netFruit.Mailbox.SendBatch:Fire(uid,its,"") end); if b<bn then task.wait(BATCH_DELAY) end end; task.wait(2); local ci={}; local cf=getFruitValues(); for _,f in ipairs(cf) do ci[f.id]=true end; local sc,fc=0,0; for fid,_ in pairs(ib) do if ci[fid] then fc=fc+1 else sc=sc+1 end end; if sc>0 then if fc>0 then return true,"TERKIRIM! "..formatValue(total).." | "..fc.." gagal" else return true,"TERKIRIM! "..formatValue(total).." | "..#sel.." buah" end end; return false,"Gagal terkirim" end
+local MAX_ITEMS_PER_BATCH = 20
+local BATCH_DELAY = 21
+local DEFAULT_TOLERANCE = 10
+local usernameList = config.mailFruitUsers or {}
+local selectedUserIndex = nil
+local isFruitAutoRunning = false
+local lastFailedIndex = nil
 
-    local fruitScroll=Instance.new("ScrollingFrame"); fruitScroll.Size=UDim2.new(1,0,1,0); fruitScroll.CanvasSize=UDim2.new(0,0,0,520); fruitScroll.ScrollBarThickness=3; fruitScroll.BackgroundTransparency=1; fruitScroll.BorderSizePixel=0; fruitScroll.Parent=parentFruit
-    local y=4
-    local fruitHdr=Instance.new("TextLabel"); fruitHdr.Size=UDim2.new(1,-12,0,16); fruitHdr.Position=UDim2.new(0,6,0,y); fruitHdr.Text="🎯  Smart Sender (Mail Fruit)"; fruitHdr.TextColor3=C.text; fruitHdr.Font=Enum.Font.GothamBold; fruitHdr.TextSize=10; fruitHdr.TextXAlignment=Enum.TextXAlignment.Left; fruitHdr.BackgroundTransparency=1; fruitHdr.Parent=fruitScroll; y=y+20
-    local valueBox=Instance.new("TextBox"); valueBox.Size=UDim2.new(1,-12,0,22); valueBox.Position=UDim2.new(0,6,0,y); valueBox.BackgroundColor3=C.input; valueBox.TextColor3=C.text; valueBox.PlaceholderText="Nilai target (contoh: 10000000)"; valueBox.PlaceholderColor3=Color3.fromRGB(100,100,110); valueBox.Font=Enum.Font.Gotham; valueBox.TextSize=10; valueBox.Text=""; valueBox.BorderSizePixel=0; valueBox.Parent=fruitScroll; Instance.new("UICorner",valueBox).CornerRadius=UDim.new(0,4); y=y+26
-    local toleranceInput=Instance.new("TextBox"); toleranceInput.Size=UDim2.new(1,-12,0,22); toleranceInput.Position=UDim2.new(0,6,0,y); toleranceInput.BackgroundColor3=C.input; toleranceInput.TextColor3=C.text; toleranceInput.PlaceholderText="Toleransi % (default: 10)"; toleranceInput.PlaceholderColor3=Color3.fromRGB(100,100,110); toleranceInput.Font=Enum.Font.Gotham; toleranceInput.TextSize=10; toleranceInput.Text=tostring(DEFAULT_TOLERANCE); toleranceInput.BorderSizePixel=0; toleranceInput.Parent=fruitScroll; Instance.new("UICorner",toleranceInput).CornerRadius=UDim.new(0,4); y=y+26
-    local addFrame=Instance.new("Frame"); addFrame.Size=UDim2.new(1,-12,0,22); addFrame.Position=UDim2.new(0,6,0,y); addFrame.BackgroundTransparency=1; addFrame.Parent=fruitScroll
-    local addBox=Instance.new("TextBox"); addBox.Size=UDim2.new(1,-42,1,0); addBox.BackgroundColor3=C.input; addBox.TextColor3=C.text; addBox.PlaceholderText="Tambah username..."; addBox.PlaceholderColor3=Color3.fromRGB(100,100,110); addBox.Font=Enum.Font.Gotham; addBox.TextSize=10; addBox.Text=""; addBox.BorderSizePixel=0; addBox.Parent=addFrame; Instance.new("UICorner",addBox).CornerRadius=UDim.new(0,4)
-    local addBtn=Instance.new("TextButton"); addBtn.Size=UDim2.new(0,38,1,0); addBtn.Position=UDim2.new(1,-38,0,0); addBtn.BackgroundColor3=Color3.fromRGB(0,140,200); addBtn.Text="+"; addBtn.TextColor3=C.text; addBtn.Font=Enum.Font.GothamBold; addBtn.TextSize=14; addBtn.BorderSizePixel=0; addBtn.AutoButtonColor=false; addBtn.Parent=addFrame; Instance.new("UICorner",addBtn).CornerRadius=UDim.new(0,4); y=y+26
-    local userListLabel=Instance.new("TextLabel"); userListLabel.Size=UDim2.new(1,-12,0,14); userListLabel.Position=UDim2.new(0,6,0,y); userListLabel.BackgroundTransparency=1; userListLabel.Text="📋 Daftar Target (klik untuk pilih):"; userListLabel.TextColor3=C.textDim; userListLabel.Font=Enum.Font.Gotham; userListLabel.TextSize=9; userListLabel.TextXAlignment=Enum.TextXAlignment.Left; userListLabel.Parent=fruitScroll; y=y+16
-    local userListFrame=Instance.new("ScrollingFrame"); userListFrame.Size=UDim2.new(1,-12,0,70); userListFrame.Position=UDim2.new(0,6,0,y); userListFrame.BackgroundColor3=Color3.fromRGB(24,24,30); userListFrame.BorderSizePixel=0; userListFrame.ScrollBarThickness=3; userListFrame.Parent=fruitScroll; Instance.new("UICorner",userListFrame).CornerRadius=UDim.new(0,4); y=y+74
-    local fruitStatusText=Instance.new("TextLabel"); fruitStatusText.Size=UDim2.new(1,-12,0,12); fruitStatusText.Position=UDim2.new(0,6,0,y); fruitStatusText.BackgroundTransparency=1; fruitStatusText.Text="✅ SIAP"; fruitStatusText.TextColor3=C.green; fruitStatusText.Font=Enum.Font.GothamBold; fruitStatusText.TextSize=9; fruitStatusText.TextXAlignment=Enum.TextXAlignment.Left; fruitStatusText.Parent=fruitScroll; y=y+14
-    local refreshStockBtn=Instance.new("TextButton"); refreshStockBtn.Size=UDim2.new(1,-12,0,18); refreshStockBtn.Position=UDim2.new(0,6,0,y); refreshStockBtn.BackgroundColor3=Color3.fromRGB(50,50,60); refreshStockBtn.Text="🔄 Refresh Stok"; refreshStockBtn.TextColor3=C.text; refreshStockBtn.Font=Enum.Font.Gotham; refreshStockBtn.TextSize=8; refreshStockBtn.BorderSizePixel=0; refreshStockBtn.AutoButtonColor=false; refreshStockBtn.Parent=fruitScroll; Instance.new("UICorner",refreshStockBtn).CornerRadius=UDim.new(0,4); y=y+22
-    local resumeBtn=Instance.new("TextButton"); resumeBtn.Size=UDim2.new(1,-12,0,22); resumeBtn.Position=UDim2.new(0,6,0,y); resumeBtn.BackgroundColor3=Color3.fromRGB(0,180,180); resumeBtn.Text="▶ LANJUTKAN (RESUME)"; resumeBtn.TextColor3=C.text; resumeBtn.Font=Enum.Font.GothamBold; resumeBtn.TextSize=9; resumeBtn.BorderSizePixel=0; resumeBtn.AutoButtonColor=false; resumeBtn.Visible=false; resumeBtn.Parent=fruitScroll; Instance.new("UICorner",resumeBtn).CornerRadius=UDim.new(0,4); y=y+26
-    local fruitSendBtn=Instance.new("TextButton"); fruitSendBtn.Size=UDim2.new(1,-12,0,22); fruitSendBtn.Position=UDim2.new(0,6,0,y); fruitSendBtn.BackgroundColor3=Color3.fromRGB(0,160,100); fruitSendBtn.Text="📤 KIRIM KE TARGET"; fruitSendBtn.TextColor3=C.text; fruitSendBtn.Font=Enum.Font.GothamBold; fruitSendBtn.TextSize=9; fruitSendBtn.BorderSizePixel=0; fruitSendBtn.AutoButtonColor=false; fruitSendBtn.Parent=fruitScroll; Instance.new("UICorner",fruitSendBtn).CornerRadius=UDim.new(0,4); y=y+26
-    local fruitAutoBtn=Instance.new("TextButton"); fruitAutoBtn.Size=UDim2.new(1,-12,0,22); fruitAutoBtn.Position=UDim2.new(0,6,0,y); fruitAutoBtn.BackgroundColor3=Color3.fromRGB(120,60,160); fruitAutoBtn.Text="🔄 MULAI AUTO (MULTI)"; fruitAutoBtn.TextColor3=C.text; fruitAutoBtn.Font=Enum.Font.GothamBold; fruitAutoBtn.TextSize=9; fruitAutoBtn.BorderSizePixel=0; fruitAutoBtn.AutoButtonColor=false; fruitAutoBtn.Parent=fruitScroll; Instance.new("UICorner",fruitAutoBtn).CornerRadius=UDim.new(0,4); y=y+26
-    fruitScroll.CanvasSize=UDim2.new(0,0,0,y+10)
-
-    local function refreshUsernameList()
-        for _,child in ipairs(userListFrame:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
-        local count=#usernameList; userListFrame.CanvasSize=UDim2.new(0,0,0,math.max(count*22+8,40))
-        if count==0 then local empty=Instance.new("TextLabel",userListFrame); empty.Size=UDim2.new(1,-8,0,20); empty.Position=UDim2.new(0,4,0,10); empty.BackgroundTransparency=1; empty.Text="Belum ada username"; empty.TextColor3=Color3.fromRGB(150,150,150); empty.Font=Enum.Font.Gotham; empty.TextSize=9; resumeBtn.Visible=false; return end
-        local sc={waiting=Color3.fromRGB(255,200,0),sent=C.green,failed=C.red,skipped=Color3.fromRGB(150,150,150)}
-        for i,data in ipairs(usernameList) do local isSel=(selectedUserIndex==i); local row=Instance.new("Frame",userListFrame); row.Size=UDim2.new(1,-6,0,20); row.Position=UDim2.new(0,3,0,(i-1)*22+2); row.BackgroundColor3=isSel and Color3.fromRGB(50,70,85) or Color3.fromRGB(38,38,44); row.BorderSizePixel=0; Instance.new("UICorner",row).CornerRadius=UDim.new(0,3)
-            local idx=Instance.new("TextLabel",row); idx.Size=UDim2.new(0,16,1,0); idx.Position=UDim2.new(0,2,0,0); idx.BackgroundTransparency=1; idx.Text=i; idx.TextColor3=isSel and C.text or Color3.fromRGB(150,150,150); idx.Font=Enum.Font.GothamBold; idx.TextSize=8
-            local nm=Instance.new("TextLabel",row); nm.Size=UDim2.new(1,-130,1,0); nm.Position=UDim2.new(0,18,0,0); nm.BackgroundTransparency=1; nm.Text=data.username; nm.TextColor3=isSel and Color3.fromRGB(200,240,255) or Color3.fromRGB(220,220,220); nm.Font=Enum.Font.Gotham; nm.TextSize=8; nm.TextXAlignment=Enum.TextXAlignment.Left
-            local st=Instance.new("TextLabel",row); st.Size=UDim2.new(0,35,1,0); st.Position=UDim2.new(1,-108,0,0); st.BackgroundTransparency=1; st.Text=data.status; st.TextColor3=sc[data.status]or Color3.fromRGB(150,150,150); st.Font=Enum.Font.GothamBold; st.TextSize=6; st.TextXAlignment=Enum.TextXAlignment.Right
-            local skipBtn=Instance.new("TextButton",row); skipBtn.Size=UDim2.new(0,30,1,-2); skipBtn.Position=UDim2.new(1,-72,0,1); if data.status=="skipped" then skipBtn.BackgroundColor3=Color3.fromRGB(50,60,40); skipBtn.Text="Unskip"; skipBtn.TextColor3=Color3.fromRGB(150,255,150) else skipBtn.BackgroundColor3=Color3.fromRGB(60,50,30); skipBtn.Text="Skip"; skipBtn.TextColor3=Color3.fromRGB(255,200,150) end; skipBtn.Font=Enum.Font.GothamBold; skipBtn.TextSize=6; skipBtn.BorderSizePixel=0; Instance.new("UICorner",skipBtn).CornerRadius=UDim.new(0,2)
-            skipBtn.MouseButton1Click:Connect(function() if usernameList[i].status=="skipped" then usernameList[i].status="waiting" else usernameList[i].status="skipped" end; config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList() end)
-            local sb=Instance.new("TextButton",row); sb.Size=UDim2.new(0,22,1,-2); sb.Position=UDim2.new(1,-40,0,1); sb.BackgroundColor3=isSel and Color3.fromRGB(0,140,200) or Color3.fromRGB(40,40,50); sb.Text=isSel and "✓" or "Sel"; sb.TextColor3=C.text; sb.Font=Enum.Font.GothamBold; sb.TextSize=6; sb.BorderSizePixel=0; Instance.new("UICorner",sb).CornerRadius=UDim.new(0,2); sb.MouseButton1Click:Connect(function() selectedUserIndex=i; refreshUsernameList() end)
-            local db=Instance.new("TextButton",row); db.Size=UDim2.new(0,18,1,-2); db.Position=UDim2.new(1,-16,0,1); db.BackgroundColor3=Color3.fromRGB(60,30,30); db.Text="✕"; db.TextColor3=Color3.fromRGB(255,100,100); db.Font=Enum.Font.GothamBold; db.TextSize=6; db.BorderSizePixel=0; Instance.new("UICorner",db).CornerRadius=UDim.new(0,2); db.MouseButton1Click:Connect(function() table.remove(usernameList,i); if selectedUserIndex==i then selectedUserIndex=nil end; config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList() end)
+-- ==================================================================
+-- HELPER FUNCTIONS
+-- ==================================================================
+local function getFruitValues()
+    local fruits = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return fruits end
+    for _, item in ipairs(backpack:GetChildren()) do
+        if item:IsA("Configuration") or item:IsA("Tool") then
+            local fruitId = item:GetAttribute("Id")
+            local fruitName = item:GetAttribute("FruitName") or item.Name
+            local sizeMultiplier = item:GetAttribute("SizeMultiplier") or 1
+            local mutation = item:GetAttribute("Mutation") or ""
+            if fruitId and fruitName then
+                local finalValue = 0
+                if FruitValueCalc and SellFlags then
+                    pcall(function()
+                        local baseValue = FruitValueCalc(fruitName, sizeMultiplier, mutation, player, nil)
+                        local valueWithBoost = SellFlags.Apply(fruitName, baseValue)
+                        finalValue = math.floor(valueWithBoost / 1.10)
+                    end)
+                end
+                if finalValue == 0 then finalValue = math.floor(sizeMultiplier * 1000) end
+                table.insert(fruits, {name = fruitName, id = fruitId, value = finalValue, size = sizeMultiplier, mutation = mutation})
+            end
         end
-        local hf=false; for _,d in ipairs(usernameList) do if d.status=="failed" then hf=true; break end end; resumeBtn.Visible=hf
     end
+    table.sort(fruits, function(a, b) return a.value > b.value end)
+    return fruits
+end
 
-    local function addUsername(name) if name~="" then for _,d in ipairs(usernameList) do if d.username:lower()==name:lower() then return end end; table.insert(usernameList,{username=name,status="waiting"}); config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList() end end
-    local function resetAllStatus() for _,d in ipairs(usernameList) do d.status="waiting" end; lastFailedIndex=nil; config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList() end
+local function formatValue(v)
+    if v >= 1e12 then return string.format("%.2fT", v/1e12)
+    elseif v >= 1e9 then return string.format("%.2fB", v/1e9)
+    elseif v >= 1e6 then return string.format("%.2fM", v/1e6)
+    elseif v >= 1e3 then return string.format("%.1fK", v/1e3)
+    else return tostring(v) end
+end
 
-    addBtn.MouseButton1Click:Connect(function() addUsername(addBox.Text); addBox.Text="" end)
-    refreshStockBtn.MouseButton1Click:Connect(function() local fruits=getFruitValues(); local tv=0; for _,f in ipairs(fruits) do tv=tv+f.value end; fruitStatusText.Text="📦 "..#fruits.." buah | Total: "..formatValue(tv) end)
-    fruitSendBtn.MouseButton1Click:Connect(function() local tv=tonumber(valueBox.Text); local tol=tonumber(toleranceInput.Text)or DEFAULT_TOLERANCE; if #usernameList==0 then fruitStatusText.Text="❌ Tambah username!"; return end; if not tv then fruitStatusText.Text="❌ ISI NILAI!"; return end; if not selectedUserIndex then fruitStatusText.Text="❌ Pilih username!"; fruitStatusText.TextColor3=C.red; return end; local un=usernameList[selectedUserIndex].username; fruitStatusText.Text="📤 "..un.."..."; fruitStatusText.TextColor3=Color3.fromRGB(0,200,255); local ok,msg=sendToUser(un,tv,tol); if ok then usernameList[selectedUserIndex].status="sent"; fruitStatusText.Text="✅ "..msg; fruitStatusText.TextColor3=C.green else usernameList[selectedUserIndex].status="failed"; fruitStatusText.Text="❌ "..msg; fruitStatusText.TextColor3=C.red end; config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList() end)
-    resumeBtn.MouseButton1Click:Connect(function() if not lastFailedIndex then return end; local tv=tonumber(valueBox.Text); local tol=tonumber(toleranceInput.Text)or DEFAULT_TOLERANCE; if not tv then fruitStatusText.Text="❌ ISI NILAI!"; return end; isFruitAutoRunning=true; resumeBtn.Visible=false; fruitAutoBtn.Text="⏸ STOP AUTO"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(180,50,50); task.spawn(function() for i=lastFailedIndex,#usernameList do if not isFruitAutoRunning then break end; if usernameList[i].status=="skipped" then fruitStatusText.Text="⏭ Skip #"..i..": "..usernameList[i].username elseif usernameList[i].status=="waiting" or usernameList[i].status=="failed" then local un=usernameList[i].username; fruitStatusText.Text="📤 "..un.."..."; fruitStatusText.TextColor3=Color3.fromRGB(0,200,255); local ok,msg=sendToUser(un,tv,tol); if ok then usernameList[i].status="sent"; fruitStatusText.Text="✅ "..msg; fruitStatusText.TextColor3=C.green; refreshUsernameList(); if i<#usernameList then for t=BATCH_DELAY,1,-1 do if not isFruitAutoRunning then break end; fruitStatusText.Text="⏳ Jeda "..t.."s..."; task.wait(1) end end else usernameList[i].status="failed"; fruitStatusText.Text="❌ "..un..": "..msg; fruitStatusText.TextColor3=C.red; refreshUsernameList(); lastFailedIndex=i; resumeBtn.Visible=true; isFruitAutoRunning=false; fruitAutoBtn.Text="🔄 MULAI AUTO (MULTI)"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(120,60,160); return end end; refreshUsernameList() end; isFruitAutoRunning=false; fruitAutoBtn.Text="🔄 MULAI AUTO (MULTI)"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(120,60,160); fruitStatusText.Text="✅ Auto selesai! Status di-reset."; fruitStatusText.TextColor3=C.green; resumeBtn.Visible=false; task.delay(2,resetAllStatus) end) end)
-    fruitAutoBtn.MouseButton1Click:Connect(function() if isFruitAutoRunning then isFruitAutoRunning=false; fruitAutoBtn.Text="🔄 MULAI AUTO (MULTI)"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(120,60,160); fruitStatusText.Text="⏸ Dihentikan"; fruitStatusText.TextColor3=C.yellow; return end; if #usernameList==0 then fruitStatusText.Text="❌ Tambah username!"; return end; local tv=tonumber(valueBox.Text); local tol=tonumber(toleranceInput.Text)or DEFAULT_TOLERANCE; if not tv then fruitStatusText.Text="❌ ISI NILAI!"; return end; for _,d in ipairs(usernameList) do if d.status~="skipped" then d.status="waiting" end end; refreshUsernameList(); isFruitAutoRunning=true; fruitAutoBtn.Text="⏸ STOP AUTO"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(180,50,50); resumeBtn.Visible=false; lastFailedIndex=nil; task.spawn(function() for i=1,#usernameList do if not isFruitAutoRunning then break end; if usernameList[i].status=="skipped" then fruitStatusText.Text="⏭ Skip #"..i..": "..usernameList[i].username elseif usernameList[i].status=="waiting" then local un=usernameList[i].username; fruitStatusText.Text="📤 #"..i.."/"..#usernameList..": "..un; fruitStatusText.TextColor3=Color3.fromRGB(0,200,255); local ok,msg=sendToUser(un,tv,tol); if ok then usernameList[i].status="sent"; fruitStatusText.Text="✅ "..msg; fruitStatusText.TextColor3=C.green; refreshUsernameList(); if i<#usernameList then for t=BATCH_DELAY,1,-1 do if not isFruitAutoRunning then break end; fruitStatusText.Text="⏳ Jeda "..t.."s..."; task.wait(1) end end else usernameList[i].status="failed"; fruitStatusText.Text="❌ "..un..": "..msg; fruitStatusText.TextColor3=C.red; refreshUsernameList(); lastFailedIndex=i; resumeBtn.Visible=true; isFruitAutoRunning=false; fruitAutoBtn.Text="🔄 MULAI AUTO (MULTI)"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(120,60,160); return end end; refreshUsernameList() end; isFruitAutoRunning=false; fruitAutoBtn.Text="🔄 MULAI AUTO (MULTI)"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(120,60,160); fruitStatusText.Text="✅ Auto selesai! Status di-reset."; fruitStatusText.TextColor3=C.green; resumeBtn.Visible=false; task.delay(2,resetAllStatus) end) end)
-    refreshUsernameList()
+local function sendToUser(username, targetValue, tolerance)
+    local fruits = getFruitValues()
+    if #fruits == 0 then return false, "Tidak ada fruit!" end
+    
+    local userId = netFruit.Mailbox.LookupPlayer:Fire(username)
+    if not userId or userId <= 0 then return false, "User tidak ditemukan!" end
+    
+    local minValue = targetValue * (1 - tolerance/100)
+    local maxValue = targetValue * (1 + tolerance/100)
+    local selected, totalValue = {}, 0
+    
+    for _, fruit in ipairs(fruits) do
+        if totalValue + fruit.value <= maxValue then
+            table.insert(selected, fruit); totalValue = totalValue + fruit.value
+            if totalValue >= minValue then break end
+        end
+    end
+    
+    if totalValue < minValue then return false, "Stok kurang! Maks: " .. formatValue(totalValue) end
+    if #selected > 60 then return false, "Terlalu banyak! " .. #selected .. " items" end
+    
+    -- Send batch
+    local idsBefore = {}; for _, f in ipairs(selected) do idsBefore[f.id] = true end
+    local batchesNeeded = math.ceil(#selected / MAX_ITEMS_PER_BATCH)
+    
+    for batchNum = 1, batchesNeeded do
+        local si = (batchNum-1)*MAX_ITEMS_PER_BATCH+1; local ei = math.min(batchNum*MAX_ITEMS_PER_BATCH, #selected)
+        local items = {}
+        for i = si, ei do table.insert(items, {Category="HarvestedFruits", ItemKey=selected[i].id, Count=1}) end
+        pcall(function() netFruit.Mailbox.SendBatch:Fire(userId, items, "") end)
+        if batchNum < batchesNeeded then task.wait(BATCH_DELAY) end
+    end
+    
+    task.wait(2)
+    local currentIds = {}; local cf = getFruitValues(); for _, f in ipairs(cf) do currentIds[f.id] = true end
+    local sc, fc = 0, 0
+    for fid, _ in pairs(idsBefore) do if currentIds[fid] then fc=fc+1 else sc=sc+1 end end
+    
+    if sc > 0 then
+        if fc > 0 then return true, "TERKIRIM! " .. formatValue(totalValue) .. " | " .. fc .. " gagal"
+        else return true, "TERKIRIM! " .. formatValue(totalValue) .. " | " .. #selected .. " buah" end
+    end
+    return false, "Gagal terkirim"
+end
+
+-- Scroll (TANPA UIListLayout)
+local fruitScroll = Instance.new("ScrollingFrame")
+fruitScroll.Size = UDim2.new(1, 0, 1, 0)
+fruitScroll.CanvasSize = UDim2.new(0, 0, 0, 520)
+fruitScroll.ScrollBarThickness = 3
+fruitScroll.BackgroundTransparency = 1
+fruitScroll.BorderSizePixel = 0
+fruitScroll.Parent = parentFruit
+
+local y = 4  -- Posisi Y awal
+
+-- Header
+local fruitHdr = Instance.new("TextLabel")
+fruitHdr.Size = UDim2.new(1, -12, 0, 16); fruitHdr.Position = UDim2.new(0, 6, 0, y)
+fruitHdr.Text = "🎯  Smart Sender (Mail Fruit)"; fruitHdr.TextColor3 = C.text
+fruitHdr.Font = Enum.Font.GothamBold; fruitHdr.TextSize = 10
+fruitHdr.TextXAlignment = Enum.TextXAlignment.Left; fruitHdr.BackgroundTransparency = 1; fruitHdr.Parent = fruitScroll
+y += 20
+
+-- Value input
+local valueBox = Instance.new("TextBox")
+valueBox.Size = UDim2.new(1, -12, 0, 22); valueBox.Position = UDim2.new(0, 6, 0, y)
+valueBox.BackgroundColor3 = C.input; valueBox.TextColor3 = C.text
+valueBox.PlaceholderText = "Nilai target (contoh: 10000000)"; valueBox.PlaceholderColor3 = Color3.fromRGB(100,100,110)
+valueBox.Font = Enum.Font.Gotham; valueBox.TextSize = 10; valueBox.Text = ""; valueBox.BorderSizePixel = 0; valueBox.Parent = fruitScroll
+Instance.new("UICorner", valueBox).CornerRadius = UDim.new(0, 4)
+y += 26
+
+-- Tolerance
+local toleranceInput = Instance.new("TextBox")
+toleranceInput.Size = UDim2.new(1, -12, 0, 22); toleranceInput.Position = UDim2.new(0, 6, 0, y)
+toleranceInput.BackgroundColor3 = C.input; toleranceInput.TextColor3 = C.text
+toleranceInput.PlaceholderText = "Toleransi % (default: 10)"; toleranceInput.PlaceholderColor3 = Color3.fromRGB(100,100,110)
+toleranceInput.Font = Enum.Font.Gotham; toleranceInput.TextSize = 10; toleranceInput.Text = tostring(DEFAULT_TOLERANCE)
+toleranceInput.BorderSizePixel = 0; toleranceInput.Parent = fruitScroll
+Instance.new("UICorner", toleranceInput).CornerRadius = UDim.new(0, 4)
+y += 26
+
+-- Add username
+local addFrame = Instance.new("Frame")
+addFrame.Size = UDim2.new(1, -12, 0, 22); addFrame.Position = UDim2.new(0, 6, 0, y); addFrame.BackgroundTransparency = 1; addFrame.Parent = fruitScroll
+local addBox = Instance.new("TextBox")
+addBox.Size = UDim2.new(1, -42, 1, 0); addBox.BackgroundColor3 = C.input; addBox.TextColor3 = C.text
+addBox.PlaceholderText = "Tambah username..."; addBox.PlaceholderColor3 = Color3.fromRGB(100,100,110)
+addBox.Font = Enum.Font.Gotham; addBox.TextSize = 10; addBox.Text = ""; addBox.BorderSizePixel = 0; addBox.Parent = addFrame
+Instance.new("UICorner", addBox).CornerRadius = UDim.new(0, 4)
+local addBtn = Instance.new("TextButton")
+addBtn.Size = UDim2.new(0, 38, 1, 0); addBtn.Position = UDim2.new(1, -38, 0, 0)
+addBtn.BackgroundColor3 = Color3.fromRGB(0, 140, 200); addBtn.Text = "+"; addBtn.TextColor3 = C.text
+addBtn.Font = Enum.Font.GothamBold; addBtn.TextSize = 14; addBtn.BorderSizePixel = 0; addBtn.AutoButtonColor = false; addBtn.Parent = addFrame
+Instance.new("UICorner", addBtn).CornerRadius = UDim.new(0, 4)
+y += 26
+
+-- User list label
+local userListLabel = Instance.new("TextLabel")
+userListLabel.Size = UDim2.new(1, -12, 0, 14); userListLabel.Position = UDim2.new(0, 6, 0, y)
+userListLabel.BackgroundTransparency = 1; userListLabel.Text = "📋 Daftar Target (klik untuk pilih):"
+userListLabel.TextColor3 = C.textDim; userListLabel.Font = Enum.Font.Gotham; userListLabel.TextSize = 9
+userListLabel.TextXAlignment = Enum.TextXAlignment.Left; userListLabel.Parent = fruitScroll
+y += 16
+
+-- User list frame
+local userListFrame = Instance.new("ScrollingFrame")
+userListFrame.Size = UDim2.new(1, -12, 0, 70); userListFrame.Position = UDim2.new(0, 6, 0, y)
+userListFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 30); userListFrame.BorderSizePixel = 0
+userListFrame.ScrollBarThickness = 3; userListFrame.Parent = fruitScroll
+Instance.new("UICorner", userListFrame).CornerRadius = UDim.new(0, 4)
+y += 74
+
+-- Status
+local fruitStatusText = Instance.new("TextLabel")
+fruitStatusText.Size = UDim2.new(1, -12, 0, 12); fruitStatusText.Position = UDim2.new(0, 6, 0, y)
+fruitStatusText.BackgroundTransparency = 1; fruitStatusText.Text = "✅ SIAP"; fruitStatusText.TextColor3 = C.green
+fruitStatusText.Font = Enum.Font.GothamBold; fruitStatusText.TextSize = 9
+fruitStatusText.TextXAlignment = Enum.TextXAlignment.Left; fruitStatusText.Parent = fruitScroll
+y += 14
+
+-- Refresh stock button
+local refreshStockBtn = Instance.new("TextButton")
+refreshStockBtn.Size = UDim2.new(1, -12, 0, 18); refreshStockBtn.Position = UDim2.new(0, 6, 0, y)
+refreshStockBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60); refreshStockBtn.Text = "🔄 Refresh Stok"
+refreshStockBtn.TextColor3 = C.text; refreshStockBtn.Font = Enum.Font.Gotham; refreshStockBtn.TextSize = 8
+refreshStockBtn.BorderSizePixel = 0; refreshStockBtn.AutoButtonColor = false; refreshStockBtn.Parent = fruitScroll
+Instance.new("UICorner", refreshStockBtn).CornerRadius = UDim.new(0, 4)
+y += 22
+
+-- Resume button
+local resumeBtn = Instance.new("TextButton")
+resumeBtn.Size = UDim2.new(1, -12, 0, 22); resumeBtn.Position = UDim2.new(0, 6, 0, y)
+resumeBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 180); resumeBtn.Text = "▶ LANJUTKAN (RESUME)"
+resumeBtn.TextColor3 = C.text; resumeBtn.Font = Enum.Font.GothamBold; resumeBtn.TextSize = 9
+resumeBtn.BorderSizePixel = 0; resumeBtn.AutoButtonColor = false; resumeBtn.Visible = false; resumeBtn.Parent = fruitScroll
+Instance.new("UICorner", resumeBtn).CornerRadius = UDim.new(0, 4)
+y += 26
+
+-- Send button
+local fruitSendBtn = Instance.new("TextButton")
+fruitSendBtn.Size = UDim2.new(1, -12, 0, 22); fruitSendBtn.Position = UDim2.new(0, 6, 0, y)
+fruitSendBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 100); fruitSendBtn.Text = "📤 KIRIM KE TARGET"
+fruitSendBtn.TextColor3 = C.text; fruitSendBtn.Font = Enum.Font.GothamBold; fruitSendBtn.TextSize = 9
+fruitSendBtn.BorderSizePixel = 0; fruitSendBtn.AutoButtonColor = false; fruitSendBtn.Parent = fruitScroll
+Instance.new("UICorner", fruitSendBtn).CornerRadius = UDim.new(0, 4)
+y += 26
+
+-- Auto button
+local fruitAutoBtn = Instance.new("TextButton")
+fruitAutoBtn.Size = UDim2.new(1, -12, 0, 22); fruitAutoBtn.Position = UDim2.new(0, 6, 0, y)
+fruitAutoBtn.BackgroundColor3 = Color3.fromRGB(120, 60, 160); fruitAutoBtn.Text = "🔄 MULAI AUTO (MULTI)"
+fruitAutoBtn.TextColor3 = C.text; fruitAutoBtn.Font = Enum.Font.GothamBold; fruitAutoBtn.TextSize = 9
+fruitAutoBtn.BorderSizePixel = 0; fruitAutoBtn.AutoButtonColor = false; fruitAutoBtn.Parent = fruitScroll
+Instance.new("UICorner", fruitAutoBtn).CornerRadius = UDim.new(0, 4)
+y += 26
+
+-- Update CanvasSize
+fruitScroll.CanvasSize = UDim2.new(0, 0, 0, y + 10)
+
+-- ==================================================================
+-- FUNGSI REFRESH + ADD
+-- ==================================================================
+local function refreshUsernameList()
+    for _, child in ipairs(userListFrame:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
+    local count = #usernameList
+    userListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22 + 8, 40))
+    
+    if count == 0 then
+        local empty = Instance.new("TextLabel", userListFrame)
+        empty.Size = UDim2.new(1, -8, 0, 20); empty.Position = UDim2.new(0, 4, 0, 10)
+        empty.BackgroundTransparency = 1; empty.Text = "Belum ada username"
+        empty.TextColor3 = Color3.fromRGB(150, 150, 150); empty.Font = Enum.Font.Gotham; empty.TextSize = 9
+        resumeBtn.Visible = false
+        return
+    end
+    
+    local sc = {waiting=Color3.fromRGB(255,200,0), sent=C.green, failed=C.red, skipped=Color3.fromRGB(150,150,150)}
+    for i, data in ipairs(usernameList) do
+        local isSel = (selectedUserIndex == i)
+        local row = Instance.new("Frame", userListFrame)
+        row.Size = UDim2.new(1, -6, 0, 20); row.Position = UDim2.new(0, 3, 0, (i-1)*22+2)
+        row.BackgroundColor3 = isSel and Color3.fromRGB(50,70,85) or Color3.fromRGB(38,38,44); row.BorderSizePixel = 0
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 3)
+        
+        local idx = Instance.new("TextLabel", row); idx.Size=UDim2.new(0,16,1,0); idx.Position=UDim2.new(0,2,0,0)
+        idx.BackgroundTransparency=1; idx.Text=i; idx.TextColor3=isSel and C.text or Color3.fromRGB(150,150,150); idx.Font=Enum.Font.GothamBold; idx.TextSize=8
+        
+        local nm = Instance.new("TextLabel", row); nm.Size=UDim2.new(1,-130,1,0); nm.Position=UDim2.new(0,18,0,0)
+        nm.BackgroundTransparency=1; nm.Text=data.username; nm.TextColor3=isSel and Color3.fromRGB(200,240,255) or Color3.fromRGB(220,220,220)
+        nm.Font=Enum.Font.Gotham; nm.TextSize=8; nm.TextXAlignment=Enum.TextXAlignment.Left
+        
+        local st = Instance.new("TextLabel", row); st.Size=UDim2.new(0,35,1,0); st.Position=UDim2.new(1,-108,0,0)
+        st.BackgroundTransparency=1; st.Text=data.status; st.TextColor3=sc[data.status]or Color3.fromRGB(150,150,150)
+        st.Font=Enum.Font.GothamBold; st.TextSize=6; st.TextXAlignment=Enum.TextXAlignment.Right
+        
+        -- Skip/Unskip toggle
+        local skipBtn = Instance.new("TextButton", row)
+        skipBtn.Size=UDim2.new(0,30,1,-2); skipBtn.Position=UDim2.new(1,-72,0,1)
+        if data.status == "skipped" then
+            skipBtn.BackgroundColor3=Color3.fromRGB(50,60,40); skipBtn.Text="Unskip"; skipBtn.TextColor3=Color3.fromRGB(150,255,150)
+        else
+            skipBtn.BackgroundColor3=Color3.fromRGB(60,50,30); skipBtn.Text="Skip"; skipBtn.TextColor3=Color3.fromRGB(255,200,150)
+        end
+        skipBtn.Font=Enum.Font.GothamBold; skipBtn.TextSize=6; skipBtn.BorderSizePixel=0
+        Instance.new("UICorner", skipBtn).CornerRadius = UDim.new(0, 2)
+        skipBtn.MouseButton1Click:Connect(function()
+            if usernameList[i].status == "skipped" then usernameList[i].status = "waiting"
+            else usernameList[i].status = "skipped" end
+            config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList()
+        end)
+        
+        -- Select
+        local sb = Instance.new("TextButton", row); sb.Size=UDim2.new(0,22,1,-2); sb.Position=UDim2.new(1,-40,0,1)
+        sb.BackgroundColor3=isSel and Color3.fromRGB(0,140,200) or Color3.fromRGB(40,40,50)
+        sb.Text=isSel and "✓" or "Sel"; sb.TextColor3=C.text; sb.Font=Enum.Font.GothamBold; sb.TextSize=6; sb.BorderSizePixel=0
+        Instance.new("UICorner", sb).CornerRadius = UDim.new(0, 2)
+        sb.MouseButton1Click:Connect(function() selectedUserIndex=i; refreshUsernameList() end)
+        
+        -- Delete
+        local db = Instance.new("TextButton", row); db.Size=UDim2.new(0,18,1,-2); db.Position=UDim2.new(1,-16,0,1)
+        db.BackgroundColor3=Color3.fromRGB(60,30,30); db.Text="✕"; db.TextColor3=Color3.fromRGB(255,100,100)
+        db.Font=Enum.Font.GothamBold; db.TextSize=6; db.BorderSizePixel=0
+        Instance.new("UICorner", db).CornerRadius = UDim.new(0, 2)
+        db.MouseButton1Click:Connect(function() table.remove(usernameList,i); if selectedUserIndex==i then selectedUserIndex=nil end; config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList() end)
+    end
+    
+    local hasFailed = false
+    for _, data in ipairs(usernameList) do if data.status=="failed" then hasFailed=true; break end end
+    resumeBtn.Visible = hasFailed
+end
+
+local function addUsername(name)
+    if name ~= "" then
+        for _, d in ipairs(usernameList) do if d.username:lower()==name:lower() then return end end
+        table.insert(usernameList, {username=name, status="waiting"})
+        config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList()
+    end
+end
+
+local function resetAllStatus()
+    for _, data in ipairs(usernameList) do data.status = "waiting" end
+    lastFailedIndex = nil; config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList()
+end
+
+-- ==================================================================
+-- BUTTON HANDLERS
+-- ==================================================================
+addBtn.MouseButton1Click:Connect(function() addUsername(addBox.Text); addBox.Text="" end)
+
+refreshStockBtn.MouseButton1Click:Connect(function()
+    local fruits = getFruitValues(); local tv = 0; for _, f in ipairs(fruits) do tv=tv+f.value end
+    fruitStatusText.Text = "📦 "..#fruits.." buah | Total: "..formatValue(tv)
+end)
+
+fruitSendBtn.MouseButton1Click:Connect(function()
+    local tv = tonumber(valueBox.Text); local tol = tonumber(toleranceInput.Text) or DEFAULT_TOLERANCE
+    if #usernameList==0 then fruitStatusText.Text="❌ Tambah username!"; return end
+    if not tv then fruitStatusText.Text="❌ ISI NILAI!"; return end
+    if not selectedUserIndex then fruitStatusText.Text="❌ Pilih username!"; fruitStatusText.TextColor3=C.red; return end
+    local un = usernameList[selectedUserIndex].username
+    fruitStatusText.Text="📤 "..un.."..."; fruitStatusText.TextColor3=Color3.fromRGB(0,200,255)
+    local ok, msg = sendToUser(un, tv, tol)
+    if ok then usernameList[selectedUserIndex].status="sent"; fruitStatusText.Text="✅ "..msg; fruitStatusText.TextColor3=C.green
+    else usernameList[selectedUserIndex].status="failed"; fruitStatusText.Text="❌ "..msg; fruitStatusText.TextColor3=C.red end
+    config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList()
+end)
+
+resumeBtn.MouseButton1Click:Connect(function()
+    if not lastFailedIndex then return end
+    local tv = tonumber(valueBox.Text); local tol = tonumber(toleranceInput.Text) or DEFAULT_TOLERANCE
+    if not tv then fruitStatusText.Text="❌ ISI NILAI!"; return end
+    isFruitAutoRunning=true; resumeBtn.Visible=false
+    fruitAutoBtn.Text="⏸ STOP AUTO"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(180,50,50)
+    task.spawn(function()
+        for i=lastFailedIndex, #usernameList do
+            if not isFruitAutoRunning then break end
+            if usernameList[i].status=="skipped" then fruitStatusText.Text="⏭ Skip #"..i..": "..usernameList[i].username
+            elseif usernameList[i].status=="waiting" or usernameList[i].status=="failed" then
+                local un=usernameList[i].username; fruitStatusText.Text="📤 "..un.."..."; fruitStatusText.TextColor3=Color3.fromRGB(0,200,255)
+                local ok, msg = sendToUser(un, tv, tol)
+                if ok then usernameList[i].status="sent"; fruitStatusText.Text="✅ "..msg; fruitStatusText.TextColor3=C.green; refreshUsernameList()
+                    if i<#usernameList then for t=BATCH_DELAY,1,-1 do if not isFruitAutoRunning then break end; fruitStatusText.Text="⏳ Jeda "..t.."s..."; task.wait(1) end end
+                else usernameList[i].status="failed"; fruitStatusText.Text="❌ "..un..": "..msg; fruitStatusText.TextColor3=C.red; refreshUsernameList()
+                    lastFailedIndex=i; resumeBtn.Visible=true; isFruitAutoRunning=false; fruitAutoBtn.Text="🔄 MULAI AUTO (MULTI)"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(120,60,160); return
+                end
+            end; refreshUsernameList()
+        end
+        isFruitAutoRunning=false; fruitAutoBtn.Text="🔄 MULAI AUTO (MULTI)"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(120,60,160)
+        fruitStatusText.Text="✅ Auto selesai! Status di-reset."; fruitStatusText.TextColor3=C.green; resumeBtn.Visible=false
+        task.delay(2, resetAllStatus)
+    end)
+end)
+
+fruitAutoBtn.MouseButton1Click:Connect(function()
+    if isFruitAutoRunning then isFruitAutoRunning=false; fruitAutoBtn.Text="🔄 MULAI AUTO (MULTI)"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(120,60,160); fruitStatusText.Text="⏸ Dihentikan"; fruitStatusText.TextColor3=C.yellow; return end
+    if #usernameList==0 then fruitStatusText.Text="❌ Tambah username!"; return end
+    local tv = tonumber(valueBox.Text); local tol = tonumber(toleranceInput.Text) or DEFAULT_TOLERANCE
+    if not tv then fruitStatusText.Text="❌ ISI NILAI!"; return end
+    for _, data in ipairs(usernameList) do if data.status~="skipped" then data.status="waiting" end end; refreshUsernameList()
+    isFruitAutoRunning=true; fruitAutoBtn.Text="⏸ STOP AUTO"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(180,50,50); resumeBtn.Visible=false; lastFailedIndex=nil
+    task.spawn(function()
+        for i=1, #usernameList do
+            if not isFruitAutoRunning then break end
+            if usernameList[i].status=="skipped" then fruitStatusText.Text="⏭ Skip #"..i..": "..usernameList[i].username
+            elseif usernameList[i].status=="waiting" then
+                local un=usernameList[i].username; fruitStatusText.Text="📤 #"..i.."/"..#usernameList..": "..un; fruitStatusText.TextColor3=Color3.fromRGB(0,200,255)
+                local ok, msg = sendToUser(un, tv, tol)
+                if ok then usernameList[i].status="sent"; fruitStatusText.Text="✅ "..msg; fruitStatusText.TextColor3=C.green; refreshUsernameList()
+                    if i<#usernameList then for t=BATCH_DELAY,1,-1 do if not isFruitAutoRunning then break end; fruitStatusText.Text="⏳ Jeda "..t.."s..."; task.wait(1) end end
+                else usernameList[i].status="failed"; fruitStatusText.Text="❌ "..un..": "..msg; fruitStatusText.TextColor3=C.red; refreshUsernameList()
+                    lastFailedIndex=i; resumeBtn.Visible=true; isFruitAutoRunning=false; fruitAutoBtn.Text="🔄 MULAI AUTO (MULTI)"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(120,60,160); return
+                end
+            end; refreshUsernameList()
+        end
+        isFruitAutoRunning=false; fruitAutoBtn.Text="🔄 MULAI AUTO (MULTI)"; fruitAutoBtn.BackgroundColor3=Color3.fromRGB(120,60,160)
+        fruitStatusText.Text="✅ Auto selesai! Status di-reset."; fruitStatusText.TextColor3=C.green; resumeBtn.Visible=false
+        task.delay(2, resetAllStatus)
+    end)
+end)
+
+refreshUsernameList()
+print("[AoneHub] ✅ Tab Mail Fruit Ready (Absolute Position)")
+
+-- Auto-refresh stock
+task.spawn(function()
+    while parentFruit.Parent do
+        task.wait(30)
+        if fruitStockLabel and fruitStockLabel.Parent then  -- ⬅️ Cek nil
+            local fruits = getFruitValues()
+            local totalValue = 0
+            for _, f in ipairs(fruits) do totalValue = totalValue + f.value end
+            fruitStockLabel.Text = "📦 " .. #fruits .. " buah | Total: " .. formatValue(totalValue)
+        end
+    end
+end)
+
+print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
 
     -- ==================================================================
     -- AUTO-START
     -- ==================================================================
     if config.isRunningBuy then task.delay(2,function() if getRemote() then isRunningBuy=true; cacheBuyShop(); pcall(scanAndBuy); task.spawn(buyMainLoop); updateBuyUI() end end) end
     if config.isRunningSell then task.delay(3,function() if net and net.NPCS and net.NPCS.SellAll then isRunningSell=true; task.spawn(sellLoop); updateSellUI() end end) end
-    if config.isAutoMailRunning then task.delay(4,function() if config.mailTargetUsername~="" then isAutoRunning=true; userBox.Text=config.mailTargetUsername; updatePlayerInfo(config.mailTargetUsername); autoBtn.Text="⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(180,50,50); autoStatusLabel.Text="🔄 Auto Mail: ON"; autoStatusLabel.TextColor3=C.green end end) end
-    if config.isAutoClaimRunning then task.delay(5,function() isClaimRunning=true; claimBtn.Text="⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3=Color3.fromRGB(180,50,120); claimStatusLabel.Text="📬 Auto Claim: ON"; claimStatusLabel.TextColor3=Color3.fromRGB(200,100,255) end) end
 
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
