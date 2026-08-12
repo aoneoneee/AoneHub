@@ -189,6 +189,16 @@ local function main()
     end
     for _, tab in ipairs(tabs) do tabBtns[tab.name].MouseButton1Click:Connect(function() switchTab(tab.name) end) end
 
+    -- Placeholder Tab 5
+    do local f = tabFrames["Ekstra"]
+        local ic = Instance.new("TextLabel"); ic.Size = UDim2.new(1, 0, 0, 32); ic.Position = UDim2.new(0, 0, 0.35, -16)
+        ic.Text = "⚙️"; ic.Font = Enum.Font.Gotham; ic.TextSize = 28; ic.BackgroundTransparency = 1; ic.Parent = f
+        local tt = Instance.new("TextLabel"); tt.Size = UDim2.new(1, 0, 0, 18); tt.Position = UDim2.new(0, 0, 0.45, 0)
+        tt.Text = "Ekstra"; tt.TextColor3 = C.text; tt.Font = Enum.Font.GothamBold; tt.TextSize = 12; tt.BackgroundTransparency = 1; tt.Parent = f
+        local st = Instance.new("TextLabel"); st.Size = UDim2.new(1, 0, 0, 12); st.Position = UDim2.new(0, 0, 0.52, 0)
+        st.Text = "Coming soon..."; st.TextColor3 = C.textDim; st.Font = Enum.Font.Gotham; st.TextSize = 9; st.BackgroundTransparency = 1; st.Parent = f
+    end
+
     -- ==================================================================
     -- TAB 1: AUTO BUY
     -- ==================================================================
@@ -987,176 +997,6 @@ end)
 refreshUsernameList()
 print("[AoneHub] ✅ Tab Mail Fruit Ready (Absolute Position)")
 
-    -- ==================================================================
-    -- TAB 5: EKSTRA (ANTI AFK - HOLD BUILD)
-    -- ==================================================================
-    local parentEkstra = tabFrames["Ekstra"]
-
-    -- Hapus placeholder lama
-    for _, child in ipairs(parentEkstra:GetChildren()) do
-        child:Destroy()
-    end
-
-    -- State (pakai config biar persist)
-    if config.isRunningAfk == nil then config.isRunningAfk = false end
-    local isAfkRunning = config.isRunningAfk
-
-    local function antiAfkLoop()
-        while isAfkRunning do
-        -- Tunggu 16-18 menit acak
-            local waitTime = math.random(960, 1080)
-        
-        -- Countdown bisa ditampilkan kalau mau
-            for i = waitTime, 1, -1 do
-                if not isAfkRunning then break end
-            -- Update UI setiap 60 detik
-                if i % 60 == 0 then
-                    updateAfkUI(i)
-                end
-                task.wait(1)
-            end
-        
-            if not isAfkRunning then break end
-        
-            -- Equip Build tool
-            pcall(function()
-                local backpack = player:FindFirstChild("Backpack")
-                local character = player.Character
-            
-                if backpack and character then
-                    local build = backpack:FindFirstChild("Build")
-                    local humanoid = character:FindFirstChildOfClass("Humanoid")
-                
-                    if build and humanoid then
-                        humanoid:EquipTool(build)
-                        task.wait(1)
-                        humanoid:UnequipTools()
-                    end
-                end
-            end)
-        end
-    end
-
-local function startAfk()
-    if isAfkRunning then return end
-    isAfkRunning = true
-    config.isRunningAfk = true
-    saveConfig()
-    task.spawn(antiAfkLoop)
-    updateAfkUI()
-end
-
-local function stopAfk()
-    isAfkRunning = false
-    config.isRunningAfk = false
-    saveConfig()
-    updateAfkUI()
-end
-
--- ==================================================================
--- AFK UI
--- ==================================================================
-local afkScroll = Instance.new("ScrollingFrame")
-afkScroll.Size = UDim2.new(1, 0, 1, 0)
-afkScroll.CanvasSize = UDim2.new(0, 0, 0, 250)
-afkScroll.ScrollBarThickness = 3
-afkScroll.BackgroundTransparency = 1
-afkScroll.BorderSizePixel = 0
-afkScroll.Parent = parentEkstra
-
-local y = 4
-
--- Header
-local afkHdr = Instance.new("TextLabel")
-afkHdr.Size = UDim2.new(1, -12, 0, 20); afkHdr.Position = UDim2.new(0, 6, 0, y)
-afkHdr.Text = "⚙️  Anti AFK (Hold Build)"
-afkHdr.TextColor3 = C.text
-afkHdr.Font = Enum.Font.GothamBold; afkHdr.TextSize = 11
-afkHdr.TextXAlignment = Enum.TextXAlignment.Left; afkHdr.BackgroundTransparency = 1; afkHdr.Parent = afkScroll
-y += 24
-
--- Status
-local afkStatusText = Instance.new("TextLabel")
-afkStatusText.Size = UDim2.new(1, -12, 0, 14); afkStatusText.Position = UDim2.new(0, 6, 0, y)
-afkStatusText.Text = isAfkRunning and "🟢 ANTI AFK ON" or "⏹️ OFF"
-afkStatusText.TextColor3 = isAfkRunning and C.green or C.red
-afkStatusText.Font = Enum.Font.GothamSemibold; afkStatusText.TextSize = 9
-afkStatusText.TextXAlignment = Enum.TextXAlignment.Left; afkStatusText.BackgroundTransparency = 1; afkStatusText.Parent = afkScroll
-y += 18
-
--- Countdown
-local afkCountdownText = Instance.new("TextLabel")
-afkCountdownText.Size = UDim2.new(1, -12, 0, 14); afkCountdownText.Position = UDim2.new(0, 6, 0, y)
-afkCountdownText.Text = ""
-afkCountdownText.TextColor3 = C.yellow
-afkCountdownText.Font = Enum.Font.Gotham; afkCountdownText.TextSize = 9
-afkCountdownText.TextXAlignment = Enum.TextXAlignment.Left; afkCountdownText.BackgroundTransparency = 1; afkCountdownText.Parent = afkScroll
-y += 20
-
--- Info
-local afkInfoText = Instance.new("TextLabel")
-afkInfoText.Size = UDim2.new(1, -12, 0, 40); afkInfoText.Position = UDim2.new(0, 6, 0, y)
-afkInfoText.Text = "🔧 Equip 'Build' tool tiap 16-18 menit\n⏱️  Waktu acak (natural)\n✅ Aman, seperti ganti tool biasa"
-afkInfoText.TextColor3 = C.textDim; afkInfoText.Font = Enum.Font.Gotham; afkInfoText.TextSize = 8
-afkInfoText.TextXAlignment = Enum.TextXAlignment.Left; afkInfoText.BackgroundTransparency = 1
-afkInfoText.TextWrapped = true; afkInfoText.Parent = afkScroll
-y += 46
-
--- Toggle button
-local afkToggleBtn = Instance.new("TextButton")
-afkToggleBtn.Size = UDim2.new(1, -12, 0, 28); afkToggleBtn.Position = UDim2.new(0, 6, 0, y)
-afkToggleBtn.Text = isAfkRunning and "⏹ STOP" or "▶ START"
-afkToggleBtn.TextColor3 = C.text; afkToggleBtn.Font = Enum.Font.GothamBold; afkToggleBtn.TextSize = 10
-afkToggleBtn.BackgroundColor3 = isAfkRunning and C.red or C.green
-afkToggleBtn.BorderSizePixel = 0; afkToggleBtn.AutoButtonColor = false; afkToggleBtn.Parent = afkScroll
-Instance.new("UICorner", afkToggleBtn).CornerRadius = UDim.new(0, 5)
-
-afkToggleBtn.MouseEnter:Connect(function()
-    afkToggleBtn.BackgroundColor3 = isAfkRunning and Color3.fromRGB(220, 70, 70) or Color3.fromRGB(70, 220, 70)
-end)
-afkToggleBtn.MouseLeave:Connect(function()
-    afkToggleBtn.BackgroundColor3 = isAfkRunning and C.red or C.green
-end)
-
-function updateAfkUI(secondsLeft)
-    if isAfkRunning then
-        afkStatusText.Text = "🟢 ANTI AFK ON"
-        afkStatusText.TextColor3 = C.green
-        afkToggleBtn.Text = "⏹ STOP"
-        afkToggleBtn.BackgroundColor3 = C.red
-        
-        if secondsLeft then
-            local m = math.floor(secondsLeft / 60)
-            local s = secondsLeft % 60
-            afkCountdownText.Text = string.format("⏳ Next equip: %02d:%02d", m, s)
-        end
-    else
-        afkStatusText.Text = "⏹️ OFF"
-        afkStatusText.TextColor3 = C.red
-        afkToggleBtn.Text = "▶ START"
-        afkToggleBtn.BackgroundColor3 = C.green
-        afkCountdownText.Text = ""
-    end
-end
-
-afkToggleBtn.MouseButton1Click:Connect(function()
-    if isAfkRunning then stopAfk() else startAfk() end
-    updateAfkUI()
-end)
-
-updateAfkUI()
-
--- Auto-start dari config
-if config.isRunningAfk then
-    task.delay(2, function()
-        isAfkRunning = true
-        task.spawn(antiAfkLoop)
-        updateAfkUI()
-    end)
-end
-
-print("[AoneHub] ✅ Tab Ekstra Ready (Anti AFK - Hold Build)")
-    
 -- Auto-refresh stock
 task.spawn(function()
     while parentFruit.Parent do
@@ -1178,6 +1018,34 @@ print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
     if config.isRunningBuy then task.delay(2,function() if getRemote() then isRunningBuy=true; cacheBuyShop(); pcall(scanAndBuy); task.spawn(buyMainLoop); updateBuyUI() end end) end
     if config.isRunningSell then task.delay(3,function() if net and net.NPCS and net.NPCS.SellAll then isRunningSell=true; task.spawn(sellLoop); updateSellUI() end end) end
 
+    -- ANTI AFK SUPER SIMPLE - HOLD SHOVEL
+    task.spawn(function() 
+        while wait(math.random(960, 1080)) do -- 16-18 menit acak
+            pcall(function()
+                local backpack = player:FindFirstChild("Backpack")
+                local character = player.Character
+        
+                if backpack and character then
+                    local build = backpack:FindFirstChild("Build")
+                    local humanoid = character:FindFirstChildOfClass("Humanoid")
+            
+                    if build and humanoid then
+                    -- Pegang build
+                        humanoid:EquipTool(build)
+                
+                        wait(1) -- 1 detik
+                
+                        -- Lepaskan
+                        humanoid:UnequipTools()
+                    else
+                        print("[Anti AFK] Build tidak ditemukan di backpack!")
+                        print("[Anti AFK] Cek apakah nama item persis 'Build'")
+                    end
+                end
+            end)
+        end
+    end) 
+    
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
 end
