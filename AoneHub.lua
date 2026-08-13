@@ -627,22 +627,25 @@ config.mailSelectedItems=selMailItems; saveConfig(); updateMailSelLabel() end
         item.id = d and d.id or nil
     end
     
-    -- ⬇️ SIMPAN STOCK SEBELUM KIRIM ⬇️
+    -- ⬇️ SIMPAN STOCK SEBELUM KIRIM (format: [key] = {name, count, isUUID})
     local stockBefore = {}
     for cat, data in pairs(ALL_DATA) do
         for _, id in ipairs(data.items) do
             local name = type(id) == "table" and (id.name or "?") or tostring(id)
             local iid = type(id) == "table" and id.id or nil
             local key = iid or name
-            stockBefore[key] = data.getStock(name)
+            stockBefore[key] = {
+                name = name,
+                count = data.getStock(name),
+                isUUID = data.isUUID,
+                category = cat
+            }
         end
     end
     
-    local pib = {}   -- Pet IDs before
-    local its = {}   -- Items to send
-    local sentCounts = {}  -- ⬅️ Catat berapa yang dikirim per item
+    local its = {}  -- Items to send
     
-    -- Loop semua kategori & item
+    -- Loop & kirim yang ready
     for cat, data in pairs(ALL_DATA) do
         for _, id in ipairs(data.items) do
             local name = type(id) == "table" and (id.name or "?") or tostring(id)
@@ -663,9 +666,6 @@ config.mailSelectedItems=selMailItems; saveConfig(); updateMailSelLabel() end
                             ItemKey = data.isUUID and (iid or name) or name,
                             Count = count
                         })
-                        if data.isUUID and iid then pib[iid] = true end
-                        -- ⬇️ Catat key & jumlah yang dikirim ⬇️
-                        sentCounts[key] = count
                     end
                 end
             end
@@ -675,58 +675,59 @@ config.mailSelectedItems=selMailItems; saveConfig(); updateMailSelLabel() end
     if #its == 0 then return false, "Stok kosong!" end
     if #its > 20 then return false, "Max 20 jenis!" end
     
-    -- Kirim
-    net.Mailbox.SendBatch:Fire(uid, its, "")
-    task.wait(2)
+    -- ⬇️ KIRIM ⬇️
+    local sendSuccess = pcall(function()
+        net.Mailbox.SendBatch:Fire(uid, its, "")
+    end)
     
-    -- ⬇️ VERIFIKASI: bandingkan stock sebelum vs sesudah ⬇️
-    local anyReduced = false
+    if not sendSuccess then return false, "Gagal kirim (error)" end
     
-    for key, sentCount in pairs(sentCounts) do
-        -- Cari nama item dari key
-        local itemName = nil
-        local isUUID = false
-        for cat, data in pairs(ALL_DATA) do
-            for _, id in ipairs(data.items) do
-                local name = type(id) == "table" and (id.name or "?") or tostring(id)
-                local iid = type(id) == "table" and id.id or nil
-                local k = iid or name
-                if k == key then
-                    itemName = name
-                    isUUID = data.isUUID
+    -- ⬇️ TUNGGU SERVER PROSES ⬇️
+    task.wait(3)
+    
+    -- ⬇️ VERIFIKASI: cek stock BERKURANG untuk setiap item yang dikirim ⬇️
+    local sentAny = false
+    
+    for _, item in ipairs(its) do
+        local key = item.ItemKey
+        local before = stockBefore[key]
+        
+        if before then
+            if before.isUUID then
+                -- Cek pet hilang dari backpack
+                local found = false
+                local currentPets = getBackpackPets()
+                for _, p in ipairs(currentPets) do
+                    if p.id == key or p.name == before.name then
+                        found = true
+                        break
+                    end
+                end
+                if not found then
+                    sentAny = true
+                    break
+                end
+            else
+                -- Cek stock berkurang
+                local afterStock = ALL_DATA[before.category].getStock(before.name)
+                if afterStock < before.count then
+                    sentAny = true
                     break
                 end
             end
-            if itemName then break end
-        end
-        
-        if not isUUID and itemName then
-            local afterStock = ALL_DATA[itemName] and ALL_DATA[itemName].getStock 
-                and ALL_DATA[itemName].getStock(itemName) or 0
-            -- Kalau stock berkurang, berarti terkirim
-            if afterStock < (stockBefore[key] or 0) then
-                anyReduced = true
-                break
-            end
         end
     end
     
-    -- Cek pets (UUID)
-    if next(pib) then
-        local cp = getBackpackPets(); local ci = {}
-        for _, p in ipairs(cp) do if p.id then ci[p.id] = true end end
-        for pid, _ in pairs(pib) do 
-            if not ci[pid] then anyReduced = true; break end 
-        end
+    if not sentAny then
+        return false, "Gagal terkirim (stock tidak berubah)"
     end
     
-    if not anyReduced then return false, "Gagal terkirim" end
+    -- Refresh GUI
+    task.delay(1, refreshMailList)
     
-    -- ⬇️ REFRESH STOCK LABEL DI GUI ⬇️
-    refreshMailList()  -- ⬅️ Update tampilan stock
-    task.delay(3, refreshMailList)  -- ⬅️ Refresh lagi setelah server update
+    return true, "TERKIRIM! " .. #its .. " jenis"
+    end
     
-    return true, "TERKIRIM! " .. #its .. " jenis" end
     sendBtn.MouseButton1Click:Connect(function() updatePlayerInfo(userBox.Text); mailStatusText.Text="📤 Mengirim..."; mailStatusText.TextColor3=Color3.fromRGB(0,200,255); local ok,msg=doSend(true); mailStatusText.Text=(ok and"✅ "or"❌ ")..msg; mailStatusText.TextColor3=ok and C.green or C.red; if ok then task.delay(1,refreshMailList); task.delay(3,refreshMailList) end end)
     autoBtn.MouseButton1Click:Connect(function()
     isAutoRunning = not isAutoRunning
