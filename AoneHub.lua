@@ -479,16 +479,69 @@ local function main()
     local function initFav() local bp=getBackpack(); if not bp then return end; for _,i in ipairs(bp:GetChildren()) do if i:GetAttribute("HarvestedFruit")==true and i:GetAttribute("IsFavorite")==nil then i:SetAttribute("IsFavorite",false) end end end
     local function favById(fid) for _=1,3 do pcall(function() net.Backpack.SetFruitFavorite:Fire(fid,true) end); task.wait(0.5); local f=findFruitById(fid); if f and f:GetAttribute("IsFavorite")==true then return true end; task.wait(0.3) end; return false end
     local function unfavById(fid) for _=1,3 do pcall(function() net.Backpack.SetFruitFavorite:Fire(fid,false) end); task.wait(0.5); local f=findFruitById(fid); if f and f:GetAttribute("IsFavorite")~=true then return true end; task.wait(0.3) end; return false end
-    local function favUnmatched(names) initFav(); local ms={}; for _,n in ipairs(names) do ms[n]=true end; local ai=getAllFruitItems()
-        for _,d in ipairs(ai) do if ms[d.name] and d.item:GetAttribute("IsFavorite")==true then if not unfavById(d.id) then return false end; task.wait(0.3) end end
-        for _,d in ipairs(ai) do if not ms[d.name] and d.item:GetAttribute("IsFavorite")~=true then if not favById(d.id) then return false end; task.wait(0.5+math.random()*1.0) end end
-        for _,d in ipairs(ai) do local c=ms[d.name]~=nil; local f=d.item:GetAttribute("IsFavorite")==true; if c and f then if not unfavById(d.id) then return false end elseif not c and not f then if not favById(d.id) then return false end end end; return true end
-    local function unfavAll() for _,d in ipairs(getAllFruitItems()) do if d.item:GetAttribute("IsFavorite")==true then pcall(function() net.Backpack.SetFruitFavorite:Fire(d.id,false) end); task.wait(0.3) end end end
+    local function favUnmatched(names)
+    initFav()
+    
+    -- names = daftar buah yang akan DIJUAL (sudah dicek diselect + multiplier >= target)
+    local ms = {}
+    for _, n in ipairs(names) do ms[n] = true end
+    
+    local ai = getAllFruitItems()
+    
+    -- STEP 1: UNFAVORIT buah yang akan dijual (yang ada di names)
+    for _, d in ipairs(ai) do
+        if ms[d.name] then
+            if d.item:GetAttribute("IsFavorite") == true then
+                if not unfavById(d.id) then return false end
+                task.wait(0.3)
+            end
+        end
+    end
+    
+    -- STEP 2: FAVORIT SEMUA buah yang TIDAK akan dijual
+    for _, d in ipairs(ai) do
+        if not ms[d.name] then
+            if d.item:GetAttribute("IsFavorite") ~= true then
+                if not favById(d.id) then return false end
+                task.wait(0.5 + math.random() * 1.0)
+            end
+        end
+    end
+    
+    -- STEP 3: Verifikasi
+    for _, d in ipairs(ai) do
+        local willSell = ms[d.name] ~= nil
+        local isFav = d.item:GetAttribute("IsFavorite") == true
+        
+        if willSell and isFav then
+            -- Seharusnya tidak favorit
+            if not unfavById(d.id) then return false end
+        elseif not willSell and not isFav then
+            -- Seharusnya favorit
+            if not favById(d.id) then return false end
+        end
+    end
+    
+    return true
+    end
+    local function unfavAll() for _,d in ipairs(getAllFruitItems()) do if d.item:GetAttribute("IsFavorite")==true then pcall(function() net.Backpack.SetFruitFavorite:Fire(d.id,false) end); task.wait(0.5+math.random()*1.5) end end end
     local function readMult(fn) local pg=player:FindFirstChild("PlayerGui"); if not pg then return nil end; local sg=pg:FindFirstChild("FruitStockPrice"); if not sg or not sg.Enabled then return nil end; local sf=sg:FindFirstChild("Frame"); if sf then sf=sf:FindFirstChild("ScrollingFrame") end; if not sf then return nil end
         for _,c in ipairs(sf:GetChildren()) do if c:IsA("Frame") and c.Name=="FruitCard" and c:GetAttribute("SeedToolTip")==fn then local f=c:FindFirstChild("Frame"); if f then local ml=f:FindFirstChild("Multiplier"); if ml and ml:IsA("TextLabel") then local num=ml.Text:match("X([%d.]+)"); if num then return tonumber(num) end end end end end; return nil end
     local function updateMults() for fn,_ in pairs(config.selectedSellFruits) do local m=readMult(fn); if m then currentMultipliers[fn]=m end end
         if net.FruitStock and net.FruitStock.Request then local _,d=pcall(function() return net.FruitStock.Request:Fire() end); if d and d.entries then for fn,_ in pairs(config.selectedSellFruits) do local e=d.entries[fn]; if e then currentMultipliers[fn]=e.multiplier or 1 end end end end end
-    local function getMatching() local mt={}; for fn,_ in pairs(config.selectedSellFruits) do local t=config.sellTargets[fn]or 4.0; local m=currentMultipliers[fn]or 1; if m>=t then table.insert(mt,{name=fn,current=m,target=t}) end end; return mt end
+    local function getMatching()
+    local mt = {}
+    for fn, isSelected in pairs(config.selectedSellFruits) do
+        if isSelected then  -- ⬅️ HANYA DISELECT
+            local t = config.sellTargets[fn] or 4.0
+            local m = currentMultipliers[fn] or 1
+            if m >= t then  -- ⬅️ HANYA multiplier >= target
+                table.insert(mt, {name = fn, current = m, target = t})
+            end
+        end
+    end
+    return mt
+    end
     local function getSecUntilSell() local now=os.time(); local cm=math.floor(now/60); local cs=now%60; local nrm=math.ceil(cm/10)*10; local mutr=nrm-cm; if mutr==0 then return 600-cs end; return(mutr*60)-cs end
     local function sellAll() task.wait(0.5+math.random()*2.5); local s=pcall(function() net.NPCS.SellAll:Fire() end); return s end
     local function processSell(mt) local ns={}; for _,m in ipairs(mt) do table.insert(ns,m.name) end; if not favUnmatched(ns) then return false end; task.wait(0.5+math.random()); if not sellAll() then unfavAll(); return false end; task.wait(1+math.random()); unfavAll(); return true end
