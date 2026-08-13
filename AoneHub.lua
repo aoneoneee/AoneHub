@@ -627,8 +627,20 @@ config.mailSelectedItems=selMailItems; saveConfig(); updateMailSelLabel() end
         item.id = d and d.id or nil
     end
     
+    -- ⬇️ SIMPAN STOCK SEBELUM KIRIM ⬇️
+    local stockBefore = {}
+    for cat, data in pairs(ALL_DATA) do
+        for _, id in ipairs(data.items) do
+            local name = type(id) == "table" and (id.name or "?") or tostring(id)
+            local iid = type(id) == "table" and id.id or nil
+            local key = iid or name
+            stockBefore[key] = data.getStock(name)
+        end
+    end
+    
     local pib = {}   -- Pet IDs before
     local its = {}   -- Items to send
+    local sentCounts = {}  -- ⬅️ Catat berapa yang dikirim per item
     
     -- Loop semua kategori & item
     for cat, data in pairs(ALL_DATA) do
@@ -643,7 +655,6 @@ config.mailSelectedItems=selMailItems; saveConfig(); updateMailSelLabel() end
                 if count <= 0 then count = type(id) == "table" and (id.count or 1) or data.getStock(name) end
                 local stock = type(id) == "table" and (id.count or data.getStock(name)) or data.getStock(name)
                 
-                -- ⬇️ KIRIM YANG READY SAJA ⬇️
                 if forceSend or stock >= count then
                     count = math.min(count, stock, data.maxInput or 9999)
                     if count > 0 then
@@ -653,9 +664,10 @@ config.mailSelectedItems=selMailItems; saveConfig(); updateMailSelLabel() end
                             Count = count
                         })
                         if data.isUUID and iid then pib[iid] = true end
+                        -- ⬇️ Catat key & jumlah yang dikirim ⬇️
+                        sentCounts[key] = count
                     end
                 end
-                -- Kalau stock < count & bukan forceSend → SKIP (tidak kirim yang ini)
             end
         end
     end
@@ -667,28 +679,56 @@ config.mailSelectedItems=selMailItems; saveConfig(); updateMailSelLabel() end
     net.Mailbox.SendBatch:Fire(uid, its, "")
     task.wait(2)
     
-    -- Verifikasi
+    -- ⬇️ VERIFIKASI: bandingkan stock sebelum vs sesudah ⬇️
     local anyReduced = false
-    for _, item in ipairs(its) do
-        if not ALL_DATA[item.Category].isUUID then
-            local afterStock = ALL_DATA[item.Category].getStock(item.ItemKey)
-            if afterStock < (selMailItems[item.ItemKey] and selMailItems[item.ItemKey].count or 1) then
+    
+    for key, sentCount in pairs(sentCounts) do
+        -- Cari nama item dari key
+        local itemName = nil
+        local isUUID = false
+        for cat, data in pairs(ALL_DATA) do
+            for _, id in ipairs(data.items) do
+                local name = type(id) == "table" and (id.name or "?") or tostring(id)
+                local iid = type(id) == "table" and id.id or nil
+                local k = iid or name
+                if k == key then
+                    itemName = name
+                    isUUID = data.isUUID
+                    break
+                end
+            end
+            if itemName then break end
+        end
+        
+        if not isUUID and itemName then
+            local afterStock = ALL_DATA[itemName] and ALL_DATA[itemName].getStock 
+                and ALL_DATA[itemName].getStock(itemName) or 0
+            -- Kalau stock berkurang, berarti terkirim
+            if afterStock < (stockBefore[key] or 0) then
                 anyReduced = true
                 break
             end
         end
     end
     
+    -- Cek pets (UUID)
     if next(pib) then
         local cp = getBackpackPets(); local ci = {}
         for _, p in ipairs(cp) do if p.id then ci[p.id] = true end end
-        for pid, _ in pairs(pib) do if not ci[pid] then anyReduced = true; break end end
+        for pid, _ in pairs(pib) do 
+            if not ci[pid] then anyReduced = true; break end 
+        end
     end
     
     if not anyReduced then return false, "Gagal terkirim" end
+    
+    -- ⬇️ REFRESH STOCK LABEL DI GUI ⬇️
+    refreshMailList()  -- ⬅️ Update tampilan stock
+    task.delay(3, refreshMailList)  -- ⬅️ Refresh lagi setelah server update
+    
     return true, "TERKIRIM! " .. #its .. " jenis" end
-    sendBtn.MouseButton1Click:Connect(function() updatePlayerInfo(userBox.Text); mailStatusText.Text="📤 Mengirim..."; mailStatusText.TextColor3=Color3.fromRGB(0,200,255); local ok,msg=doSend(true); mailStatusText.Text=(ok and"✅ "or"❌ ")..msg; mailStatusText.TextColor3=ok and C.green or C.red; if ok then task.delay(5,refreshMailList) end end)
-    autoBtn.MouseButton1Click:Connect(function() isAutoRunning=not isAutoRunning; config.isAutoMailRunning=isAutoRunning; saveConfig(); if isAutoRunning then if userBox.Text=="" then mailStatusText.Text="❌ ISI USERNAME!"; mailStatusText.TextColor3=C.red; isAutoRunning=false; return end; updatePlayerInfo(userBox.Text); autoBtn.Text="⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(180,50,50); lastAutoScan=0; currentScanInterval=math.random(autoScanMin,autoScanMax); autoStatusLabel.Text="🔄 Auto Mail: ON (scan "..currentScanInterval.."s)"; autoStatusLabel.TextColor3=C.green else autoBtn.Text="🔄 MULAI AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(0,120,180); autoStatusLabel.Text="🔄 Auto Mail: OFF"; autoStatusLabel.TextColor3=Color3.fromRGB(150,150,150) end end)
+    sendBtn.MouseButton1Click:Connect(function() updatePlayerInfo(userBox.Text); mailStatusText.Text="📤 Mengirim..."; mailStatusText.TextColor3=Color3.fromRGB(0,200,255); local ok,msg=doSend(true); mailStatusText.Text=(ok and"✅ "or"❌ ")..msg; mailStatusText.TextColor3=ok and C.green or C.red; if ok then task.delay(1,refreshMailList); task.delay(3,refreshMailList) end end)
+    autoBtn.MouseButton1Click:Connect(function() isAutoRunning=not isAutoRunning; config.isAutoMailRunning=isAutoRunning; saveConfig(); if isAutoRunning then if userBox.Text=="" then mailStatusText.Text="❌ ISI USERNAME!"; mailStatusText.TextColor3=C.red; isAutoRunning=false; return end; updatePlayerInfo(userBox.Text); autoBtn.Text="⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(180,50,50); lastAutoScan=0; currentScanInterval=math.random(autoScanMin,autoScanMax); autoStatusLabel.Text="🔄 Auto Mail: ON (scan "..currentScanInterval.."s)"; autoStatusLabel.TextColor3=C.green else autoBtn.Text="🔄 MULAI AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(0,120,180); autoStatusLabel.Text="🔄 Auto Mail: OFF"; autoStatusLabel.TextColor3=Color3.fromRGB(150,150,150); if ok then task.delay(1,refreshMailList); task.delay(3,refreshMailList) end end)
     claimBtn.MouseButton1Click:Connect(function() isClaimRunning=not isClaimRunning; config.isAutoClaimRunning=isClaimRunning; saveConfig(); if isClaimRunning then claimBtn.Text="⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3=Color3.fromRGB(180,50,120); lastClaimScan=0; currentClaimInterval=math.random(claimScanMin,claimScanMax); claimStatusLabel.Text="📬 Auto Claim: ON (scan "..currentClaimInterval.."s)"; claimStatusLabel.TextColor3=Color3.fromRGB(200,100,255); local ok,msg=claimAllGifts(); if ok then mailStatusText.Text="✅ "..msg; mailStatusText.TextColor3=C.green end else claimBtn.Text="📬 MULAI AUTO CLAIM"; claimBtn.BackgroundColor3=Color3.fromRGB(120,60,160); claimStatusLabel.Text="📬 Auto Claim: OFF"; claimStatusLabel.TextColor3=Color3.fromRGB(150,150,150) end end)
     task.spawn(function() while parentMail.Parent do task.wait(1); if isAutoRunning then lastAutoScan=lastAutoScan+1; autoStatusLabel.Text="🔄 Auto Mail: ON (scan "..(currentScanInterval-lastAutoScan).."s)"; if lastAutoScan>=currentScanInterval then lastAutoScan=0; currentScanInterval=math.random(autoScanMin,autoScanMax); local bp=getBackpackPets(); local bm={}; for _,p in ipairs(bp) do bm[p.name]=p end; for _,item in ipairs(ALL_DATA.Pets.items) do local d=bm[item.name]; item.count=d and d.count or 0; item.id=d and d.id or nil end; refreshMailList(); local ok,msg=doSend(false); if ok then mailStatusText.Text="✅ "..msg; mailStatusText.TextColor3=C.green; task.delay(5,refreshMailList) end end end; if isClaimRunning then lastClaimScan=lastClaimScan+1; claimStatusLabel.Text="📬 Auto Claim: ON (scan "..(currentClaimInterval-lastClaimScan).."s)"; if lastClaimScan>=currentClaimInterval then lastClaimScan=0; currentClaimInterval=math.random(claimScanMin,claimScanMax); local ok,msg=claimAllGifts(); if ok then mailStatusText.Text="✅ "..msg; mailStatusText.TextColor3=C.green end end end end end)
     refreshMailList()
