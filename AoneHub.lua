@@ -1096,6 +1096,7 @@ fruitScroll.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 -- ==================================================================
 -- FUNGSI REFRESH + ADD
 -- ==================================================================
+
 local function updateFruitPlayerInfo()
     if not selectedUserIndex then
         fruitPlayerInfo.Visible = false
@@ -1112,36 +1113,17 @@ local function updateFruitPlayerInfo()
         local userId, displayName = netFruit.Mailbox.LookupPlayer:Fire(username)
         
         if userId and userId > 0 then
-            -- PAKAI MailboxItemCatalog SEPERTI AUTO MAIL
-            if MailboxItemCatalog2 then
-                local headshot = MailboxItemCatalog2.GetCachedHeadshot(userId)
-                if headshot and headshot ~= "" then
-                    fruitPlayerImage.Image = headshot
-                else
-                    task.spawn(function()
-                        local img = MailboxItemCatalog2.GetHeadshot(userId)
-                        if img ~= "" then 
-                            fruitPlayerImage.Image = img 
-                        end
-                    end)
-                end
-            end
+            fruitPlayerDisplay.Text = (displayName and displayName ~= "" and displayName or username)
             
-            -- Fallback ke Players service kalau MailboxItemCatalog gagal
-            task.spawn(function()
-                task.wait(2)
-                if fruitPlayerImage.Image == "rbxasset://textures/ui/GuiImagePlaceholder.png" then
-                    local Players = game:GetService("Players")
-                    local success, thumb = pcall(function()
-                        return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
-                    end)
-                    if success and thumb then
-                        fruitPlayerImage.Image = thumb
-                    end
-                end
+            -- LANGSUNG PAKAI PLAYERS SERVICE
+            local Players = game:GetService("Players")
+            local success, thumb = pcall(function()
+                return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size48x48)
             end)
             
-            fruitPlayerDisplay.Text = (displayName and displayName ~= "" and displayName or username)
+            if success and thumb then
+                fruitPlayerImage.Image = thumb
+            end
         else
             fruitPlayerDisplay.Text = "User tidak ditemukan"
             fruitPlayerName.Text = ""
