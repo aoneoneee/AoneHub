@@ -1066,6 +1066,7 @@ local function refreshUsernameList()
         empty.BackgroundTransparency = 1; empty.Text = "Belum ada username"
         empty.TextColor3 = Color3.fromRGB(150, 150, 150); empty.Font = Enum.Font.Gotham; empty.TextSize = 9
         resumeBtn.Visible = false
+        lastFailedIndex = nil
         return
     end
     
@@ -1119,9 +1120,11 @@ local function refreshUsernameList()
         db.MouseButton1Click:Connect(function() table.remove(usernameList,i); if selectedUserIndex==i then selectedUserIndex=nil end; config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList() end)
     end
     
-    local hasFailed = false
-    for _, data in ipairs(usernameList) do if data.status=="failed" then hasFailed=true; break end end
-    resumeBtn.Visible = hasFailed
+    if lastFailedIndex then
+        resumeBtn.Visible = true
+    else
+        resumeBtn.Visible = false
+    end
 end
 
 local function addUsername(name)
@@ -1169,7 +1172,12 @@ resumeBtn.MouseButton1Click:Connect(function()
     task.spawn(function()
         for i=lastFailedIndex, #usernameList do
             if not isFruitAutoRunning then break end
-            if usernameList[i].status=="skipped" then fruitStatusText.Text="⏭ Skip #"..i..": "..usernameList[i].username
+            if usernameList[i].status=="skipped" then 
+                fruitStatusText.Text="⏭ Skip #"..i..": "..usernameList[i].username
+                fruitStatusText.TextColor3 = C.yellow
+            elseif usernameList[i].status=="sent" then
+                fruitStatusText.Text="✅ #"..i.." sudah terkirim"
+                fruitStatusText.TextColor3 = C.green
             elseif usernameList[i].status=="waiting" or usernameList[i].status=="failed" then
                 local un=usernameList[i].username; fruitStatusText.Text="📤 "..un.."..."; fruitStatusText.TextColor3=Color3.fromRGB(0,200,255)
                 local ok, msg = sendToUser(un, tv, tol)
