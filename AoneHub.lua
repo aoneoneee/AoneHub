@@ -1096,11 +1096,6 @@ fruitScroll.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 -- ==================================================================
 -- FUNGSI REFRESH + ADD
 -- ==================================================================
--- Fungsi update player info
-local MailboxItemCatalog2 = nil
-pcall(function() MailboxItemCatalog2 = require(player.PlayerScripts.Controllers.MailboxController.MailboxItemCatalog) end)
-
--- Letakkan fungsi ini SEBELUM refreshUsernameList()
 local function updateFruitPlayerInfo()
     if not selectedUserIndex then
         fruitPlayerInfo.Visible = false
