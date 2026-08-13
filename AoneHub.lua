@@ -984,6 +984,86 @@ userListLabel.TextColor3 = C.textDim; userListLabel.Font = Enum.Font.Gotham; use
 userListLabel.TextXAlignment = Enum.TextXAlignment.Left; userListLabel.Parent = fruitScroll
 y += 16
 
+-- Player Info Frame (untuk selected user)
+local fruitPlayerInfo = Instance.new("Frame")
+fruitPlayerInfo.Size = UDim2.new(1, -12, 0, 36)
+fruitPlayerInfo.Position = UDim2.new(0, 6, 0, y)
+fruitPlayerInfo.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+fruitPlayerInfo.BorderSizePixel = 0
+fruitPlayerInfo.Visible = false
+fruitPlayerInfo.Parent = fruitScroll
+Instance.new("UICorner", fruitPlayerInfo).CornerRadius = UDim.new(0, 4)
+y += 40
+
+local fruitPlayerImage = Instance.new("ImageLabel")
+fruitPlayerImage.Size = UDim2.new(0, 26, 0, 26)
+fruitPlayerImage.Position = UDim2.new(0, 5, 0.5, -13)
+fruitPlayerImage.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+fruitPlayerImage.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+fruitPlayerImage.Parent = fruitPlayerInfo
+Instance.new("UICorner", fruitPlayerImage).CornerRadius = UDim.new(1, 0)
+
+local fruitPlayerDisplay = Instance.new("TextLabel")
+fruitPlayerDisplay.Size = UDim2.new(1, -36, 0, 16)
+fruitPlayerDisplay.Position = UDim2.new(0, 36, 0, 2)
+fruitPlayerDisplay.BackgroundTransparency = 1
+fruitPlayerDisplay.Text = ""
+fruitPlayerDisplay.TextColor3 = C.text
+fruitPlayerDisplay.Font = Enum.Font.GothamBold
+fruitPlayerDisplay.TextSize = 11
+fruitPlayerDisplay.TextXAlignment = Enum.TextXAlignment.Left
+fruitPlayerDisplay.Parent = fruitPlayerInfo
+
+local fruitPlayerName = Instance.new("TextLabel")
+fruitPlayerName.Size = UDim2.new(1, -36, 0, 12)
+fruitPlayerName.Position = UDim2.new(0, 36, 0, 18)
+fruitPlayerName.BackgroundTransparency = 1
+fruitPlayerName.Text = ""
+fruitPlayerName.TextColor3 = Color3.fromRGB(150, 150, 160)
+fruitPlayerName.Font = Enum.Font.Gotham
+fruitPlayerName.TextSize = 8
+fruitPlayerName.TextXAlignment = Enum.TextXAlignment.Left
+fruitPlayerName.Parent = fruitPlayerInfo
+
+-- Fungsi update player info
+local MailboxItemCatalog2 = nil
+pcall(function() MailboxItemCatalog2 = require(player.PlayerScripts.Controllers.MailboxController.MailboxItemCatalog) end)
+
+local function updateFruitPlayerInfo()
+    if not selectedUserIndex then
+        fruitPlayerInfo.Visible = false
+        return
+    end
+    
+    local username = usernameList[selectedUserIndex].username
+    fruitPlayerInfo.Visible = true
+    fruitPlayerName.Text = "@" .. username
+    fruitPlayerDisplay.Text = "Loading..."
+    fruitPlayerImage.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+    
+    task.spawn(function()
+        local userId, displayName = netFruit.Mailbox.LookupPlayer:Fire(username)
+        
+        if userId and userId > 0 then
+            if MailboxItemCatalog2 then
+                local headshot = MailboxItemCatalog2.GetCachedHeadshot(userId)
+                if headshot and headshot ~= "" then
+                    fruitPlayerImage.Image = headshot
+                else
+                    task.spawn(function()
+                        local img = MailboxItemCatalog2.GetHeadshot(userId)
+                        if img ~= "" then fruitPlayerImage.Image = img end
+                    end)
+                end
+            end
+            fruitPlayerDisplay.Text = (displayName and displayName ~= "" and displayName or username)
+        else
+            fruitPlayerDisplay.Text = "User tidak ditemukan"
+            fruitPlayerName.Text = ""
+        end
+    end)
+end
+
 -- User list frame
 local userListFrame = Instance.new("ScrollingFrame")
 userListFrame.Size = UDim2.new(1, -12, 0, 70); userListFrame.Position = UDim2.new(0, 6, 0, y)
@@ -1055,6 +1135,42 @@ fruitScroll.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 -- ==================================================================
 -- FUNGSI REFRESH + ADD
 -- ==================================================================
+-- Letakkan fungsi ini SEBELUM refreshUsernameList()
+local function updateFruitPlayerInfo()
+    if not selectedUserIndex then
+        fruitPlayerInfo.Visible = false
+        return
+    end
+    
+    local username = usernameList[selectedUserIndex].username
+    fruitPlayerInfo.Visible = true
+    fruitPlayerName.Text = "@" .. username
+    fruitPlayerDisplay.Text = "Loading..."
+    fruitPlayerImage.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+    
+    task.spawn(function()
+        local userId, displayName = netFruit.Mailbox.LookupPlayer:Fire(username)
+        
+        if userId and userId > 0 then
+            if MailboxItemCatalog2 then
+                local headshot = MailboxItemCatalog2.GetCachedHeadshot(userId)
+                if headshot and headshot ~= "" then
+                    fruitPlayerImage.Image = headshot
+                else
+                    task.spawn(function()
+                        local img = MailboxItemCatalog2.GetHeadshot(userId)
+                        if img ~= "" then fruitPlayerImage.Image = img end
+                    end)
+                end
+            end
+            fruitPlayerDisplay.Text = (displayName and displayName ~= "" and displayName or username)
+        else
+            fruitPlayerDisplay.Text = "User tidak ditemukan"
+            fruitPlayerName.Text = ""
+        end
+    end)
+end
+    
 local function refreshUsernameList()
     for _, child in ipairs(userListFrame:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
     local count = #usernameList
@@ -1110,14 +1226,14 @@ local function refreshUsernameList()
         sb.BackgroundColor3=isSel and Color3.fromRGB(0,140,200) or Color3.fromRGB(40,40,50)
         sb.Text=isSel and "✓" or "Sel"; sb.TextColor3=C.text; sb.Font=Enum.Font.GothamBold; sb.TextSize=6; sb.BorderSizePixel=0
         Instance.new("UICorner", sb).CornerRadius = UDim.new(0, 2)
-        sb.MouseButton1Click:Connect(function() selectedUserIndex=i; refreshUsernameList() end)
+        sb.MouseButton1Click:Connect(function() selectedUserIndex=i; refreshUsernameList(); updateFruitPlayerInfo() end)
         
         -- Delete
         local db = Instance.new("TextButton", row); db.Size=UDim2.new(0,18,1,-2); db.Position=UDim2.new(1,-16,0,1)
         db.BackgroundColor3=Color3.fromRGB(60,30,30); db.Text="✕"; db.TextColor3=Color3.fromRGB(255,100,100)
         db.Font=Enum.Font.GothamBold; db.TextSize=6; db.BorderSizePixel=0
         Instance.new("UICorner", db).CornerRadius = UDim.new(0, 2)
-        db.MouseButton1Click:Connect(function() table.remove(usernameList,i); if selectedUserIndex==i then selectedUserIndex=nil end; config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList() end)
+        db.MouseButton1Click:Connect(function() table.remove(usernameList,i); if selectedUserIndex==i then selectedUserIndex=nil; fruitPlayerInfo.Visible=false end; config.mailFruitUsers=usernameList; saveConfig(); refreshUsernameList() end)
     end
     
     if lastFailedIndex then
