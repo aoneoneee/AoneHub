@@ -608,7 +608,85 @@ config.mailSelectedItems=selMailItems; saveConfig(); updateMailSelLabel() end
             cb.MouseButton1Click:Connect(ti)
         end; updateMailSelLabel()
     end
-    local function doSend(forceSend) local un=userBox.Text; if un=="" then return false,"ISI USERNAME!" end; if countMailSelected()>20 then return false,"Max 20!" end; local uid; if cachedUsername==un and cachedUserId then uid=cachedUserId else updatePlayerInfo(un); task.wait(1); uid=cachedUserId end; if not uid or uid<=0 then return false,"User tidak ditemukan!" end; local bp=getBackpackPets(); local bm={}; for _,p in ipairs(bp) do bm[p.name]=p end; for _,item in ipairs(ALL_DATA.Pets.items) do local d=bm[item.name]; item.count=d and d.count or 0; item.id=d and d.id or nil end; local sb={}; for cat,data in pairs(ALL_DATA) do for _,id in ipairs(data.items) do local name=type(id)=="table" and(id.name or"?")or tostring(id); sb[name]=data.getStock(name) end end; local pib={}; local its={}; local ar=true; for cat,data in pairs(ALL_DATA) do for _,id in ipairs(data.items) do local name=type(id)=="table" and(id.name or"?")or tostring(id); local iid=type(id)=="table" and id.id or nil; local key=iid or name; local sel=selMailItems[key]; if sel and sel.selected then local c=sel.count; if c<=0 then c=type(id)=="table" and(id.count or 1)or data.getStock(name) end; local st=type(id)=="table" and(id.count or data.getStock(name))or data.getStock(name); if forceSend then c=math.min(c,st,data.maxInput or 9999); if c>0 then table.insert(its,{Category=cat,ItemKey=data.isUUID and(iid or name)or name,Count=c}); if data.isUUID and iid then pib[iid]=true end end else if st<c then ar=false else c=math.min(c,data.maxInput or 9999); if c>0 then table.insert(its,{Category=cat,ItemKey=data.isUUID and(iid or name)or name,Count=c}); if data.isUUID and iid then pib[iid]=true end end end end end end end; if not forceSend and not ar then return false,"Menunggu stok..." end; if #its==0 then return false,"Stok kosong!" end; if #its>20 then return false,"Max 20 jenis!" end; net.Mailbox.SendBatch:Fire(uid,its,""); task.wait(2); local ar2=false; for _,item in ipairs(its) do if not ALL_DATA[item.Category].isUUID then local as=ALL_DATA[item.Category].getStock(item.ItemKey); if as<(sb[item.ItemKey]or 0) then ar2=true; break end end end; if next(pib) then local cp=getBackpackPets(); local ci={}; for _,p in ipairs(cp) do if p.id then ci[p.id]=true end end; for pid,_ in pairs(pib) do if not ci[pid] then ar2=true; break end end end; if not ar2 then return false,"Gagal terkirim" end; return true,"TERKIRIM! "..#its.." jenis" end
+    local function doSend(forceSend)
+    local un = userBox.Text
+    if un == "" then return false, "ISI USERNAME!" end
+    if countMailSelected() > 20 then return false, "Max 20!" end
+    
+    local uid
+    if cachedUsername == un and cachedUserId then uid = cachedUserId
+    else updatePlayerInfo(un); task.wait(1); uid = cachedUserId end
+    if not uid or uid <= 0 then return false, "User tidak ditemukan!" end
+    
+    -- Refresh pets
+    local bp = getBackpackPets(); local bm = {}
+    for _, p in ipairs(bp) do bm[p.name] = p end
+    for _, item in ipairs(ALL_DATA.Pets.items) do
+        local d = bm[item.name]
+        item.count = d and d.count or 0
+        item.id = d and d.id or nil
+    end
+    
+    local pib = {}   -- Pet IDs before
+    local its = {}   -- Items to send
+    
+    -- Loop semua kategori & item
+    for cat, data in pairs(ALL_DATA) do
+        for _, id in ipairs(data.items) do
+            local name = type(id) == "table" and (id.name or "?") or tostring(id)
+            local iid = type(id) == "table" and id.id or nil
+            local key = iid or name
+            local sel = selMailItems[key]
+            
+            if sel and sel.selected then
+                local count = sel.count
+                if count <= 0 then count = type(id) == "table" and (id.count or 1) or data.getStock(name) end
+                local stock = type(id) == "table" and (id.count or data.getStock(name)) or data.getStock(name)
+                
+                -- ⬇️ KIRIM YANG READY SAJA ⬇️
+                if forceSend or stock >= count then
+                    count = math.min(count, stock, data.maxInput or 9999)
+                    if count > 0 then
+                        table.insert(its, {
+                            Category = cat,
+                            ItemKey = data.isUUID and (iid or name) or name,
+                            Count = count
+                        })
+                        if data.isUUID and iid then pib[iid] = true end
+                    end
+                end
+                -- Kalau stock < count & bukan forceSend → SKIP (tidak kirim yang ini)
+            end
+        end
+    end
+    
+    if #its == 0 then return false, "Stok kosong!" end
+    if #its > 20 then return false, "Max 20 jenis!" end
+    
+    -- Kirim
+    net.Mailbox.SendBatch:Fire(uid, its, "")
+    task.wait(2)
+    
+    -- Verifikasi
+    local anyReduced = false
+    for _, item in ipairs(its) do
+        if not ALL_DATA[item.Category].isUUID then
+            local afterStock = ALL_DATA[item.Category].getStock(item.ItemKey)
+            if afterStock < (selMailItems[item.ItemKey] and selMailItems[item.ItemKey].count or 1) then
+                anyReduced = true
+                break
+            end
+        end
+    end
+    
+    if next(pib) then
+        local cp = getBackpackPets(); local ci = {}
+        for _, p in ipairs(cp) do if p.id then ci[p.id] = true end end
+        for pid, _ in pairs(pib) do if not ci[pid] then anyReduced = true; break end end
+    end
+    
+    if not anyReduced then return false, "Gagal terkirim" end
+    return true, "TERKIRIM! " .. #its .. " jenis" end
     sendBtn.MouseButton1Click:Connect(function() updatePlayerInfo(userBox.Text); mailStatusText.Text="📤 Mengirim..."; mailStatusText.TextColor3=Color3.fromRGB(0,200,255); local ok,msg=doSend(true); mailStatusText.Text=(ok and"✅ "or"❌ ")..msg; mailStatusText.TextColor3=ok and C.green or C.red; if ok then task.delay(5,refreshMailList) end end)
     autoBtn.MouseButton1Click:Connect(function() isAutoRunning=not isAutoRunning; config.isAutoMailRunning=isAutoRunning; saveConfig(); if isAutoRunning then if userBox.Text=="" then mailStatusText.Text="❌ ISI USERNAME!"; mailStatusText.TextColor3=C.red; isAutoRunning=false; return end; updatePlayerInfo(userBox.Text); autoBtn.Text="⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(180,50,50); lastAutoScan=0; currentScanInterval=math.random(autoScanMin,autoScanMax); autoStatusLabel.Text="🔄 Auto Mail: ON (scan "..currentScanInterval.."s)"; autoStatusLabel.TextColor3=C.green else autoBtn.Text="🔄 MULAI AUTO MAIL"; autoBtn.BackgroundColor3=Color3.fromRGB(0,120,180); autoStatusLabel.Text="🔄 Auto Mail: OFF"; autoStatusLabel.TextColor3=Color3.fromRGB(150,150,150) end end)
     claimBtn.MouseButton1Click:Connect(function() isClaimRunning=not isClaimRunning; config.isAutoClaimRunning=isClaimRunning; saveConfig(); if isClaimRunning then claimBtn.Text="⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3=Color3.fromRGB(180,50,120); lastClaimScan=0; currentClaimInterval=math.random(claimScanMin,claimScanMax); claimStatusLabel.Text="📬 Auto Claim: ON (scan "..currentClaimInterval.."s)"; claimStatusLabel.TextColor3=Color3.fromRGB(200,100,255); local ok,msg=claimAllGifts(); if ok then mailStatusText.Text="✅ "..msg; mailStatusText.TextColor3=C.green end else claimBtn.Text="📬 MULAI AUTO CLAIM"; claimBtn.BackgroundColor3=Color3.fromRGB(120,60,160); claimStatusLabel.Text="📬 Auto Claim: OFF"; claimStatusLabel.TextColor3=Color3.fromRGB(150,150,150) end end)
