@@ -1025,45 +1025,6 @@ fruitPlayerName.TextSize = 8
 fruitPlayerName.TextXAlignment = Enum.TextXAlignment.Left
 fruitPlayerName.Parent = fruitPlayerInfo
 
--- Fungsi update player info
-local MailboxItemCatalog2 = nil
-pcall(function() MailboxItemCatalog2 = require(player.PlayerScripts.Controllers.MailboxController.MailboxItemCatalog) end)
-
-local function updateFruitPlayerInfo()
-    if not selectedUserIndex then
-        fruitPlayerInfo.Visible = false
-        return
-    end
-    
-    local username = usernameList[selectedUserIndex].username
-    fruitPlayerInfo.Visible = true
-    fruitPlayerName.Text = "@" .. username
-    fruitPlayerDisplay.Text = "Loading..."
-    fruitPlayerImage.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
-    
-    task.spawn(function()
-        local userId, displayName = netFruit.Mailbox.LookupPlayer:Fire(username)
-        
-        if userId and userId > 0 then
-            if MailboxItemCatalog2 then
-                local headshot = MailboxItemCatalog2.GetCachedHeadshot(userId)
-                if headshot and headshot ~= "" then
-                    fruitPlayerImage.Image = headshot
-                else
-                    task.spawn(function()
-                        local img = MailboxItemCatalog2.GetHeadshot(userId)
-                        if img ~= "" then fruitPlayerImage.Image = img end
-                    end)
-                end
-            end
-            fruitPlayerDisplay.Text = (displayName and displayName ~= "" and displayName or username)
-        else
-            fruitPlayerDisplay.Text = "User tidak ditemukan"
-            fruitPlayerName.Text = ""
-        end
-    end)
-end
-
 -- User list frame
 local userListFrame = Instance.new("ScrollingFrame")
 userListFrame.Size = UDim2.new(1, -12, 0, 70); userListFrame.Position = UDim2.new(0, 6, 0, y)
@@ -1135,6 +1096,10 @@ fruitScroll.CanvasSize = UDim2.new(0, 0, 0, y + 10)
 -- ==================================================================
 -- FUNGSI REFRESH + ADD
 -- ==================================================================
+-- Fungsi update player info
+local MailboxItemCatalog2 = nil
+pcall(function() MailboxItemCatalog2 = require(player.PlayerScripts.Controllers.MailboxController.MailboxItemCatalog) end)
+
 -- Letakkan fungsi ini SEBELUM refreshUsernameList()
 local function updateFruitPlayerInfo()
     if not selectedUserIndex then
