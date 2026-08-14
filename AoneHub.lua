@@ -1385,7 +1385,7 @@ task.spawn(function()
             VirtualInputManager:SendMouseButtonEvent(false, x, y, 0, true, nil)
         end)
         
-        task.wait(420 + math.random() * 180)
+        task.wait(60 + math.random() * 60)
     end
 end)
 
