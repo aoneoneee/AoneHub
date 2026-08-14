@@ -1369,25 +1369,44 @@ end)
 print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
 
 -- ==================================================================
--- AUTO ANTI-AFK (LANGSUNG AKTIF TANPA TOMBOL)
+-- ANTI AFK BYPASS (Simulasi Input)
 -- ==================================================================
-task.spawn(function()
-    print("[AoneHub] 🔄 Anti-AFK: ON (otomatis)")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local antiAfkRunning = false
+
+local function simulateInput()
+    -- Simulasi mouse movement
+    VirtualInputManager:SendMouseMoveEvent(100, 100, nil)
+    VirtualInputManager:SendMouseMoveEvent(200, 200, nil)
+    VirtualInputManager:SendMouseMoveEvent(150, 150, nil)
     
-    while true do
-        pcall(function()
-            local VirtualInputManager = game:GetService("VirtualInputManager")
-            local x = math.random(100, 500)
-            local y = math.random(100, 500)
-            VirtualInputManager:SendMouseMoveEvent(x, y, nil)
-            VirtualInputManager:SendMouseButtonEvent(true, x, y, 0, true, nil)
-            task.wait(0.05)
-            VirtualInputManager:SendMouseButtonEvent(false, x, y, 0, true, nil)
-        end)
-        
-        task.wait(60 + math.random() * 60)
-    end
-end)
+    -- Simulasi key press (spasi)
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, nil)
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, nil)
+end
+
+-- Auto anti-AFK loop
+local function startAntiAfk()
+    antiAfkRunning = true
+    
+    task.spawn(function()
+        while antiAfkRunning do
+            -- Simulasi input tiap 60 detik (idle biasanya 5-15 menit)
+            simulateInput()
+            task.wait(420+math.random*180)
+        end
+    end)
+end
+
+local function stopAntiAfk()
+    antiAfkRunning = false
+end
+
+-- Test
+startAntiAfk()
+print("✅ Anti-AFK Bypass aktif!")
 
     -- ==================================================================
     -- AUTO-START
