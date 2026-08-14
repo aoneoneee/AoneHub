@@ -1395,7 +1395,7 @@ local function startAntiAfk()
         while antiAfkRunning do
             -- Simulasi input tiap 60 detik (idle biasanya 5-15 menit)
             simulateInput()
-            task.wait(420+math.random*180)
+            task.wait(420+math.random()*180)
         end
     end)
 end
