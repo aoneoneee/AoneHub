@@ -15,7 +15,7 @@ local function main()
     -- CONFIG
     -- ==================================================================
     local function getConfigPath()
-        local basePath = "storage/emulated/0/Delta/Workspace"
+        local basePath = "AoneHub"
         pcall(function() makefolder(basePath) end)
         return basePath .. "/AoneHub_Config.json"
     end
