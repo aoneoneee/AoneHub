@@ -27,13 +27,13 @@ local function main()
         searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
         isRunningBuy = false, isRunningSell = false,
         selectedSellFruits = {}, sellTargets = {},
-        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false,
+        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, isAntiAfkRunning = false,
     }
 
     local function loadConfig()
         local s, d = pcall(readfile, SAVE_FILE)
         if s and d then local s2, loaded = pcall(HttpService.JSONDecode, HttpService, d)
-            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; return true end
+            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; if config.isAntiAfkRunning == nil then config.isAntiAfkRunning = false; return true end
         end; return false
     end
     local function saveConfig()
@@ -45,6 +45,45 @@ local function main()
     local function safeRequire(path)
         local s, r = pcall(function() return require(path) end)
         if s then return r end; return nil
+    end
+
+    -- ==================================================================
+    -- ANTI AFK (Background)
+    -- ==================================================================
+    local isAntiAfkRunning = config.isAntiAfkRunning or false
+
+    local function simulateInput()
+        pcall(function()
+            local VirtualInputManager = game:GetService("VirtualInputManager")
+            VirtualInputManager:SendMouseMoveEvent(math.random(100, 500), math.random(100, 500), nil)
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, nil)
+            task.wait(0.1)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, nil)
+        end)
+    end
+
+    local function startAntiAfk()
+        if isAntiAfkRunning then return end
+        isAntiAfkRunning = true
+        config.isAntiAfkRunning = true
+        saveConfig()
+    
+        task.spawn(function()
+            while isAntiAfkRunning do
+                simulateInput()
+                task.wait(420+math.random()*180)
+            end
+        end)
+    
+        print("[AoneHub] 🔄 Anti-AFK started")
+    end
+
+    local function stopAntiAfk()
+        if not isAntiAfkRunning then return end
+        isAntiAfkRunning = false
+        config.isAntiAfkRunning = false
+        saveConfig()
+        print("[AoneHub] ⏹️ Anti-AFK stopped")
     end
 
     -- ==================================================================
@@ -1368,46 +1407,6 @@ end)
 
 print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
 
--- ==================================================================
--- ANTI AFK BYPASS (Simulasi Input)
--- ==================================================================
-local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-
-local antiAfkRunning = false
-
-local function simulateInput()
-    -- Simulasi mouse movement
-    VirtualInputManager:SendMouseMoveEvent(100, 100, nil)
-    VirtualInputManager:SendMouseMoveEvent(200, 200, nil)
-    VirtualInputManager:SendMouseMoveEvent(150, 150, nil)
-    
-    -- Simulasi key press (spasi)
-    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, nil)
-    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, nil)
-end
-
--- Auto anti-AFK loop
-local function startAntiAfk()
-    antiAfkRunning = true
-    
-    task.spawn(function()
-        while antiAfkRunning do
-            -- Simulasi input tiap 60 detik (idle biasanya 5-15 menit)
-            simulateInput()
-            task.wait(420+math.random()*180)
-        end
-    end)
-end
-
-local function stopAntiAfk()
-    antiAfkRunning = false
-end
-
--- Test
-startAntiAfk()
-print("✅ Anti-AFK Bypass aktif!")
-
     -- ==================================================================
     -- AUTO-START
     -- ==================================================================
@@ -1415,6 +1414,7 @@ print("✅ Anti-AFK Bypass aktif!")
     if config.isRunningSell then task.delay(3,function() if net and net.NPCS and net.NPCS.SellAll then isRunningSell=true; task.spawn(sellLoop); updateSellUI() end end) end
     if config.isAutoMailRunning then task.delay(4,function() if config.mailTargetUsername ~= "" then isAutoRunning=true; userBox.Text=config.mailTargetUsername; updatePlayerInfo(config.mailTargetUsername); autoBtn.Text = "⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50); autoStatusLabel.Text = "🔄 Auto Mail: ON"; autoStatusLabel.TextColor3 = C.green end end) end
     if config.isAutoClaimRunning then task.delay(5,function() isClaimRunning = true; claimBtn.Text = "⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 120); claimStatusLabel.Text = "📬 Auto Claim: ON"; claimStatusLabel.TextColor3 = Color3.fromRGB(200, 100, 255) end) end
+    if config.isAntiAfkRunning then task.delay(6, function() isAntiAfkRunning = true; task.spawn(function(); while isAntiAfkRunning do simulateInput(); task.wait(60) end end) end) end
 
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
