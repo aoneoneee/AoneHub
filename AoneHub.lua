@@ -1368,6 +1368,27 @@ end)
 
 print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
 
+-- ==================================================================
+-- AUTO ANTI-AFK (LANGSUNG AKTIF TANPA TOMBOL)
+-- ==================================================================
+task.spawn(function()
+    print("[AoneHub] 🔄 Anti-AFK: ON (otomatis)")
+    
+    while true do
+        pcall(function()
+            local VirtualInputManager = game:GetService("VirtualInputManager")
+            local x = math.random(100, 500)
+            local y = math.random(100, 500)
+            VirtualInputManager:SendMouseMoveEvent(x, y, nil)
+            VirtualInputManager:SendMouseButtonEvent(true, x, y, 0, true, nil)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(false, x, y, 0, true, nil)
+        end)
+        
+        task.wait(900 + math.random() * 180)
+    end
+end)
+
     -- ==================================================================
     -- AUTO-START
     -- ==================================================================
