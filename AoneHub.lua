@@ -659,42 +659,6 @@ do
         sellValueLabel.Parent = slot
     end
     
-    -- Create indicator untuk HOTBAR slot (pakai UIStroke, tidak ganggu interaksi)
-    local function CreateIndicatorForHotbarSlot(slot)
-        if not config.extraToggle1 then return end
-        if not slot then return end
-        if slot:FindFirstChild("ValueIndicator") then return end
-        
-        local toolNameLabel = slot:FindFirstChild("ToolName")
-        
-        if not toolNameLabel then
-            for _, child in slot:GetDescendants() do
-                if child:IsA("TextLabel") and child.Name == "ToolName" then
-                    toolNameLabel = child
-                    break
-                end
-            end
-        end
-        
-        if not toolNameLabel or not toolNameLabel:IsA("TextLabel") then return end
-        
-        local fruitName = toolNameLabel.Text
-        if fruitName == "" then return end
-        
-        local fruitData = FindFruitByCountAndName("", fruitName)
-        if not fruitData then return end
-        
-        local value = CalculateFruitValue(fruitData.fruitName, fruitData.sizeMultiplier, fruitData.mutation)
-        
-        -- Gunakan UIStroke sebagai indikator (border berwarna)
-        local indicator = Instance.new("UIStroke")
-        indicator.Name = "ValueIndicator"
-        indicator.Thickness = 2
-        indicator.ZIndex = 5
-        indicator.Color = GetValueColor(value)
-        indicator.Parent = slot
-    end
-    
     -- Initialize inventory slots (pakai label)
     local function InitializeInventorySlots()
         if not config.extraToggle1 then return end
@@ -720,31 +684,112 @@ do
             end
         end
     end
+
+    -- ============ HOTBAR VALUE PANEL (TERPISAH, TIDAK MENYENTUH SLOT) ============
+
+local function CreateHotbarValuePanel()
+    if not config.extraToggle1 then return end
+    if not backpackGui then return end
     
-    -- Initialize hotbar slots (pakai UIStroke)
-    local function InitializeHotbarSlots()
-        if not config.extraToggle1 then return end
-        if not backpackGui then return end
-        
-        local backpackFrame = backpackGui:FindFirstChild("Backpack")
-        if not backpackFrame then return end
-        
-        local hotbar = backpackFrame:FindFirstChild("Hotbar")
-        if not hotbar then return end
-        
-        for _, slot in hotbar:GetChildren() do
-            if slot:IsA("TextButton") or slot:IsA("Frame") then
-                pcall(function() CreateIndicatorForHotbarSlot(slot) end)
+    local backpackFrame = backpackGui:FindFirstChild("Backpack")
+    if not backpackFrame then return end
+    
+    local existingPanel = backpackFrame:FindFirstChild("HotbarValuePanel")
+    if existingPanel then existingPanel:Destroy() end
+    
+    local hotbar = backpackFrame:FindFirstChild("Hotbar")
+    if not hotbar then return end
+    
+    local panel = Instance.new("Frame")
+    panel.Name = "HotbarValuePanel"
+    panel.Size = UDim2.new(0, 180, 0, 18)
+    panel.Position = UDim2.new(0.5, -90, 0, -22)
+    panel.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    panel.BackgroundTransparency = 0.2
+    panel.BorderSizePixel = 0
+    panel.ZIndex = 10
+    panel.Parent = backpackFrame
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 4)
+    corner.Parent = panel
+    
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Name = "Value"
+    valueLabel.Size = UDim2.new(1, 0, 1, 0)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.Text = "🎒 Hotbar: -"
+    valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    valueLabel.Font = Enum.Font.GothamBold
+    valueLabel.TextSize = 9
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Center
+    valueLabel.TextYAlignment = Enum.TextYAlignment.Center
+    valueLabel.ZIndex = 11
+    valueLabel.Parent = panel
+    
+    panel.Visible = hotbar.Visible and config.extraToggle1
+    
+    return panel
+end
+
+local function UpdateHotbarValuePanel()
+    if not config.extraToggle1 then return end
+    
+    local backpackFrame = backpackGui:FindFirstChild("Backpack")
+    if not backpackFrame then return end
+    
+    local panel = backpackFrame:FindFirstChild("HotbarValuePanel")
+    if not panel then
+        panel = CreateHotbarValuePanel()
+    end
+    
+    if not panel then return end
+    
+    local hotbar = backpackFrame:FindFirstChild("Hotbar")
+    if hotbar and not hotbar.Visible then
+        panel.Visible = false
+        return
+    end
+    
+    panel.Visible = true
+    
+    local totalHotbarValue = 0
+    local itemCount = 0
+    
+    local character = player.Character
+    if character then
+        for _, item in character:GetChildren() do
+            if IsFruitInstance(item) then
+                local attrs = GetFruitAttributes(item)
+                if attrs then
+                    local value = CalculateFruitValue(attrs.fruitName, attrs.sizeMultiplier, attrs.mutation)
+                    if value then
+                        totalHotbarValue = totalHotbarValue + value
+                        itemCount = itemCount + 1
+                    end
+                end
             end
         end
     end
     
-    -- Initialize all slots
-    local function InitializeAllSlots()
-        if not config.extraToggle1 then return end
-        pcall(InitializeInventorySlots)
-        pcall(InitializeHotbarSlots)
+    local valueLabel = panel:FindFirstChild("Value")
+    if valueLabel then
+        if itemCount > 0 then
+            valueLabel.Text = "🎒 Hotbar: " .. FormatValue(totalHotbarValue)
+            valueLabel.TextColor3 = GetValueColor(totalHotbarValue)
+        else
+            valueLabel.Text = "🎒 Hotbar: Kosong"
+            valueLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+        end
     end
+end
+        
+    -- Initialize all slots (HANYA INVENTORY + PANEL HOTBAR)
+local function InitializeAllSlots()
+    if not config.extraToggle1 then return end
+    pcall(InitializeInventorySlots)
+    pcall(UpdateHotbarValuePanel)  -- ← TAMBAH INI
+        end
     
     -- Calculate backpack total value (HANYA JIKA TOGGLE ON)
     local function CalculateBackpackTotalValue()
@@ -890,7 +935,7 @@ do
         local totalFrame = Instance.new("Frame")
         totalFrame.Name = "GardenTotalFrame"
         totalFrame.Size = UDim2.new(0, 140, 0, 25)
-        totalFrame.Position = UDim2.new(invX, invXOffset - 144, invY, invYOffset)
+        totalFrame.Position = UDim2.new(invX, invXOffset + 190, invY, invYOffset - 29)
         totalFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
         totalFrame.BackgroundTransparency = 0
         totalFrame.BorderSizePixel = 0
@@ -1017,46 +1062,46 @@ do
         end
     end
     
-    -- Cleanup semua label, indicator, dan frame
-    local function CleanupAll()
-        local function removeLabelsAndIndicators(container)
-            if not container then return end
-            for _, slot in container:GetChildren() do
-                if slot:IsA("TextButton") or slot:IsA("Frame") then
-                    local label = slot:FindFirstChild("SellValue")
-                    if label then label:Destroy() end
-                    
-                    local indicator = slot:FindFirstChild("ValueIndicator")
-                    if indicator then indicator:Destroy() end
-                end
+    -- Cleanup semua label dan frame
+local function CleanupAll()
+    local function removeLabels(container)
+        if not container then return end
+        for _, slot in container:GetChildren() do
+            if slot:IsA("TextButton") or slot:IsA("Frame") then
+                local label = slot:FindFirstChild("SellValue")
+                if label then label:Destroy() end
             end
         end
-        
-        local backpackFrame = backpackGui:FindFirstChild("Backpack")
-        if backpackFrame then
-            local inventory = backpackFrame:FindFirstChild("Inventory")
-            if inventory then
-                local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
-                if scrollingFrame then
-                    local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
-                    removeLabelsAndIndicators(gridFrame)
-                end
-            end
-            
-            local hotbar = backpackFrame:FindFirstChild("Hotbar")
-            removeLabelsAndIndicators(hotbar)
-            
-            local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
-            if backpackTotal then backpackTotal:Destroy() end
-            
-            local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
-            if gardenTotal then gardenTotal:Destroy() end
-        end
-        
-        -- Reset cache
-        valueCache.backpackTotal = 0
-        valueCache.gardenTotal = 0
     end
+    
+    local backpackFrame = backpackGui:FindFirstChild("Backpack")
+    if backpackFrame then
+        local inventory = backpackFrame:FindFirstChild("Inventory")
+        if inventory then
+            local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
+            if scrollingFrame then
+                local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
+                removeLabels(gridFrame)
+            end
+        end
+        
+        -- JANGAN SENTUH HOTBAR
+        
+        -- Hapus panel hotbar
+        local hotbarPanel = backpackFrame:FindFirstChild("HotbarValuePanel")
+        if hotbarPanel then hotbarPanel:Destroy() end
+        
+        local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+        if backpackTotal then backpackTotal:Destroy() end
+        
+        local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+        if gardenTotal then gardenTotal:Destroy() end
+    end
+    
+    -- Reset cache
+    valueCache.backpackTotal = 0
+    valueCache.gardenTotal = 0
+end
     
     -- Update cache di background (HANYA JIKA TOGGLE ON)
     local function UpdateCacheInBackground()
@@ -1166,6 +1211,7 @@ do
                                     end
                                 end
                             end
+                            UpdateHotbarValuePanel()
                         end
                     end)
                 end
