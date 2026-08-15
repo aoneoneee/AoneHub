@@ -307,67 +307,73 @@ do local f = tabFrames["Ekstra"]
     updateToggle()
     
     -- Special handling untuk Value Display (Toggle 1)
-if configKey == "extraToggle1" then
-    if config[configKey] then
-        -- Aktifkan Value Display
-        print("[AoneHub] ✅ Value Display: ON")
-        task.wait(0.5)
-        pcall(function()
-            -- Refresh labels jika ON
-            local backpackFrame = backpackGui:FindFirstChild("BackpackGui"):FindFirstChild("Backpack")
-            if backpackFrame then
-                -- Re-create total frames
-                local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
-                if not backpackTotal then
-                    -- Akan dibuat oleh update loop
+    if configKey == "extraToggle1" then
+        if config[configKey] then
+            -- Aktifkan Value Display
+            print("[AoneHub] ✅ Value Display: ON")
+            task.wait(0.5)
+            pcall(function()
+                local backpackGui = playerGui:FindFirstChild("BackpackGui")
+                if backpackGui then
+                    local backpackFrame = backpackGui:FindFirstChild("Backpack")
+                    if backpackFrame then
+                        -- Update toggle button di game
+                        local gameToggle = backpackFrame:FindFirstChild("ValueToggleButton")
+                        if gameToggle then
+                            gameToggle.Text = "ON"
+                            gameToggle.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+                        end
+                    end
                 end
-                local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
-                if not gardenTotal then
-                    -- Akan dibuat oleh update loop
-                end
-            end
-        end)
-    else
-        -- Nonaktifkan Value Display
-        print("[AoneHub] ❌ Value Display: OFF")
-        pcall(function()
-            local backpackGui = playerGui:FindFirstChild("BackpackGui")
-            if backpackGui then
-                local backpackFrame = backpackGui:FindFirstChild("Backpack")
-                if backpackFrame then
-                    -- Cleanup labels
-                    local function removeLabels(container)
-                        if not container then return end
-                        for _, slot in container:GetChildren() do
-                            if slot:IsA("TextButton") or slot:IsA("Frame") then
-                                local label = slot:FindFirstChild("SellValue")
-                                if label then label:Destroy() end
+            end)
+        else
+            -- Nonaktifkan Value Display
+            print("[AoneHub] ❌ Value Display: OFF")
+            pcall(function()
+                local backpackGui = playerGui:FindFirstChild("BackpackGui")
+                if backpackGui then
+                    local backpackFrame = backpackGui:FindFirstChild("Backpack")
+                    if backpackFrame then
+                        -- Update toggle button di game
+                        local gameToggle = backpackFrame:FindFirstChild("ValueToggleButton")
+                        if gameToggle then
+                            gameToggle.Text = "OFF"
+                            gameToggle.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+                        end
+                        
+                        -- Cleanup labels
+                        local function removeLabels(container)
+                            if not container then return end
+                            for _, slot in container:GetChildren() do
+                                if slot:IsA("TextButton") or slot:IsA("Frame") then
+                                    local label = slot:FindFirstChild("SellValue")
+                                    if label then label:Destroy() end
+                                end
                             end
                         end
-                    end
-                    
-                    local inventory = backpackFrame:FindFirstChild("Inventory")
-                    if inventory then
-                        local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
-                        if scrollingFrame then
-                            local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
-                            removeLabels(gridFrame)
+                        
+                        local inventory = backpackFrame:FindFirstChild("Inventory")
+                        if inventory then
+                            local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
+                            if scrollingFrame then
+                                local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
+                                removeLabels(gridFrame)
+                            end
                         end
+                        
+                        local hotbar = backpackFrame:FindFirstChild("Hotbar")
+                        removeLabels(hotbar)
+                        
+                        local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                        if backpackTotal then backpackTotal:Destroy() end
+                        
+                        local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                        if gardenTotal then gardenTotal:Destroy() end
                     end
-                    
-                    local hotbar = backpackFrame:FindFirstChild("Hotbar")
-                    removeLabels(hotbar)
-                    
-                    local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
-                    if backpackTotal then backpackTotal:Destroy() end
-                    
-                    local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
-                    if gardenTotal then gardenTotal:Destroy() end
                 end
-            end
-        end)
+            end)
+        end
     end
-end
 end)
         
         updateToggle()
@@ -397,14 +403,21 @@ end)
 end
 
 -- ==================================================================
--- VALUE DISPLAY SYSTEM (FULL INTEGRATION)
+-- VALUE DISPLAY SYSTEM (DENGAN CACHE - HANYA HITUNG SAAT ON)
 -- ==================================================================
 do
     local valueDisplaySystem = {
         initialized = false,
         backpackTotalFrame = nil,
         gardenTotalFrame = nil,
-        toggleButton = nil,
+    }
+    
+    -- Cache system
+    local valueCache = {
+        backpackTotal = 0,
+        gardenTotal = 0,
+        lastBackpackUpdate = 0,
+        lastGardenUpdate = 0,
     }
     
     -- Safe require
@@ -688,6 +701,8 @@ do
         local inventory = backpackFrame:FindFirstChild("Inventory")
         if not inventory then return end
         
+        if not inventory.Visible then return end
+        
         local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
         if not scrollingFrame then return end
         
@@ -726,7 +741,7 @@ do
         pcall(InitializeHotbarSlots)
     end
     
-    -- Calculate backpack total value
+    -- Calculate backpack total value (HANYA JIKA TOGGLE ON)
     local function CalculateBackpackTotalValue()
         if not config.extraToggle1 then return 0 end
         
@@ -741,6 +756,53 @@ do
                     local value = CalculateFruitValue(attrs.fruitName, attrs.sizeMultiplier, attrs.mutation)
                     if value then
                         totalValue = totalValue + value
+                    end
+                end
+            end
+        end
+        
+        return totalValue
+    end
+    
+    -- Calculate garden total value (HANYA JIKA TOGGLE ON)
+    local function CalculateGardenTotalValue()
+        if not config.extraToggle1 then return 0 end
+        
+        local gardensFolder = workspace:FindFirstChild("Gardens")
+        if not gardensFolder then return 0 end
+        
+        local userId = player.UserId
+        local totalValue = 0
+        
+        for _, plot in gardensFolder:GetChildren() do
+            local ownerId = plot:GetAttribute("OwnerUserId")
+            local plotUserId = plot:GetAttribute("UserId")
+            
+            if ownerId == userId or plotUserId == userId then
+                local plants = plot:FindFirstChild("Plants")
+                if plants then
+                    for _, plant in plants:GetChildren() do
+                        if plant:IsA("Model") then
+                            local fruitsFolder = plant:FindFirstChild("Fruits")
+                            if fruitsFolder then
+                                for _, fruit in fruitsFolder:GetChildren() do
+                                    if fruit:IsA("Model") then
+                                        local fruitName = fruit:GetAttribute("CorePartName")
+                                        local sizeMulti = fruit:GetAttribute("SizeMulti") or 1
+                                        local mutation = fruit:GetAttribute("Mutation")
+                                        
+                                        if mutation == "" then mutation = nil end
+                                        
+                                        if fruitName then
+                                            local value = CalculateFruitValue(fruitName, sizeMulti, mutation)
+                                            if value then
+                                                totalValue = totalValue + value
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
                     end
                 end
             end
@@ -790,7 +852,7 @@ do
         valueLabel.Size = UDim2.new(1, 0, 1, 0)
         valueLabel.Position = UDim2.new(0, 0, 0, 0)
         valueLabel.BackgroundTransparency = 1
-        valueLabel.Text = "💰 " .. FormatValue(CalculateBackpackTotalValue())
+        valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
         valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
         valueLabel.Font = Enum.Font.GothamBold
         valueLabel.TextSize = 14
@@ -802,93 +864,6 @@ do
         totalFrame.Visible = inventory.Visible and config.extraToggle1
         
         return totalFrame
-    end
-    
-    -- Update backpack total value
-    local function UpdateBackpackTotalValue()
-        if not config.extraToggle1 then return end
-        
-        local totalValue = CalculateBackpackTotalValue()
-        
-        local backpackFrame = backpackGui:FindFirstChild("Backpack")
-        if not backpackFrame then return end
-        
-        local totalFrame = backpackFrame:FindFirstChild("BackpackTotalFrame")
-        if not totalFrame then
-            totalFrame = CreateBackpackTotalFrame()
-        end
-        
-        if not totalFrame then return end
-        
-        local inventory = backpackFrame:FindFirstChild("Inventory")
-        if inventory and not inventory.Visible then
-            totalFrame.Visible = false
-            return
-        end
-        
-        totalFrame.Visible = true
-        
-        local valueLabel = totalFrame:FindFirstChild("Value")
-        if valueLabel then
-            valueLabel.Text = "💰 " .. FormatValue(totalValue)
-            
-            if totalValue >= 10000000 then
-                valueLabel.TextColor3 = Color3.fromRGB(255, 0, 255)
-            elseif totalValue >= 1000000 then
-                valueLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-            elseif totalValue >= 100000 then
-                valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-            else
-                valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            end
-        end
-    end
-    
-    -- Calculate garden total value
-    local function CalculateGardenTotalValue()
-        if not config.extraToggle1 then return 0 end
-        
-        local gardensFolder = workspace:FindFirstChild("Gardens")
-        if not gardensFolder then return 0 end
-        
-        local userId = player.UserId
-        local totalValue = 0
-        
-        for _, plot in gardensFolder:GetChildren() do
-            local ownerId = plot:GetAttribute("OwnerUserId")
-            local plotUserId = plot:GetAttribute("UserId")
-            
-            if ownerId == userId or plotUserId == userId then
-                local plants = plot:FindFirstChild("Plants")
-                if plants then
-                    for _, plant in plants:GetChildren() do
-                        if plant:IsA("Model") then
-                            local fruitsFolder = plant:FindFirstChild("Fruits")
-                            if fruitsFolder then
-                                for _, fruit in fruitsFolder:GetChildren() do
-                                    if fruit:IsA("Model") then
-                                        local fruitName = fruit:GetAttribute("CorePartName")
-                                        local sizeMulti = fruit:GetAttribute("SizeMulti") or 1
-                                        local mutation = fruit:GetAttribute("Mutation")
-                                        
-                                        if mutation == "" then mutation = nil end
-                                        
-                                        if fruitName then
-                                            local value = CalculateFruitValue(fruitName, sizeMulti, mutation)
-                                            if value then
-                                                totalValue = totalValue + value
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        
-        return totalValue
     end
     
     -- Create garden total frame
@@ -945,7 +920,7 @@ do
         valueLabel.Size = UDim2.new(1, 0, 0, 13)
         valueLabel.Position = UDim2.new(0, 0, 0, 11)
         valueLabel.BackgroundTransparency = 1
-        valueLabel.Text = "💰 " .. FormatValue(CalculateGardenTotalValue())
+        valueLabel.Text = "💰 " .. FormatValue(valueCache.gardenTotal)
         valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
         valueLabel.Font = Enum.Font.GothamBold
         valueLabel.TextSize = 12
@@ -959,11 +934,48 @@ do
         return totalFrame
     end
     
-    -- Update garden total value
-    local function UpdateGardenTotalValue()
+    -- Update backpack total value (gunakan cache)
+    local function UpdateBackpackTotalValue()
         if not config.extraToggle1 then return end
         
-        local totalValue = CalculateGardenTotalValue()
+        local backpackFrame = backpackGui:FindFirstChild("Backpack")
+        if not backpackFrame then return end
+        
+        local totalFrame = backpackFrame:FindFirstChild("BackpackTotalFrame")
+        if not totalFrame then
+            totalFrame = CreateBackpackTotalFrame()
+        end
+        
+        if not totalFrame then return end
+        
+        local inventory = backpackFrame:FindFirstChild("Inventory")
+        
+        if inventory and not inventory.Visible then
+            totalFrame.Visible = false
+            return
+        end
+        
+        totalFrame.Visible = true
+        
+        local valueLabel = totalFrame:FindFirstChild("Value")
+        if valueLabel then
+            valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
+            
+            if valueCache.backpackTotal >= 10000000 then
+                valueLabel.TextColor3 = Color3.fromRGB(255, 0, 255)
+            elseif valueCache.backpackTotal >= 1000000 then
+                valueLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+            elseif valueCache.backpackTotal >= 100000 then
+                valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+            else
+                valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            end
+        end
+    end
+    
+    -- Update garden total value (gunakan cache)
+    local function UpdateGardenTotalValue()
+        if not config.extraToggle1 then return end
         
         local backpackFrame = backpackGui:FindFirstChild("Backpack")
         if not backpackFrame then return end
@@ -976,6 +988,7 @@ do
         if not totalFrame then return end
         
         local inventory = backpackFrame:FindFirstChild("Inventory")
+        
         if inventory and not inventory.Visible then
             totalFrame.Visible = false
             return
@@ -985,13 +998,13 @@ do
         
         local valueLabel = totalFrame:FindFirstChild("Value")
         if valueLabel then
-            valueLabel.Text = "💰 " .. FormatValue(totalValue)
+            valueLabel.Text = "💰 " .. FormatValue(valueCache.gardenTotal)
             
-            if totalValue >= 10000000 then
+            if valueCache.gardenTotal >= 10000000 then
                 valueLabel.TextColor3 = Color3.fromRGB(255, 0, 255)
-            elseif totalValue >= 1000000 then
+            elseif valueCache.gardenTotal >= 1000000 then
                 valueLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-            elseif totalValue >= 100000 then
+            elseif valueCache.gardenTotal >= 100000 then
                 valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
             else
                 valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -999,26 +1012,157 @@ do
         end
     end
     
-    for _, slot in container:GetChildren() do
+    -- Cleanup semua label dan frame
+    local function CleanupAll()
+        local function removeLabels(container)
+            if not container then return end
+            for _, slot in container:GetChildren() do
+                if slot:IsA("TextButton") or slot:IsA("Frame") then
+                    local label = slot:FindFirstChild("SellValue")
+                    if label then label:Destroy() end
+                end
+            end
+        end
+        
+        local backpackFrame = backpackGui:FindFirstChild("Backpack")
+        if backpackFrame then
+            local inventory = backpackFrame:FindFirstChild("Inventory")
+            if inventory then
+                local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
+                if scrollingFrame then
+                    local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
+                    removeLabels(gridFrame)
+                end
+            end
+            
+            local hotbar = backpackFrame:FindFirstChild("Hotbar")
+            removeLabels(hotbar)
+            
+            local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+            if backpackTotal then backpackTotal:Destroy() end
+            
+            local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+            if gardenTotal then gardenTotal:Destroy() end
+        end
+        
+        -- Reset cache
+        valueCache.backpackTotal = 0
+        valueCache.gardenTotal = 0
+    end
     
-    -- Update loop
-    local function StartPeriodicCheck()
+    -- Update cache di background (HANYA JIKA TOGGLE ON)
+    local function UpdateCacheInBackground()
         task.spawn(function()
             while true do
-                task.wait(3)
+                task.wait(5)  -- Update cache setiap 5 detik
+                
+                if config.extraToggle1 then
+                    -- HANYA hitung jika toggle ON
+                    pcall(function()
+                        valueCache.backpackTotal = CalculateBackpackTotalValue()
+                        valueCache.lastBackpackUpdate = os.time()
+                    end)
+                    
+                    -- Garden lebih jarang diupdate (setiap 5 detik)
+                    if os.time() - valueCache.lastGardenUpdate > 5 then
+                        pcall(function()
+                            valueCache.gardenTotal = CalculateGardenTotalValue()
+                            valueCache.lastGardenUpdate = os.time()
+                        end)
+                    end
+                end
+            end
+        end)
+    end
+    
+    -- Watch Inventory visibility (INSTANT menggunakan cache)
+    local function SetupInventoryWatcher()
+        local backpackFrame = backpackGui:FindFirstChild("Backpack")
+        if not backpackFrame then return end
+        
+        local inventory = backpackFrame:FindFirstChild("Inventory")
+        if not inventory then return end
+        
+        inventory:GetPropertyChangedSignal("Visible"):Connect(function()
+            if not config.extraToggle1 then return end
+            
+            if inventory.Visible then
+                -- Inventory dibuka - LANGSUNG tampilkan dengan nilai cache
+                pcall(function()
+                    local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                    local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                    
+                    if backpackTotal then
+                        backpackTotal.Visible = true
+                        local valueLabel = backpackTotal:FindFirstChild("Value")
+                        if valueLabel then
+                            valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
+                        end
+                    else
+                        CreateBackpackTotalFrame()
+                    end
+                    
+                    if gardenTotal then
+                        gardenTotal.Visible = true
+                        local valueLabel = gardenTotal:FindFirstChild("Value")
+                        if valueLabel then
+                            valueLabel.Text = "💰 " .. FormatValue(valueCache.gardenTotal)
+                        end
+                    else
+                        CreateGardenTotalFrame()
+                    end
+                    
+                    -- Update labels
+                    InitializeAllSlots()
+                end)
+            else
+                -- Inventory ditutup - LANGSUNG sembunyikan
+                local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                if backpackTotal then backpackTotal.Visible = false end
+                
+                local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                if gardenTotal then gardenTotal.Visible = false end
+            end
+        end)
+    end
+    
+    -- Update frame dengan nilai cache (cepat)
+    local function StartPeriodicUpdate()
+        task.spawn(function()
+            while true do
+                task.wait(0.5)
                 
                 if config.extraToggle1 then
                     pcall(function()
-                        UpdateBackpackTotalValue()
-                        UpdateGardenTotalValue()
-                        InitializeAllSlots()
+                        local backpackFrame = backpackGui:FindFirstChild("Backpack")
+                        if backpackFrame then
+                            local inventory = backpackFrame:FindFirstChild("Inventory")
+                            
+                            if inventory and inventory.Visible then
+                                local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                                if backpackTotal and backpackTotal.Visible then
+                                    local valueLabel = backpackTotal:FindFirstChild("Value")
+                                    if valueLabel then
+                                        valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
+                                    end
+                                end
+                                
+                                local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                                if gardenTotal and gardenTotal.Visible then
+                                    local valueLabel = gardenTotal:FindFirstChild("Value")
+                                    if valueLabel then
+                                        valueLabel.Text = "💰 " .. FormatValue(valueCache.gardenTotal)
+                                    end
+                                end
+                            end
+                        end
                     end)
                 end
             end
         end)
     end
     
-    -- Watch garden
+    -- Watch garden (HANYA JIKA TOGGLE ON)
     local function SetupGardenWatcher()
         local gardensFolder = workspace:FindFirstChild("Gardens")
         if not gardensFolder then return end
@@ -1031,7 +1175,10 @@ do
                     local corePartName = descendant:GetAttribute("CorePartName")
                     if corePartName then
                         task.wait(0.3)
-                        pcall(UpdateGardenTotalValue)
+                        pcall(function()
+                            valueCache.gardenTotal = CalculateGardenTotalValue()
+                            valueCache.lastGardenUpdate = os.time()
+                        end)
                     end
                 end
             end)
@@ -1043,14 +1190,17 @@ do
                     local corePartName = descendant:GetAttribute("CorePartName")
                     if corePartName then
                         task.wait(0.3)
-                        pcall(UpdateGardenTotalValue)
+                        pcall(function()
+                            valueCache.gardenTotal = CalculateGardenTotalValue()
+                            valueCache.lastGardenUpdate = os.time()
+                        end)
                     end
                 end
             end)
         end
     end
     
-    -- Watch backpack
+    -- Watch backpack (HANYA JIKA TOGGLE ON)
     local function SetupFruitWatcher()
         local backpack = player:FindFirstChild("Backpack")
         if not backpack then return end
@@ -1060,8 +1210,11 @@ do
             
             if IsFruitInstance(instance) then
                 task.wait(0.5)
+                pcall(function()
+                    valueCache.backpackTotal = CalculateBackpackTotalValue()
+                    valueCache.lastBackpackUpdate = os.time()
+                end)
                 pcall(InitializeAllSlots)
-                pcall(UpdateBackpackTotalValue)
             end
         end)
         
@@ -1070,7 +1223,10 @@ do
             
             if IsFruitInstance(instance) then
                 task.wait(0.3)
-                pcall(UpdateBackpackTotalValue)
+                pcall(function()
+                    valueCache.backpackTotal = CalculateBackpackTotalValue()
+                    valueCache.lastBackpackUpdate = os.time()
+                end)
                 pcall(InitializeAllSlots)
             end
         end)
@@ -1082,26 +1238,36 @@ do
     pcall(function()
         SetupFruitWatcher()
         SetupGardenWatcher()
+        SetupInventoryWatcher()
         
+        -- Mulai cache dan update di background
+        UpdateCacheInBackground()
+        StartPeriodicUpdate()
+        
+        -- Jika toggle ON, hitung cache awal
         if config.extraToggle1 then
-            CreateBackpackTotalFrame()
-            CreateGardenTotalFrame()
+            task.spawn(function()
+                valueCache.backpackTotal = CalculateBackpackTotalValue()
+                valueCache.gardenTotal = CalculateGardenTotalValue()
+                valueCache.lastBackpackUpdate = os.time()
+                valueCache.lastGardenUpdate = os.time()
+                
+                -- Buat frame jika Inventory visible
+                local backpackFrame = backpackGui:FindFirstChild("Backpack")
+                if backpackFrame then
+                    local inventory = backpackFrame:FindFirstChild("Inventory")
+                    if inventory and inventory.Visible then
+                        CreateBackpackTotalFrame()
+                        CreateGardenTotalFrame()
+                        InitializeAllSlots()
+                    end
+                end
+            end)
         end
         
-        StartPeriodicCheck()
-        
-        if config.extraToggle1 then
-            for i = 1, 10 do
-                InitializeAllSlots()
-                UpdateBackpackTotalValue()
-                UpdateGardenTotalValue()
-                task.wait(0.5)
-            end
-        end
-        
-        print("[AoneHub] ✅ Value Display system initialized!")
+        print("[AoneHub] ✅ Value Display system initialized with cache!")
     end)
-end
+    end
     
     -- ==================================================================
     -- TAB 1: AUTO BUY
@@ -2283,7 +2449,7 @@ print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
     task.delay(6, function()
         print("[AoneHub] ✅ Value Display auto-started!")
     end)
-    end
+end
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
 end
