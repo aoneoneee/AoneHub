@@ -27,13 +27,13 @@ local function main()
         searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
         isRunningBuy = false, isRunningSell = false,
         selectedSellFruits = {}, sellTargets = {},
-        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false,
+        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, espEnabled = false,
     }
 
     local function loadConfig()
         local s, d = pcall(readfile, SAVE_FILE)
         if s and d then local s2, loaded = pcall(HttpService.JSONDecode, HttpService, d)
-            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; return true end
+            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; if config.espEnabled == nil then config.espEnabled = false end; return true end
         end; return false
     end
     local function saveConfig()
@@ -188,16 +188,6 @@ local function main()
         if tabFrames[tabName] then tabFrames[tabName].Visible = true; tabBtns[tabName].BackgroundColor3 = C.accent; tabBtns[tabName].TextColor3 = C.text; activeTab = tabName end
     end
     for _, tab in ipairs(tabs) do tabBtns[tab.name].MouseButton1Click:Connect(function() switchTab(tab.name) end) end
-
-    -- Placeholder Tab 5
-    do local f = tabFrames["Ekstra"]
-        local ic = Instance.new("TextLabel"); ic.Size = UDim2.new(1, 0, 0, 32); ic.Position = UDim2.new(0, 0, 0.35, -16)
-        ic.Text = "⚙️"; ic.Font = Enum.Font.Gotham; ic.TextSize = 28; ic.BackgroundTransparency = 1; ic.Parent = f
-        local tt = Instance.new("TextLabel"); tt.Size = UDim2.new(1, 0, 0, 18); tt.Position = UDim2.new(0, 0, 0.45, 0)
-        tt.Text = "Ekstra"; tt.TextColor3 = C.text; tt.Font = Enum.Font.GothamBold; tt.TextSize = 12; tt.BackgroundTransparency = 1; tt.Parent = f
-        local st = Instance.new("TextLabel"); st.Size = UDim2.new(1, 0, 0, 12); st.Position = UDim2.new(0, 0, 0.52, 0)
-        st.Text = "Coming soon..."; st.TextColor3 = C.textDim; st.Font = Enum.Font.Gotham; st.TextSize = 9; st.BackgroundTransparency = 1; st.Parent = f
-    end
 
     -- ==================================================================
     -- TAB 1: AUTO BUY
@@ -1368,6 +1358,486 @@ end)
 
 print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
 
+-- ==================================================================
+-- TAB 5: EKSTRA (ESP GARDEN & INVENTORY + CONFIG SAVE)
+-- ==================================================================
+local parentExtra = tabFrames["Ekstra"]
+
+-- Hapus placeholder
+for _, child in ipairs(parentExtra:GetChildren()) do
+    child:Destroy()
+end
+
+-- Load state dari config
+local espRunning = config.espEnabled or false
+
+-- ==================================================================
+-- ESP MODULES
+-- ==================================================================
+local espModules = {}
+local espReady = false
+local FRIEND_BOOST_PERCENT = 0
+
+local function espSafeRequire(parent, moduleName)
+    local success, module = pcall(function() return require(parent:WaitForChild(moduleName, 10)) end)
+    if success then return module end
+    return nil
+end
+
+local function initEspModules()
+    local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
+    if not sharedModules then return false end
+    
+    espModules.SellValueData = espSafeRequire(sharedModules, "SellValueData")
+    espModules.FruitValueCalc = espSafeRequire(sharedModules, "FruitValueCalc")
+    
+    local flagsFolder = sharedModules:FindFirstChild("Flags")
+    if flagsFolder then
+        espModules.SellFlags = espSafeRequire(flagsFolder, "SellFlags")
+    end
+    
+    espModules.NumberUtils = espSafeRequire(sharedModules, "NumberUtils")
+    espModules.Worlds = espSafeRequire(sharedModules, "Worlds")
+    
+    if espModules.SellValueData and espModules.FruitValueCalc 
+        and espModules.SellFlags and espModules.NumberUtils and espModules.Worlds then
+        espReady = true
+        
+        -- Friend boost
+        pcall(function()
+            local hud = playerGui:FindFirstChild("HUD")
+            if hud then
+                local currencies = hud:FindFirstChild("Currencies")
+                if currencies then
+                    local friendBoost = currencies:FindFirstChild("FriendBoost")
+                    if friendBoost then
+                        local textLabel = friendBoost:FindFirstChild("TextLabel")
+                        if textLabel then
+                            local pct = textLabel.Text:match("(%d+)%%")
+                            if pct then FRIEND_BOOST_PERCENT = tonumber(pct) or 0 end
+                        end
+                    end
+                end
+            end
+        end)
+        
+        return true
+    end
+    
+    return false
+end
+
+local function espCalculateValue(fruitName, sizeMultiplier, mutation)
+    if not espReady then return nil end
+    if not espModules.SellValueData[fruitName] then return nil end
+    
+    local success, baseValue = pcall(function()
+        return espModules.FruitValueCalc(fruitName, sizeMultiplier or 1, mutation, player, nil)
+    end)
+    if not success or not baseValue then return nil end
+    
+    local success2, valueWithBoost = pcall(function()
+        return espModules.SellFlags.Apply(fruitName, baseValue)
+    end)
+    if not success2 or not valueWithBoost then return nil end
+    
+    if FRIEND_BOOST_PERCENT > 0 then
+        valueWithBoost = valueWithBoost / (1 + FRIEND_BOOST_PERCENT / 100)
+    end
+    
+    return math.floor(valueWithBoost)
+end
+
+local function espFormatValue(value)
+    if not value or value <= 0 then return "0" end
+    local success, result = pcall(function()
+        return espModules.NumberUtils.Abbreviate(value) .. espModules.Worlds.Current.CurrencySuffix
+    end)
+    if success then return result end
+    return tostring(value)
+end
+
+local function espIsFruit(instance)
+    if instance:IsA("Configuration") or instance:IsA("Tool") then
+        local success, fruitName = pcall(function() return instance:GetAttribute("FruitName") end)
+        return success and fruitName ~= nil and fruitName ~= ""
+    end
+    return false
+end
+
+local function espGetAttrs(instance)
+    local success, attrs = pcall(function()
+        return {
+            fruitName = instance:GetAttribute("FruitName"),
+            sizeMultiplier = instance:GetAttribute("SizeMultiplier") or 1,
+            mutation = instance:GetAttribute("Mutation"),
+            id = instance:GetAttribute("Id")
+        }
+    end)
+    if success then return attrs end
+    return nil
+end
+
+local function espCreateSlotLabel(slot)
+    if not slot or not slot:IsA("TextButton") then return end
+    if slot:FindFirstChild("SellValue") then return end
+    
+    local toolNameLabel = slot:FindFirstChild("ToolName")
+    if not toolNameLabel then
+        for _, child in slot:GetDescendants() do
+            if child:IsA("TextLabel") and child.Name == "ToolName" then
+                toolNameLabel = child
+                break
+            end
+        end
+    end
+    
+    if not toolNameLabel or not toolNameLabel:IsA("TextLabel") then return end
+    
+    local fruitName = toolNameLabel.Text
+    if fruitName == "" then return end
+    
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return end
+    
+    local matchingFruit = nil
+    for _, instance in backpack:GetChildren() do
+        if espIsFruit(instance) then
+            local attrs = espGetAttrs(instance)
+            if attrs and attrs.fruitName == fruitName then
+                matchingFruit = attrs
+                break
+            end
+        end
+    end
+    
+    if not matchingFruit then return end
+    
+    local value = espCalculateValue(matchingFruit.fruitName, matchingFruit.sizeMultiplier, matchingFruit.mutation)
+    
+    local sellValueLabel = Instance.new("TextLabel")
+    sellValueLabel.Name = "SellValue"
+    sellValueLabel.BackgroundTransparency = 1
+    sellValueLabel.Font = Enum.Font.GothamSemibold
+    sellValueLabel.TextSize = 10
+    sellValueLabel.TextXAlignment = Enum.TextXAlignment.Left
+    sellValueLabel.BorderSizePixel = 0
+    sellValueLabel.ZIndex = 5
+    sellValueLabel.Size = UDim2.new(1, -8, 0, 14)
+    sellValueLabel.Position = UDim2.new(0, 4, 1, -18)
+    
+    if value then
+        sellValueLabel.Text = "💰 " .. espFormatValue(value)
+        if value >= 1000000 then
+            sellValueLabel.TextColor3 = Color3.fromRGB(255, 100, 255)
+        elseif value >= 100000 then
+            sellValueLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+        elseif value >= 10000 then
+            sellValueLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+        else
+            sellValueLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+    else
+        sellValueLabel.Text = "💰 N/A"
+        sellValueLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    end
+    
+    sellValueLabel.Parent = slot
+end
+
+local function espScanAllSlots()
+    local backpackGui = playerGui:FindFirstChild("BackpackGui")
+    if not backpackGui then return end
+    
+    pcall(function()
+        local backpack = backpackGui:FindFirstChild("Backpack")
+        if backpack then
+            -- Inventory
+            local inventory = backpack:FindFirstChild("Inventory")
+            if inventory then
+                local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
+                if scrollingFrame then
+                    local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
+                    if gridFrame then
+                        for _, slot in gridFrame:GetChildren() do
+                            if slot:IsA("TextButton") then
+                                espCreateSlotLabel(slot)
+                            end
+                        end
+                    end
+                end
+            end
+            
+            -- Hotbar
+            local hotbar = backpack:FindFirstChild("Hotbar")
+            if hotbar then
+                for _, slot in hotbar:GetChildren() do
+                    if slot:IsA("TextButton") or slot:IsA("Frame") then
+                        espCreateSlotLabel(slot)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Total values
+local function espCalculateBackpackTotal()
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return 0 end
+    local total = 0
+    for _, instance in backpack:GetChildren() do
+        if espIsFruit(instance) then
+            local attrs = espGetAttrs(instance)
+            if attrs then
+                local value = espCalculateValue(attrs.fruitName, attrs.sizeMultiplier, attrs.mutation)
+                if value then total = total + value end
+            end
+        end
+    end
+    return total
+end
+
+local function espCalculateGardenTotal()
+    local gardensFolder = workspace:FindFirstChild("Gardens")
+    if not gardensFolder then return 0 end
+    local userId = player.UserId
+    local total = 0
+    
+    for _, plot in gardensFolder:GetChildren() do
+        local ownerId = plot:GetAttribute("OwnerUserId")
+        local plotUserId = plot:GetAttribute("UserId")
+        
+        if ownerId == userId or plotUserId == userId then
+            local plants = plot:FindFirstChild("Plants")
+            if plants then
+                for _, plant in plants:GetChildren() do
+                    if plant:IsA("Model") then
+                        local fruitsFolder = plant:FindFirstChild("Fruits")
+                        if fruitsFolder then
+                            for _, fruit in fruitsFolder:GetChildren() do
+                                if fruit:IsA("Model") then
+                                    local fruitName = fruit:GetAttribute("CorePartName")
+                                    local sizeMulti = fruit:GetAttribute("SizeMulti") or 1
+                                    local mutation = fruit:GetAttribute("Mutation")
+                                    if mutation == "" then mutation = nil end
+                                    
+                                    if fruitName then
+                                        local value = espCalculateValue(fruitName, sizeMulti, mutation)
+                                        if value then total = total + value end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return total
+end
+
+local function espCreateTotalFrames()
+    local backpackGui = playerGui:FindFirstChild("BackpackGui")
+    if not backpackGui then return end
+    
+    local backpack = backpackGui:FindFirstChild("Backpack")
+    if not backpack then return end
+    
+    local inventory = backpack:FindFirstChild("Inventory")
+    if not inventory then return end
+    
+    local invX = inventory.Position.X.Scale
+    local invXOffset = inventory.Position.X.Offset
+    local invY = inventory.Position.Y.Scale
+    local invYOffset = inventory.Position.Y.Offset
+    
+    -- Backpack Total
+    local oldBackpackFrame = backpack:FindFirstChild("BackpackTotalFrame")
+    if oldBackpackFrame then oldBackpackFrame:Destroy() end
+    
+    local backpackTotal = espCalculateBackpackTotal()
+    
+    local backpackTotalFrame = Instance.new("Frame")
+    backpackTotalFrame.Name = "BackpackTotalFrame"
+    backpackTotalFrame.Size = UDim2.new(0, 140, 0, 25)
+    backpackTotalFrame.Position = UDim2.new(invX, invXOffset, invY, invYOffset - 29)
+    backpackTotalFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    backpackTotalFrame.BorderSizePixel = 0
+    backpackTotalFrame.ZIndex = 10
+    backpackTotalFrame.Parent = backpack
+    
+    Instance.new("UICorner", backpackTotalFrame).CornerRadius = UDim.new(0, 4)
+    
+    local backpackValueLabel = Instance.new("TextLabel")
+    backpackValueLabel.Size = UDim2.new(1, 0, 1, 0)
+    backpackValueLabel.BackgroundTransparency = 1
+    backpackValueLabel.Text = "💰 " .. espFormatValue(backpackTotal)
+    backpackValueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+    backpackValueLabel.Font = Enum.Font.GothamBold
+    backpackValueLabel.TextSize = 13
+    backpackValueLabel.TextXAlignment = Enum.TextXAlignment.Center
+    backpackValueLabel.Parent = backpackTotalFrame
+    
+    -- Garden Total
+    local oldGardenFrame = backpack:FindFirstChild("GardenTotalFrame")
+    if oldGardenFrame then oldGardenFrame:Destroy() end
+    
+    local gardenTotal = espCalculateGardenTotal()
+    
+    local gardenTotalFrame = Instance.new("Frame")
+    gardenTotalFrame.Name = "GardenTotalFrame"
+    gardenTotalFrame.Size = UDim2.new(0, 140, 0, 25)
+    gardenTotalFrame.Position = UDim2.new(invX, invXOffset + 190, invY, invYOffset - 29)
+    gardenTotalFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    gardenTotalFrame.BorderSizePixel = 0
+    gardenTotalFrame.ZIndex = 10
+    gardenTotalFrame.Parent = backpack
+    
+    Instance.new("UICorner", gardenTotalFrame).CornerRadius = UDim.new(0, 4)
+    
+    local gardenTitleLabel = Instance.new("TextLabel")
+    gardenTitleLabel.Size = UDim2.new(1, 0, 0, 10)
+    gardenTitleLabel.Position = UDim2.new(0, 0, 0, 1)
+    gardenTitleLabel.BackgroundTransparency = 1
+    gardenTitleLabel.Text = "GARDEN"
+    gardenTitleLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    gardenTitleLabel.Font = Enum.Font.GothamBold
+    gardenTitleLabel.TextSize = 7
+    gardenTitleLabel.TextXAlignment = Enum.TextXAlignment.Center
+    gardenTitleLabel.Parent = gardenTotalFrame
+    
+    local gardenValueLabel = Instance.new("TextLabel")
+    gardenValueLabel.Size = UDim2.new(1, 0, 0, 13)
+    gardenValueLabel.Position = UDim2.new(0, 0, 0, 11)
+    gardenValueLabel.BackgroundTransparency = 1
+    gardenValueLabel.Text = "💰 " .. espFormatValue(gardenTotal)
+    gardenValueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+    gardenValueLabel.Font = Enum.Font.GothamBold
+    gardenValueLabel.TextSize = 11
+    gardenValueLabel.TextXAlignment = Enum.TextXAlignment.Center
+    gardenValueLabel.Parent = gardenTotalFrame
+end
+
+local function espLoop()
+    while espRunning do
+        pcall(espScanAllSlots)
+        pcall(espCreateTotalFrames)
+        task.wait(5)
+    end
+end
+
+local function startEsp()
+    if espRunning then return end
+    
+    if not initEspModules() then
+        espStatus.Text = "❌ Modules not found!"
+        espStatus.TextColor3 = C.red
+        return
+    end
+    
+    espRunning = true
+    config.espEnabled = true
+    saveConfig()
+    
+    espBtn.Text = "💰 ESP Garden & Inventory: ON"
+    espBtn.BackgroundColor3 = C.green
+    espStatus.Text = "Status: ON (scan tiap 2 detik)"
+    espStatus.TextColor3 = C.green
+    
+    task.spawn(espLoop)
+end
+
+local function stopEsp()
+    espRunning = false
+    config.espEnabled = false
+    saveConfig()
+    
+    espBtn.Text = "💰 ESP Garden & Inventory: OFF"
+    espBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    espStatus.Text = "Status: OFF"
+    espStatus.TextColor3 = Color3.fromRGB(150, 150, 160)
+    
+    -- Hapus total frames
+    pcall(function()
+        local backpackGui = playerGui:FindFirstChild("BackpackGui")
+        if backpackGui then
+            local backpack = backpackGui:FindFirstChild("Backpack")
+            if backpack then
+                local bf = backpack:FindFirstChild("BackpackTotalFrame")
+                if bf then bf:Destroy() end
+                local gf = backpack:FindFirstChild("GardenTotalFrame")
+                if gf then gf:Destroy() end
+            end
+        end
+    end)
+end
+
+-- ==================================================================
+-- UI
+-- ==================================================================
+local extraScroll = Instance.new("ScrollingFrame")
+extraScroll.Size = UDim2.new(1, 0, 1, 0)
+extraScroll.CanvasSize = UDim2.new(0, 0, 0, 200)
+extraScroll.ScrollBarThickness = 3
+extraScroll.BackgroundTransparency = 1
+extraScroll.BorderSizePixel = 0
+extraScroll.Parent = parentExtra
+
+local y = 10
+
+local extraHdr = Instance.new("TextLabel")
+extraHdr.Size = UDim2.new(1, -12, 0, 20)
+extraHdr.Position = UDim2.new(0, 6, 0, y)
+extraHdr.Text = "⚙️  Extra Tools"
+extraHdr.TextColor3 = C.text
+extraHdr.Font = Enum.Font.GothamBold
+extraHdr.TextSize = 11
+extraHdr.TextXAlignment = Enum.TextXAlignment.Left
+extraHdr.BackgroundTransparency = 1
+extraHdr.Parent = extraScroll
+y += 26
+
+local espBtn = Instance.new("TextButton")
+espBtn.Size = UDim2.new(1, -12, 0, 32)
+espBtn.Position = UDim2.new(0, 6, 0, y)
+espBtn.Text = espRunning and "💰 ESP Garden & Inventory: ON" or "💰 ESP Garden & Inventory: OFF"
+espBtn.TextColor3 = C.text
+espBtn.Font = Enum.Font.GothamBold
+espBtn.TextSize = 10
+espBtn.BackgroundColor3 = espRunning and C.green or Color3.fromRGB(50, 50, 60)
+espBtn.BorderSizePixel = 0
+espBtn.AutoButtonColor = false
+espBtn.Parent = extraScroll
+Instance.new("UICorner", espBtn).CornerRadius = UDim.new(0, 5)
+y += 38
+
+local espStatus = Instance.new("TextLabel")
+espStatus.Size = UDim2.new(1, -12, 0, 14)
+espStatus.Position = UDim2.new(0, 6, 0, y)
+espStatus.BackgroundTransparency = 1
+espStatus.Text = espRunning and "Status: ON" or "Status: OFF"
+espStatus.TextColor3 = espRunning and C.green or Color3.fromRGB(150, 150, 160)
+espStatus.Font = Enum.Font.Gotham
+espStatus.TextSize = 9
+espStatus.TextXAlignment = Enum.TextXAlignment.Left
+espStatus.Parent = extraScroll
+
+espBtn.MouseButton1Click:Connect(function()
+    if espRunning then
+        stopEsp()
+    else
+        startEsp()
+    end
+end)
+
+-- Destroy handler
+parentExtra.Destroying:Connect(function()
+    config.espEnabled = espRunning
+    saveConfig()
+end)
+    
     -- ==================================================================
     -- AUTO-START
     -- ==================================================================
@@ -1375,7 +1845,7 @@ print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
     if config.isRunningSell then task.delay(3,function() if net and net.NPCS and net.NPCS.SellAll then isRunningSell=true; task.spawn(sellLoop); updateSellUI() end end) end
     if config.isAutoMailRunning then task.delay(4,function() if config.mailTargetUsername ~= "" then isAutoRunning=true; userBox.Text=config.mailTargetUsername; updatePlayerInfo(config.mailTargetUsername); autoBtn.Text = "⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50); autoStatusLabel.Text = "🔄 Auto Mail: ON"; autoStatusLabel.TextColor3 = C.green end end) end
     if config.isAutoClaimRunning then task.delay(5,function() isClaimRunning = true; claimBtn.Text = "⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 120); claimStatusLabel.Text = "📬 Auto Claim: ON"; claimStatusLabel.TextColor3 = Color3.fromRGB(200, 100, 255) end) end
-    
+    if espRunning then task.delay(3, function() startEsp() end) end
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
 end
