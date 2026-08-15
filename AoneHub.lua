@@ -307,73 +307,67 @@ do local f = tabFrames["Ekstra"]
     updateToggle()
     
     -- Special handling untuk Value Display (Toggle 1)
-    if configKey == "extraToggle1" then
-        if config[configKey] then
-            -- Aktifkan Value Display
-            print("[AoneHub] ✅ Value Display: ON")
-            task.wait(0.5)
-            pcall(function()
-                local backpackGui = playerGui:FindFirstChild("BackpackGui")
-                if backpackGui then
-                    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-                    if backpackFrame then
-                        -- Update toggle button di game
-                        local gameToggle = backpackFrame:FindFirstChild("ValueToggleButton")
-                        if gameToggle then
-                            gameToggle.Text = "ON"
-                            gameToggle.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
-                        end
-                    end
+if configKey == "extraToggle1" then
+    if config[configKey] then
+        -- Aktifkan Value Display
+        print("[AoneHub] ✅ Value Display: ON")
+        task.wait(0.5)
+        pcall(function()
+            -- Refresh labels jika ON
+            local backpackFrame = backpackGui:FindFirstChild("BackpackGui"):FindFirstChild("Backpack")
+            if backpackFrame then
+                -- Re-create total frames
+                local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                if not backpackTotal then
+                    -- Akan dibuat oleh update loop
                 end
-            end)
-        else
-            -- Nonaktifkan Value Display
-            print("[AoneHub] ❌ Value Display: OFF")
-            pcall(function()
-                local backpackGui = playerGui:FindFirstChild("BackpackGui")
-                if backpackGui then
-                    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-                    if backpackFrame then
-                        -- Update toggle button di game
-                        local gameToggle = backpackFrame:FindFirstChild("ValueToggleButton")
-                        if gameToggle then
-                            gameToggle.Text = "OFF"
-                            gameToggle.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
-                        end
-                        
-                        -- Cleanup labels
-                        local function removeLabels(container)
-                            if not container then return end
-                            for _, slot in container:GetChildren() do
-                                if slot:IsA("TextButton") or slot:IsA("Frame") then
-                                    local label = slot:FindFirstChild("SellValue")
-                                    if label then label:Destroy() end
-                                end
+                local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                if not gardenTotal then
+                    -- Akan dibuat oleh update loop
+                end
+            end
+        end)
+    else
+        -- Nonaktifkan Value Display
+        print("[AoneHub] ❌ Value Display: OFF")
+        pcall(function()
+            local backpackGui = playerGui:FindFirstChild("BackpackGui")
+            if backpackGui then
+                local backpackFrame = backpackGui:FindFirstChild("Backpack")
+                if backpackFrame then
+                    -- Cleanup labels
+                    local function removeLabels(container)
+                        if not container then return end
+                        for _, slot in container:GetChildren() do
+                            if slot:IsA("TextButton") or slot:IsA("Frame") then
+                                local label = slot:FindFirstChild("SellValue")
+                                if label then label:Destroy() end
                             end
                         end
-                        
-                        local inventory = backpackFrame:FindFirstChild("Inventory")
-                        if inventory then
-                            local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
-                            if scrollingFrame then
-                                local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
-                                removeLabels(gridFrame)
-                            end
-                        end
-                        
-                        local hotbar = backpackFrame:FindFirstChild("Hotbar")
-                        removeLabels(hotbar)
-                        
-                        local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
-                        if backpackTotal then backpackTotal:Destroy() end
-                        
-                        local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
-                        if gardenTotal then gardenTotal:Destroy() end
                     end
+                    
+                    local inventory = backpackFrame:FindFirstChild("Inventory")
+                    if inventory then
+                        local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
+                        if scrollingFrame then
+                            local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
+                            removeLabels(gridFrame)
+                        end
+                    end
+                    
+                    local hotbar = backpackFrame:FindFirstChild("Hotbar")
+                    removeLabels(hotbar)
+                    
+                    local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                    if backpackTotal then backpackTotal:Destroy() end
+                    
+                    local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                    if gardenTotal then gardenTotal:Destroy() end
                 end
-            end)
-        end
+            end
+        end)
     end
+end
 end)
         
         updateToggle()
