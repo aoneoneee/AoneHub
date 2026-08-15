@@ -1743,7 +1743,7 @@ local function startEsp()
     
     espBtn.Text = "💰 ESP Garden & Inventory: ON"
     espBtn.BackgroundColor3 = C.green
-    espStatus.Text = "Status: ON (scan tiap 2 detik)"
+    espStatus.Text = "Status: ON (scan tiap 5 detik)"
     espStatus.TextColor3 = C.green
     
     task.spawn(espLoop)
@@ -1845,7 +1845,7 @@ end)
     if config.isRunningSell then task.delay(3,function() if net and net.NPCS and net.NPCS.SellAll then isRunningSell=true; task.spawn(sellLoop); updateSellUI() end end) end
     if config.isAutoMailRunning then task.delay(4,function() if config.mailTargetUsername ~= "" then isAutoRunning=true; userBox.Text=config.mailTargetUsername; updatePlayerInfo(config.mailTargetUsername); autoBtn.Text = "⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50); autoStatusLabel.Text = "🔄 Auto Mail: ON"; autoStatusLabel.TextColor3 = C.green end end) end
     if config.isAutoClaimRunning then task.delay(5,function() isClaimRunning = true; claimBtn.Text = "⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 120); claimStatusLabel.Text = "📬 Auto Claim: ON"; claimStatusLabel.TextColor3 = Color3.fromRGB(200, 100, 255) end) end
-    if espRunning then task.delay(3, function() startEsp() end) end
+
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
 end
