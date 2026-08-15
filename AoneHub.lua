@@ -1364,9 +1364,6 @@ print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
 -- TAB 5: EKSTRA (PLACEHOLDER)
 -- ==================================================================
 local parentExtra = tabFrames["Ekstra"]
-for _, child in ipairs(parentExtra:GetChildren()) do
-    child:Destroy()
-end
 
 local ic = Instance.new("TextLabel")
 ic.Size = UDim2.new(1, 0, 0, 32)
