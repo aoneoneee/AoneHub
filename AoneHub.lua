@@ -190,198 +190,44 @@ local function main()
     for _, tab in ipairs(tabs) do tabBtns[tab.name].MouseButton1Click:Connect(function() switchTab(tab.name) end) end
 
 -- ==================================================================
--- TAB 5: EKSTRA (VALUE DISPLAY - LANGSUNG ON)
+-- TAB 5: EKSTRA (PLACEHOLDER SIMPLE)
 -- ==================================================================
 local parentExtra = tabFrames["Ekstra"]
 
--- Hapus placeholder lama
+-- Hapus semua child
 for _, child in ipairs(parentExtra:GetChildren()) do
     child:Destroy()
 end
 
-local extraScroll = Instance.new("ScrollingFrame")
-extraScroll.Size = UDim2.new(1, 0, 1, 0)
-extraScroll.CanvasSize = UDim2.new(0, 0, 0, 100)
-extraScroll.ScrollBarThickness = 3
-extraScroll.BackgroundTransparency = 1
-extraScroll.BorderSizePixel = 0
-extraScroll.Parent = parentExtra
+-- Placeholder
+local ic = Instance.new("TextLabel")
+ic.Size = UDim2.new(1, 0, 0, 32)
+ic.Position = UDim2.new(0, 0, 0.35, -16)
+ic.Text = "⚙️"
+ic.Font = Enum.Font.Gotham
+ic.TextSize = 28
+ic.BackgroundTransparency = 1
+ic.Parent = parentExtra
 
-local extraHdr = Instance.new("TextLabel")
-extraHdr.Size = UDim2.new(1, -12, 0, 20)
-extraHdr.Position = UDim2.new(0, 6, 0, 10)
-extraHdr.Text = "💰 Value Display"
-extraHdr.TextColor3 = C.text
-extraHdr.Font = Enum.Font.GothamBold
-extraHdr.TextSize = 11
-extraHdr.TextXAlignment = Enum.TextXAlignment.Left
-extraHdr.BackgroundTransparency = 1
-extraHdr.Parent = extraScroll
+local tt = Instance.new("TextLabel")
+tt.Size = UDim2.new(1, 0, 0, 18)
+tt.Position = UDim2.new(0, 0, 0.45, 0)
+tt.Text = "Ekstra"
+tt.TextColor3 = C.text
+tt.Font = Enum.Font.GothamBold
+tt.TextSize = 12
+tt.BackgroundTransparency = 1
+tt.Parent = parentExtra
 
-local extraStatus = Instance.new("TextLabel")
-extraStatus.Size = UDim2.new(1, -12, 0, 14)
-extraStatus.Position = UDim2.new(0, 6, 0, 34)
-extraStatus.BackgroundTransparency = 1
-extraStatus.Text = "Status: AUTO ON"
-extraStatus.TextColor3 = C.green
-extraStatus.Font = Enum.Font.Gotham
-extraStatus.TextSize = 9
-extraStatus.TextXAlignment = Enum.TextXAlignment.Left
-extraStatus.Parent = extraScroll
-
--- ==================================================================
--- VALUE DISPLAY ENGINE (LANGSUNG JALAN TANPA TOGGLE)
--- ==================================================================
-local SellValueData = safeRequire(ReplicatedStorage.SharedModules.SellValueData)
-local FruitValueCalc = safeRequire(ReplicatedStorage.SharedModules.FruitValueCalc)
-local SellFlags = safeRequire(ReplicatedStorage.SharedModules.Flags.SellFlags)
-local NumberUtils = safeRequire(ReplicatedStorage.SharedModules.NumberUtils)
-local Worlds = safeRequire(ReplicatedStorage.SharedModules.Worlds)
-
-local function formatValue(value)
-    if not value or value <= 0 then return "0" end
-    if not NumberUtils or not Worlds then return tostring(value) end
-    
-    local success, result = pcall(function()
-        local suffix = ""
-        if Worlds.Current and Worlds.Current.CurrencySuffix then
-            suffix = Worlds.Current.CurrencySuffix
-        end
-        return NumberUtils.Abbreviate(value) .. suffix
-    end)
-    
-    if success then return result end
-    return tostring(value)
-end
-
-local function calculateFruitValue(fruitName, sizeMultiplier, mutation)
-    if not fruitName or not SellValueData or not SellValueData[fruitName] then return nil end
-    
-    local success, baseValue = pcall(function()
-        return FruitValueCalc(fruitName, sizeMultiplier or 1, mutation, player, nil)
-    end)
-    if not success or not baseValue then return nil end
-    
-    local success2, valueWithBoost = pcall(function()
-        return SellFlags.Apply(fruitName, baseValue)
-    end)
-    if not success2 or not valueWithBoost then return nil end
-    
-    return math.floor(valueWithBoost)
-end
-
-local function isFruitInstance(instance)
-    if instance:IsA("Configuration") or instance:IsA("Tool") then
-        local fruitName = instance:GetAttribute("FruitName")
-        return fruitName ~= nil and fruitName ~= ""
-    end
-    return false
-end
-
-local function createLabelForSlot(slot)
-    if not slot or not slot:IsA("TextButton") then return end
-    if slot:FindFirstChild("SellValue") then return end
-    
-    local toolNameLabel = slot:FindFirstChild("ToolName") or slot:FindFirstChildWhichIsA("TextLabel")
-    if not toolNameLabel then return end
-    
-    local fruitName = toolNameLabel.Text
-    if fruitName == "" then return end
-    
-    local fruitData = nil
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        for _, instance in backpack:GetChildren() do
-            if isFruitInstance(instance) then
-                local attrs = {
-                    fruitName = instance:GetAttribute("FruitName"),
-                    sizeMultiplier = instance:GetAttribute("SizeMultiplier") or 1,
-                    mutation = instance:GetAttribute("Mutation"),
-                }
-                if attrs.fruitName == fruitName then
-                    fruitData = attrs
-                    break
-                end
-            end
-        end
-    end
-    
-    if not fruitData then return end
-    
-    local value = calculateFruitValue(fruitData.fruitName, fruitData.sizeMultiplier, fruitData.mutation)
-    
-    local sellValueLabel = Instance.new("TextLabel")
-    sellValueLabel.Name = "SellValue"
-    sellValueLabel.BackgroundTransparency = 1
-    sellValueLabel.Font = Enum.Font.GothamSemibold
-    sellValueLabel.TextSize = 11
-    sellValueLabel.TextXAlignment = Enum.TextXAlignment.Left
-    sellValueLabel.BorderSizePixel = 0
-    sellValueLabel.ZIndex = 5
-    sellValueLabel.Size = UDim2.new(1, -8, 0, 14)
-    sellValueLabel.Position = UDim2.new(0, 4, 0, 40)
-    
-    if value then
-        sellValueLabel.Text = "💰 " .. formatValue(value)
-        sellValueLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-    else
-        sellValueLabel.Text = "💰 N/A"
-        sellValueLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-    end
-    
-    sellValueLabel.Parent = slot
-end
-
-local function initializeAllSlots()
-    local backpackGui = playerGui:FindFirstChild("BackpackGui")
-    if not backpackGui then return end
-    
-    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-    if not backpackFrame then return end
-    
-    -- Inventory
-    local inventory = backpackFrame:FindFirstChild("Inventory")
-    if inventory then
-        local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
-        if scrollingFrame then
-            local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
-            if gridFrame then
-                for _, slot in gridFrame:GetChildren() do
-                    if slot:IsA("TextButton") then
-                        pcall(function() createLabelForSlot(slot) end)
-                    end
-                end
-            end
-        end
-    end
-    
-    -- Hotbar
-    local hotbar = backpackFrame:FindFirstChild("Hotbar")
-    if hotbar then
-        for _, slot in hotbar:GetChildren() do
-            if slot:IsA("TextButton") or slot:IsA("Frame") then
-                pcall(function() createLabelForSlot(slot) end)
-            end
-        end
-    end
-end
-
--- LANGSUNG JALAN
-task.delay(3, function()
-    for i = 1, 5 do
-        pcall(initializeAllSlots)
-        task.wait(0.5)
-    end
-    print("[AoneHub] ✅ Value Display aktif!")
-end)
-
--- Loop berkala
-task.spawn(function()
-    while parentExtra.Parent do
-        task.wait(5)
-        pcall(initializeAllSlots)
-    end
-end)
+local st = Instance.new("TextLabel")
+st.Size = UDim2.new(1, 0, 0, 12)
+st.Position = UDim2.new(0, 0, 0.52, 0)
+st.Text = "Coming soon..."
+st.TextColor3 = C.textDim
+st.Font = Enum.Font.Gotham
+st.TextSize = 9
+st.BackgroundTransparency = 1
+st.Parent = parentExtra
 
     -- ==================================================================
     -- TAB 1: AUTO BUY
