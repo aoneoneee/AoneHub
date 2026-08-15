@@ -374,7 +374,7 @@ end)
 end
 
 -- ==================================================================
--- VALUE DISPLAY SYSTEM (DENGAN CACHE - HANYA HITUNG SAAT ON)
+-- VALUE DISPLAY SYSTEM (OPTIMIZED - UIStroke untuk Hotbar)
 -- ==================================================================
 do
     local valueDisplaySystem = {
@@ -570,8 +570,23 @@ do
         return nil
     end
     
-    -- Create label for slot
-    local function CreateLabelForSlot(slot)
+    -- Get color based on value
+    local function GetValueColor(value)
+        if not value then
+            return Color3.fromRGB(150, 150, 150)
+        elseif value >= 1000000 then
+            return Color3.fromRGB(255, 100, 255)  -- Pink/Purple
+        elseif value >= 100000 then
+            return Color3.fromRGB(255, 200, 0)    -- Gold
+        elseif value >= 10000 then
+            return Color3.fromRGB(0, 255, 100)    -- Green
+        else
+            return Color3.fromRGB(200, 200, 200)  -- Gray
+        end
+    end
+    
+    -- Create label for INVENTORY slot (pakai label, karena ada space)
+    local function CreateLabelForInventorySlot(slot)
         if not config.extraToggle1 then return end
         if not slot or not slot:IsA("TextButton") then return end
         if slot:FindFirstChild("SellValue") then return end
@@ -617,6 +632,11 @@ do
         sellValueLabel.BorderSizePixel = 0
         sellValueLabel.ZIndex = 5
         
+        -- Non-interaktif
+        sellValueLabel.Active = false
+        sellValueLabel.Selectable = false
+        sellValueLabel.Interactable = false
+        
         if toolCountLabel then
             sellValueLabel.Size = UDim2.new(1, -8, 0, 14)
             sellValueLabel.Position = UDim2.new(
@@ -624,14 +644,6 @@ do
                 toolCountLabel.Position.X.Offset,
                 0,
                 toolCountLabel.Position.Y.Offset + toolCountLabel.Size.Y.Offset + 2
-            )
-        elseif toolNameLabel then
-            sellValueLabel.Size = UDim2.new(1, -8, 0, 14)
-            sellValueLabel.Position = UDim2.new(
-                toolNameLabel.Position.X.Scale,
-                toolNameLabel.Position.X.Offset,
-                0,
-                toolNameLabel.Position.Y.Offset + toolNameLabel.Size.Y.Offset + 2
             )
         else
             sellValueLabel.Size = UDim2.new(1, -8, 0, 14)
@@ -641,27 +653,49 @@ do
         sellValueLabel:SetAttribute("FruitId", fruitData.id or "unknown")
         sellValueLabel:SetAttribute("FruitName", fruitName)
         
-        local displayText = value and ("💰 " .. FormatValue(value)) or "💰 N/A"
-        sellValueLabel.Text = displayText
-        
-        if value then
-            if value >= 1000000 then
-                sellValueLabel.TextColor3 = Color3.fromRGB(255, 100, 255)
-            elseif value >= 100000 then
-                sellValueLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-            elseif value >= 10000 then
-                sellValueLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-            else
-                sellValueLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-            end
-        else
-            sellValueLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-        end
+        sellValueLabel.Text = value and ("💰 " .. FormatValue(value)) or "💰 N/A"
+        sellValueLabel.TextColor3 = GetValueColor(value)
         
         sellValueLabel.Parent = slot
     end
     
-    -- Initialize inventory slots
+    -- Create indicator untuk HOTBAR slot (pakai UIStroke, tidak ganggu interaksi)
+    local function CreateIndicatorForHotbarSlot(slot)
+        if not config.extraToggle1 then return end
+        if not slot then return end
+        if slot:FindFirstChild("ValueIndicator") then return end
+        
+        local toolNameLabel = slot:FindFirstChild("ToolName")
+        
+        if not toolNameLabel then
+            for _, child in slot:GetDescendants() do
+                if child:IsA("TextLabel") and child.Name == "ToolName" then
+                    toolNameLabel = child
+                    break
+                end
+            end
+        end
+        
+        if not toolNameLabel or not toolNameLabel:IsA("TextLabel") then return end
+        
+        local fruitName = toolNameLabel.Text
+        if fruitName == "" then return end
+        
+        local fruitData = FindFruitByCountAndName("", fruitName)
+        if not fruitData then return end
+        
+        local value = CalculateFruitValue(fruitData.fruitName, fruitData.sizeMultiplier, fruitData.mutation)
+        
+        -- Gunakan UIStroke sebagai indikator (border berwarna)
+        local indicator = Instance.new("UIStroke")
+        indicator.Name = "ValueIndicator"
+        indicator.Thickness = 2
+        indicator.ZIndex = 5
+        indicator.Color = GetValueColor(value)
+        indicator.Parent = slot
+    end
+    
+    -- Initialize inventory slots (pakai label)
     local function InitializeInventorySlots()
         if not config.extraToggle1 then return end
         if not backpackGui then return end
@@ -682,12 +716,12 @@ do
         
         for _, slot in gridFrame:GetChildren() do
             if slot:IsA("TextButton") then
-                pcall(function() CreateLabelForSlot(slot) end)
+                pcall(function() CreateLabelForInventorySlot(slot) end)
             end
         end
     end
     
-    -- Initialize hotbar slots
+    -- Initialize hotbar slots (pakai UIStroke)
     local function InitializeHotbarSlots()
         if not config.extraToggle1 then return end
         if not backpackGui then return end
@@ -700,7 +734,7 @@ do
         
         for _, slot in hotbar:GetChildren() do
             if slot:IsA("TextButton") or slot:IsA("Frame") then
-                pcall(function() CreateLabelForSlot(slot) end)
+                pcall(function() CreateIndicatorForHotbarSlot(slot) end)
             end
         end
     end
@@ -856,7 +890,7 @@ do
         local totalFrame = Instance.new("Frame")
         totalFrame.Name = "GardenTotalFrame"
         totalFrame.Size = UDim2.new(0, 140, 0, 25)
-        totalFrame.Position = UDim2.new(invX, invXOffset + 190, invY, invYOffset - 29)
+        totalFrame.Position = UDim2.new(invX, invXOffset - 144, invY, invYOffset)
         totalFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
         totalFrame.BackgroundTransparency = 0
         totalFrame.BorderSizePixel = 0
@@ -983,14 +1017,17 @@ do
         end
     end
     
-    -- Cleanup semua label dan frame
+    -- Cleanup semua label, indicator, dan frame
     local function CleanupAll()
-        local function removeLabels(container)
+        local function removeLabelsAndIndicators(container)
             if not container then return end
             for _, slot in container:GetChildren() do
                 if slot:IsA("TextButton") or slot:IsA("Frame") then
                     local label = slot:FindFirstChild("SellValue")
                     if label then label:Destroy() end
+                    
+                    local indicator = slot:FindFirstChild("ValueIndicator")
+                    if indicator then indicator:Destroy() end
                 end
             end
         end
@@ -1002,12 +1039,12 @@ do
                 local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
                 if scrollingFrame then
                     local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
-                    removeLabels(gridFrame)
+                    removeLabelsAndIndicators(gridFrame)
                 end
             end
             
             local hotbar = backpackFrame:FindFirstChild("Hotbar")
-            removeLabels(hotbar)
+            removeLabelsAndIndicators(hotbar)
             
             local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
             if backpackTotal then backpackTotal:Destroy() end
@@ -1022,128 +1059,119 @@ do
     end
     
     -- Update cache di background (HANYA JIKA TOGGLE ON)
-local function UpdateCacheInBackground()
-    task.spawn(function()
-        while true do
-            task.wait(2)  -- Update cache setiap 2 detik
-            
-            -- HANYA hitung jika toggle ON
-            if config.extraToggle1 == true then  -- ← PASTIKAN == true
-                pcall(function()
-                    valueCache.backpackTotal = CalculateBackpackTotalValue()
-                    valueCache.lastBackpackUpdate = os.time()
-                end)
+    local function UpdateCacheInBackground()
+        task.spawn(function()
+            while true do
+                task.wait(2)
                 
-                -- Garden lebih jarang diupdate (setiap 5 detik)
-                if os.time() - valueCache.lastGardenUpdate > 5 then
+                if config.extraToggle1 == true then
                     pcall(function()
-                        valueCache.gardenTotal = CalculateGardenTotalValue()
-                        valueCache.lastGardenUpdate = os.time()
+                        valueCache.backpackTotal = CalculateBackpackTotalValue()
+                        valueCache.lastBackpackUpdate = os.time()
                     end)
+                    
+                    if os.time() - valueCache.lastGardenUpdate > 5 then
+                        pcall(function()
+                            valueCache.gardenTotal = CalculateGardenTotalValue()
+                            valueCache.lastGardenUpdate = os.time()
+                        end)
+                    end
                 end
             end
-        end
-    end)
-        end
+        end)
+    end
     
-   -- Watch Inventory visibility (INSTANT menggunakan cache)
-local function SetupInventoryWatcher()
-    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-    if not backpackFrame then return end
-    
-    local inventory = backpackFrame:FindFirstChild("Inventory")
-    if not inventory then return end
-    
-    inventory:GetPropertyChangedSignal("Visible"):Connect(function()
-        -- CEK TOGGLE DULU
-        if config.extraToggle1 ~= true then 
-            -- Jika OFF, sembunyikan frame
-            local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
-            if backpackTotal then backpackTotal.Visible = false end
-            
-            local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
-            if gardenTotal then gardenTotal.Visible = false end
-            
-            return 
-        end
+    -- Watch Inventory visibility (INSTANT menggunakan cache)
+    local function SetupInventoryWatcher()
+        local backpackFrame = backpackGui:FindFirstChild("Backpack")
+        if not backpackFrame then return end
         
-        if inventory.Visible then
-            -- Inventory dibuka - LANGSUNG tampilkan dengan nilai cache
-            pcall(function()
+        local inventory = backpackFrame:FindFirstChild("Inventory")
+        if not inventory then return end
+        
+        inventory:GetPropertyChangedSignal("Visible"):Connect(function()
+            if config.extraToggle1 ~= true then 
                 local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                if backpackTotal then backpackTotal.Visible = false end
+                
                 local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                if gardenTotal then gardenTotal.Visible = false end
                 
-                if backpackTotal then
-                    backpackTotal.Visible = true
-                    local valueLabel = backpackTotal:FindFirstChild("Value")
-                    if valueLabel then
-                        valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
-                    end
-                else
-                    CreateBackpackTotalFrame()
-                end
-                
-                if gardenTotal then
-                    gardenTotal.Visible = true
-                    local valueLabel = gardenTotal:FindFirstChild("Value")
-                    if valueLabel then
-                        valueLabel.Text = "💰 " .. FormatValue(valueCache.gardenTotal)
-                    end
-                else
-                    CreateGardenTotalFrame()
-                end
-                
-                -- Update labels
-                InitializeAllSlots()
-            end)
-        else
-            -- Inventory ditutup - LANGSUNG sembunyikan
-            local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
-            if backpackTotal then backpackTotal.Visible = false end
+                return 
+            end
             
-            local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
-            if gardenTotal then gardenTotal.Visible = false end
-        end
-    end)
-end
+            if inventory.Visible then
+                pcall(function()
+                    local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                    local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                    
+                    if backpackTotal then
+                        backpackTotal.Visible = true
+                        local valueLabel = backpackTotal:FindFirstChild("Value")
+                        if valueLabel then
+                            valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
+                        end
+                    else
+                        CreateBackpackTotalFrame()
+                    end
+                    
+                    if gardenTotal then
+                        gardenTotal.Visible = true
+                        local valueLabel = gardenTotal:FindFirstChild("Value")
+                        if valueLabel then
+                            valueLabel.Text = "💰 " .. FormatValue(valueCache.gardenTotal)
+                        end
+                    else
+                        CreateGardenTotalFrame()
+                    end
+                    
+                    InitializeAllSlots()
+                end)
+            else
+                local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                if backpackTotal then backpackTotal.Visible = false end
+                
+                local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                if gardenTotal then gardenTotal.Visible = false end
+            end
+        end)
+    end
     
     -- Update frame dengan nilai cache (cepat)
-    -- Update frame dengan nilai cache (cepat)
-local function StartPeriodicUpdate()
-    task.spawn(function()
-        while true do
-            task.wait(0.5)
-            
-            -- HANYA update jika toggle ON
-            if config.extraToggle1 == true then  -- ← PASTIKAN == true
-                pcall(function()
-                    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-                    if backpackFrame then
-                        local inventory = backpackFrame:FindFirstChild("Inventory")
-                        
-                        if inventory and inventory.Visible then
-                            local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
-                            if backpackTotal and backpackTotal.Visible then
-                                local valueLabel = backpackTotal:FindFirstChild("Value")
-                                if valueLabel then
-                                    valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
-                                end
-                            end
+    local function StartPeriodicUpdate()
+        task.spawn(function()
+            while true do
+                task.wait(0.5)
+                
+                if config.extraToggle1 == true then
+                    pcall(function()
+                        local backpackFrame = backpackGui:FindFirstChild("Backpack")
+                        if backpackFrame then
+                            local inventory = backpackFrame:FindFirstChild("Inventory")
                             
-                            local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
-                            if gardenTotal and gardenTotal.Visible then
-                                local valueLabel = gardenTotal:FindFirstChild("Value")
-                                if valueLabel then
-                                    valueLabel.Text = "💰 " .. FormatValue(valueCache.gardenTotal)
+                            if inventory and inventory.Visible then
+                                local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                                if backpackTotal and backpackTotal.Visible then
+                                    local valueLabel = backpackTotal:FindFirstChild("Value")
+                                    if valueLabel then
+                                        valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
+                                    end
+                                end
+                                
+                                local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                                if gardenTotal and gardenTotal.Visible then
+                                    local valueLabel = gardenTotal:FindFirstChild("Value")
+                                    if valueLabel then
+                                        valueLabel.Text = "💰 " .. FormatValue(valueCache.gardenTotal)
+                                    end
                                 end
                             end
                         end
-                    end
-                end)
+                    end)
+                end
             end
-        end
-    end)
-end
+        end)
+    end
     
     -- Watch garden (HANYA JIKA TOGGLE ON)
     local function SetupGardenWatcher()
@@ -1183,14 +1211,14 @@ end
         end
     end
     
-        -- Watch backpack (HANYA JIKA TOGGLE ON)
+    -- Watch backpack (HANYA JIKA TOGGLE ON)
     local function SetupFruitWatcher()
         local backpack = player:FindFirstChild("Backpack")
         if not backpack then return end
-    
-        backpack.ChildAdded:Connect(function(instance)
-            if not config.extraToggle1 then return end  -- ← SUDAH ADA
         
+        backpack.ChildAdded:Connect(function(instance)
+            if not config.extraToggle1 then return end
+            
             if IsFruitInstance(instance) then
                 task.wait(0.5)
                 pcall(function()
@@ -1200,10 +1228,10 @@ end
                 pcall(InitializeAllSlots)
             end
         end)
-    
-        backpack.ChildRemoved:Connect(function(instance)
-            if not config.extraToggle1 then return end  -- ← SUDAH ADA
         
+        backpack.ChildRemoved:Connect(function(instance)
+            if not config.extraToggle1 then return end
+            
             if IsFruitInstance(instance) then
                 task.wait(0.3)
                 pcall(function()
@@ -1216,20 +1244,16 @@ end
     end
     
     -- Initialize
-    -- Initialize
     task.wait(2)
-
+    
     pcall(function()
-        -- Setup watchers DENGAN pengecekan toggle
         SetupFruitWatcher()
         SetupGardenWatcher()
         SetupInventoryWatcher()
-    
-        -- Mulai cache dan update di background (AKAN CEK TOGGLE SENDIRI)
+        
         UpdateCacheInBackground()
         StartPeriodicUpdate()
-    
-        -- HANYA hitung cache awal jika toggle ON
+        
         if config.extraToggle1 == true then
             task.spawn(function()
                 pcall(function()
@@ -1237,8 +1261,7 @@ end
                     valueCache.gardenTotal = CalculateGardenTotalValue()
                     valueCache.lastBackpackUpdate = os.time()
                     valueCache.lastGardenUpdate = os.time()
-                
-                    -- Buat frame jika Inventory visible
+                    
                     local backpackFrame = backpackGui:FindFirstChild("Backpack")
                     if backpackFrame then
                         local inventory = backpackFrame:FindFirstChild("Inventory")
@@ -1251,14 +1274,13 @@ end
                 end)
             end)
         else
-            -- Jika toggle OFF, pastikan cleanup
             pcall(CleanupAll)
             print("[AoneHub] Value Display: OFF (default)")
         end
-    
+        
         print("[AoneHub] ✅ Value Display system initialized!")
     end)
-    end
+end
 
 -- ==================================================================
 -- ANTI-AFK SYSTEM (DENGAN TOGGLE DI TAB 5)
