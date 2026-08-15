@@ -189,6 +189,16 @@ local function main()
     end
     for _, tab in ipairs(tabs) do tabBtns[tab.name].MouseButton1Click:Connect(function() switchTab(tab.name) end) end
 
+    -- Placeholder Tab 5
+    do local f = tabFrames["Ekstra"]
+        local ic = Instance.new("TextLabel"); ic.Size = UDim2.new(1, 0, 0, 32); ic.Position = UDim2.new(0, 0, 0.35, -16)
+        ic.Text = "⚙️"; ic.Font = Enum.Font.Gotham; ic.TextSize = 28; ic.BackgroundTransparency = 1; ic.Parent = f
+        local tt = Instance.new("TextLabel"); tt.Size = UDim2.new(1, 0, 0, 18); tt.Position = UDim2.new(0, 0, 0.45, 0)
+        tt.Text = "Ekstra"; tt.TextColor3 = C.text; tt.Font = Enum.Font.GothamBold; tt.TextSize = 12; tt.BackgroundTransparency = 1; tt.Parent = f
+        local st = Instance.new("TextLabel"); st.Size = UDim2.new(1, 0, 0, 12); st.Position = UDim2.new(0, 0, 0.52, 0)
+        st.Text = "Coming soon..."; st.TextColor3 = C.textDim; st.Font = Enum.Font.Gotham; st.TextSize = 9; st.BackgroundTransparency = 1; st.Parent = f
+    end
+
     -- ==================================================================
     -- TAB 1: AUTO BUY
     -- ==================================================================
@@ -1358,21 +1368,6 @@ end)
 
 print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
 
--- Di sini (setelah Tab 4 selesai, sebelum AUTO-START):
-
--- ==================================================================
--- TAB 5: EKSTRA (PLACEHOLDER)
--- ==================================================================
--- Placeholder Tab 5
-    do local f = tabFrames["Ekstra"]
-        local ic = Instance.new("TextLabel"); ic.Size = UDim2.new(1, 0, 0, 32); ic.Position = UDim2.new(0, 0, 0.35, -16)
-        ic.Text = "⚙️"; ic.Font = Enum.Font.Gotham; ic.TextSize = 28; ic.BackgroundTransparency = 1; ic.Parent = f
-        local tt = Instance.new("TextLabel"); tt.Size = UDim2.new(1, 0, 0, 18); tt.Position = UDim2.new(0, 0, 0.45, 0)
-        tt.Text = "Ekstra"; tt.TextColor3 = C.text; tt.Font = Enum.Font.GothamBold; tt.TextSize = 12; tt.BackgroundTransparency = 1; tt.Parent = f
-        local st = Instance.new("TextLabel"); st.Size = UDim2.new(1, 0, 0, 12); st.Position = UDim2.new(0, 0, 0.52, 0)
-        st.Text = "Coming soon..."; st.TextColor3 = C.textDim; st.Font = Enum.Font.Gotham; st.TextSize = 9; st.BackgroundTransparency = 1; st.Parent = f
-    end
-    
     -- ==================================================================
     -- AUTO-START
     -- ==================================================================
