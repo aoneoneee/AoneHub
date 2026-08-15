@@ -374,22 +374,14 @@ end)
 end
 
 -- ==================================================================
--- VALUE DISPLAY SYSTEM (FULL FIXED - NO ERROR)
+-- VALUE DISPLAY SYSTEM (CLEAN - HANYA INVENTORY, TANPA HOTBAR)
 -- ==================================================================
 do
-    -- Cek playerGui dulu
     if not playerGui then
         print("[AoneHub] ❌ playerGui not found!")
         return
     end
     
-    local valueDisplaySystem = {
-        initialized = false,
-        backpackTotalFrame = nil,
-        gardenTotalFrame = nil,
-    }
-    
-    -- Cache system
     local valueCache = {
         backpackTotal = 0,
         gardenTotal = 0,
@@ -397,7 +389,6 @@ do
         lastGardenUpdate = 0,
     }
     
-    -- Safe require
     local function SafeRequireVD(parent, moduleName)
         if not parent then return nil end
         local success, module = pcall(function()
@@ -406,7 +397,6 @@ do
         if success then return module else return nil end
     end
     
-    -- Load modules dengan pengecekan
     if not ReplicatedStorage then
         print("[AoneHub] ❌ ReplicatedStorage not found!")
         return
@@ -430,30 +420,11 @@ do
     local NumberUtils = SafeRequireVD(sharedModules, "NumberUtils")
     local Worlds = SafeRequireVD(sharedModules, "Worlds")
     
-    if not SellValueData then
-        print("[AoneHub] ❌ SellValueData not found!")
-        return
-    end
-    
-    if not FruitValueCalc then
-        print("[AoneHub] ❌ FruitValueCalc not found!")
-        return
-    end
-    
-    if not SellFlags then
-        print("[AoneHub] ❌ SellFlags not found!")
-        return
-    end
-    
-    if not NumberUtils then
-        print("[AoneHub] ❌ NumberUtils not found!")
-        return
-    end
-    
-    if not Worlds then
-        print("[AoneHub] ❌ Worlds not found!")
-        return
-    end
+    if not SellValueData then print("[AoneHub] ❌ SellValueData not found!"); return end
+    if not FruitValueCalc then print("[AoneHub] ❌ FruitValueCalc not found!"); return end
+    if not SellFlags then print("[AoneHub] ❌ SellFlags not found!"); return end
+    if not NumberUtils then print("[AoneHub] ❌ NumberUtils not found!"); return end
+    if not Worlds then print("[AoneHub] ❌ Worlds not found!"); return end
     
     local backpackGui = playerGui:FindFirstChild("BackpackGui")
     if not backpackGui then
@@ -466,25 +437,19 @@ do
     -- Friend Boost
     local function GetFriendBoostPercentage()
         if not playerGui then return 0 end
-        
         local success, result = pcall(function()
             local hud = playerGui:FindFirstChild("HUD")
             if not hud then return 0 end
-            
             local currencies = hud:FindFirstChild("Currencies")
             if not currencies then return 0 end
-            
             local friendBoost = currencies:FindFirstChild("FriendBoost")
             if not friendBoost then return 0 end
-            
             local textLabel = friendBoost:FindFirstChild("TextLabel")
             if not textLabel then return 0 end
-            
             local percentage = textLabel.Text:match("(%d+)%%")
             if percentage then return tonumber(percentage) or 0 end
             return 0
         end)
-        
         if success then return result else return 0 end
     end
     
@@ -493,42 +458,33 @@ do
     -- Calculate fruit value
     local function CalculateFruitValue(fruitName, sizeMultiplier, mutation)
         if not fruitName or not SellValueData[fruitName] then return nil end
-        
         local success, baseValue = pcall(function()
             return FruitValueCalc(fruitName, sizeMultiplier or 1, mutation, player, nil)
         end)
         if not success or not baseValue then return nil end
-        
         local success2, valueWithBoost = pcall(function()
             return SellFlags.Apply(fruitName, baseValue)
         end)
         if not success2 or not valueWithBoost then return nil end
-        
         if FRIEND_BOOST_PERCENT > 0 then
             valueWithBoost = valueWithBoost / (1 + FRIEND_BOOST_PERCENT / 100)
         end
-        
         return math.floor(valueWithBoost)
     end
     
     -- Format value
     local function FormatValue(value)
         if not value or value <= 0 then return "0" end
-        
         if not NumberUtils then return tostring(value) end
         if not Worlds then return tostring(value) end
-        
         local success, result = pcall(function()
             local abbreviated = NumberUtils.Abbreviate(value)
             local suffix = ""
-            
             if Worlds.Current then
                 suffix = Worlds.Current.CurrencySuffix or ""
             end
-            
             return abbreviated .. suffix
         end)
-        
         if success then return result else return tostring(value) end
     end
     
@@ -568,10 +524,8 @@ do
     -- Find fruit by count and name
     local function FindFruitByCountAndName(toolCountText, fruitName)
         if not config.extraToggle1 then return nil end
-        
         local backpack = player:FindFirstChild("Backpack")
         if not backpack then return nil end
-        
         local character = player.Character
         local uiWeight = ParseToolCount(toolCountText)
         local matchingFruits = {}
@@ -602,14 +556,12 @@ do
         if uiWeight then
             local bestMatch = nil
             local closestDifference = math.huge
-            
             for _, attrs in matchingFruits do
                 local fruitWeight = attrs.weight
                 if fruitWeight then
                     local roundedUiWeight = math.floor(uiWeight * 100 + 0.5) / 100
                     local roundedFruitWeight = math.floor(fruitWeight * 100 + 0.5) / 100
                     local difference = math.abs(roundedFruitWeight - roundedUiWeight)
-                    
                     if difference < 0.005 then
                         return attrs
                     elseif difference < closestDifference then
@@ -618,12 +570,10 @@ do
                     end
                 end
             end
-            
             if bestMatch and closestDifference < 0.1 then
                 return bestMatch
             end
         end
-        
         return nil
     end
     
@@ -632,17 +582,17 @@ do
         if not value then
             return Color3.fromRGB(150, 150, 150)
         elseif value >= 1000000 then
-            return Color3.fromRGB(255, 100, 255)  -- Pink/Purple
+            return Color3.fromRGB(255, 100, 255)
         elseif value >= 100000 then
-            return Color3.fromRGB(255, 200, 0)    -- Gold
+            return Color3.fromRGB(255, 200, 0)
         elseif value >= 10000 then
-            return Color3.fromRGB(0, 255, 100)    -- Green
+            return Color3.fromRGB(0, 255, 100)
         else
-            return Color3.fromRGB(200, 200, 200)  -- Gray
+            return Color3.fromRGB(200, 200, 200)
         end
     end
     
-    -- Create label for INVENTORY slot
+    -- Create label for INVENTORY slot ONLY
     local function CreateLabelForInventorySlot(slot)
         if not config.extraToggle1 then return end
         if not slot or not slot:IsA("TextButton") then return end
@@ -704,14 +654,12 @@ do
         
         sellValueLabel:SetAttribute("FruitId", fruitData.id or "unknown")
         sellValueLabel:SetAttribute("FruitName", fruitName)
-        
         sellValueLabel.Text = value and ("💰 " .. FormatValue(value)) or "💰 N/A"
         sellValueLabel.TextColor3 = GetValueColor(value)
-        
         sellValueLabel.Parent = slot
     end
     
-    -- Initialize inventory slots
+    -- Initialize inventory slots ONLY
     local function InitializeInventorySlots()
         if not config.extraToggle1 then return end
         if not backpackGui then return end
@@ -721,7 +669,6 @@ do
         
         local inventory = backpackFrame:FindFirstChild("Inventory")
         if not inventory then return end
-        
         if not inventory.Visible then return end
         
         local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
@@ -737,19 +684,11 @@ do
         end
     end
     
-    -- Initialize all slots
-    local function InitializeAllSlots()
-        if not config.extraToggle1 then return end
-        pcall(InitializeInventorySlots)
-    end
-    
     -- Calculate backpack total value
     local function CalculateBackpackTotalValue()
         if not config.extraToggle1 then return 0 end
-        
         local backpack = player:FindFirstChild("Backpack")
         if not backpack then return 0 end
-        
         local totalValue = 0
         for _, instance in backpack:GetChildren() do
             if IsFruitInstance(instance) then
@@ -762,24 +701,20 @@ do
                 end
             end
         end
-        
         return totalValue
     end
     
     -- Calculate garden total value
     local function CalculateGardenTotalValue()
         if not config.extraToggle1 then return 0 end
-        
         local gardensFolder = workspace:FindFirstChild("Gardens")
         if not gardensFolder then return 0 end
-        
         local userId = player.UserId
         local totalValue = 0
         
         for _, plot in gardensFolder:GetChildren() do
             local ownerId = plot:GetAttribute("OwnerUserId")
             local plotUserId = plot:GetAttribute("UserId")
-            
             if ownerId == userId or plotUserId == userId then
                 local plants = plot:FindFirstChild("Plants")
                 if plants then
@@ -792,9 +727,7 @@ do
                                         local fruitName = fruit:GetAttribute("CorePartName")
                                         local sizeMulti = fruit:GetAttribute("SizeMulti") or 1
                                         local mutation = fruit:GetAttribute("Mutation")
-                                        
                                         if mutation == "" then mutation = nil end
-                                        
                                         if fruitName then
                                             local value = CalculateFruitValue(fruitName, sizeMulti, mutation)
                                             if value then
@@ -809,34 +742,25 @@ do
                 end
             end
         end
-        
         return totalValue
     end
     
     -- Create backpack total frame
     local function CreateBackpackTotalFrame()
         if not backpackGui then return end
-        
         local backpackFrame = backpackGui:FindFirstChild("Backpack")
         if not backpackFrame then return end
-        
         local inventory = backpackFrame:FindFirstChild("Inventory")
         if not inventory then return end
         
         local existingFrame = backpackFrame:FindFirstChild("BackpackTotalFrame")
         if existingFrame then existingFrame:Destroy() end
         
-        local invX = inventory.Position.X.Scale
-        local invXOffset = inventory.Position.X.Offset
-        local invY = inventory.Position.Y.Scale
-        local invYOffset = inventory.Position.Y.Offset
-        
         local totalFrame = Instance.new("Frame")
         totalFrame.Name = "BackpackTotalFrame"
         totalFrame.Size = UDim2.new(0, 140, 0, 25)
-        totalFrame.Position = UDim2.new(invX, invXOffset, invY, invYOffset - 29)
+        totalFrame.Position = UDim2.new(inventory.Position.X.Scale, inventory.Position.X.Offset, inventory.Position.Y.Scale, inventory.Position.Y.Offset - 29)
         totalFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-        totalFrame.BackgroundTransparency = 0
         totalFrame.BorderSizePixel = 0
         totalFrame.ZIndex = 10
         totalFrame.Parent = backpackFrame
@@ -845,16 +769,9 @@ do
         corner.CornerRadius = UDim.new(0, 4)
         corner.Parent = totalFrame
         
-        local stroke = Instance.new("UIStroke")
-        stroke.Color = Color3.fromRGB(255, 255, 255)
-        stroke.Thickness = 1
-        stroke.Transparency = 0.5
-        stroke.Parent = totalFrame
-        
         local valueLabel = Instance.new("TextLabel")
         valueLabel.Name = "Value"
         valueLabel.Size = UDim2.new(1, 0, 1, 0)
-        valueLabel.Position = UDim2.new(0, 0, 0, 0)
         valueLabel.BackgroundTransparency = 1
         valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
         valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
@@ -866,34 +783,25 @@ do
         valueLabel.Parent = totalFrame
         
         totalFrame.Visible = inventory.Visible and config.extraToggle1
-        
         return totalFrame
     end
     
     -- Create garden total frame
     local function CreateGardenTotalFrame()
         if not backpackGui then return end
-        
         local backpackFrame = backpackGui:FindFirstChild("Backpack")
         if not backpackFrame then return end
-        
         local inventory = backpackFrame:FindFirstChild("Inventory")
         if not inventory then return end
         
         local existingFrame = backpackFrame:FindFirstChild("GardenTotalFrame")
         if existingFrame then existingFrame:Destroy() end
         
-        local invX = inventory.Position.X.Scale
-        local invXOffset = inventory.Position.X.Offset
-        local invY = inventory.Position.Y.Scale
-        local invYOffset = inventory.Position.Y.Offset
-        
         local totalFrame = Instance.new("Frame")
         totalFrame.Name = "GardenTotalFrame"
         totalFrame.Size = UDim2.new(0, 140, 0, 25)
-        totalFrame.Position = UDim2.new(invX, invXOffset + 190, invY, invYOffset - 29)
+        totalFrame.Position = UDim2.new(inventory.Position.X.Scale, inventory.Position.X.Offset - 190, inventory.Position.Y.Scale, inventory.Position.Y.Offset - 29)
         totalFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-        totalFrame.BackgroundTransparency = 0
         totalFrame.BorderSizePixel = 0
         totalFrame.ZIndex = 10
         totalFrame.Parent = backpackFrame
@@ -901,12 +809,6 @@ do
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(0, 4)
         corner.Parent = totalFrame
-        
-        local stroke = Instance.new("UIStroke")
-        stroke.Color = Color3.fromRGB(255, 255, 255)
-        stroke.Thickness = 1
-        stroke.Transparency = 0.5
-        stroke.Parent = totalFrame
         
         local titleLabel = Instance.new("TextLabel")
         titleLabel.Name = "Title"
@@ -936,94 +838,12 @@ do
         valueLabel.Parent = totalFrame
         
         totalFrame.Visible = inventory.Visible and config.extraToggle1
-        
         return totalFrame
     end
     
-    -- Update backpack total value
-    local function UpdateBackpackTotalValue()
-        if not config.extraToggle1 then return end
-        if not backpackGui then return end
-        
-        local backpackFrame = backpackGui:FindFirstChild("Backpack")
-        if not backpackFrame then return end
-        
-        local totalFrame = backpackFrame:FindFirstChild("BackpackTotalFrame")
-        if not totalFrame then
-            totalFrame = CreateBackpackTotalFrame()
-        end
-        
-        if not totalFrame then return end
-        
-        local inventory = backpackFrame:FindFirstChild("Inventory")
-        
-        if inventory and not inventory.Visible then
-            totalFrame.Visible = false
-            return
-        end
-        
-        totalFrame.Visible = true
-        
-        local valueLabel = totalFrame:FindFirstChild("Value")
-        if valueLabel then
-            valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
-            
-            if valueCache.backpackTotal >= 10000000 then
-                valueLabel.TextColor3 = Color3.fromRGB(255, 0, 255)
-            elseif valueCache.backpackTotal >= 1000000 then
-                valueLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-            elseif valueCache.backpackTotal >= 100000 then
-                valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-            else
-                valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            end
-        end
-    end
-    
-    -- Update garden total value
-    local function UpdateGardenTotalValue()
-        if not config.extraToggle1 then return end
-        if not backpackGui then return end
-        
-        local backpackFrame = backpackGui:FindFirstChild("Backpack")
-        if not backpackFrame then return end
-        
-        local totalFrame = backpackFrame:FindFirstChild("GardenTotalFrame")
-        if not totalFrame then
-            totalFrame = CreateGardenTotalFrame()
-        end
-        
-        if not totalFrame then return end
-        
-        local inventory = backpackFrame:FindFirstChild("Inventory")
-        
-        if inventory and not inventory.Visible then
-            totalFrame.Visible = false
-            return
-        end
-        
-        totalFrame.Visible = true
-        
-        local valueLabel = totalFrame:FindFirstChild("Value")
-        if valueLabel then
-            valueLabel.Text = "💰 " .. FormatValue(valueCache.gardenTotal)
-            
-            if valueCache.gardenTotal >= 10000000 then
-                valueLabel.TextColor3 = Color3.fromRGB(255, 0, 255)
-            elseif valueCache.gardenTotal >= 1000000 then
-                valueLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
-            elseif valueCache.gardenTotal >= 100000 then
-                valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-            else
-                valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            end
-        end
-    end
-    
-    -- Cleanup semua label dan frame
+    -- Cleanup
     local function CleanupAll()
         if not backpackGui then return end
-        
         local function removeLabels(container)
             if not container then return end
             for _, slot in container:GetChildren() do
@@ -1056,18 +876,16 @@ do
         valueCache.gardenTotal = 0
     end
     
-    -- Update cache di background
+    -- Update cache in background
     local function UpdateCacheInBackground()
         task.spawn(function()
             while true do
                 task.wait(2)
-                
                 if config.extraToggle1 == true then
                     pcall(function()
                         valueCache.backpackTotal = CalculateBackpackTotalValue()
                         valueCache.lastBackpackUpdate = os.time()
                     end)
-                    
                     if os.time() - valueCache.lastGardenUpdate > 5 then
                         pcall(function()
                             valueCache.gardenTotal = CalculateGardenTotalValue()
@@ -1079,25 +897,21 @@ do
         end)
     end
     
-    -- Watch Inventory visibility
+    -- Watch inventory visibility
     local function SetupInventoryWatcher()
         if not backpackGui then return end
-        
         local backpackFrame = backpackGui:FindFirstChild("Backpack")
         if not backpackFrame then return end
-        
         local inventory = backpackFrame:FindFirstChild("Inventory")
         if not inventory then return end
         
         inventory:GetPropertyChangedSignal("Visible"):Connect(function()
-            if config.extraToggle1 ~= true then 
+            if config.extraToggle1 ~= true then
                 local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
                 if backpackTotal then backpackTotal.Visible = false end
-                
                 local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
                 if gardenTotal then gardenTotal.Visible = false end
-                
-                return 
+                return
             end
             
             if inventory.Visible then
@@ -1125,32 +939,28 @@ do
                         CreateGardenTotalFrame()
                     end
                     
-                    InitializeAllSlots()
+                    InitializeInventorySlots()
                 end)
             else
                 local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
                 if backpackTotal then backpackTotal.Visible = false end
-                
                 local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
                 if gardenTotal then gardenTotal.Visible = false end
             end
         end)
     end
     
-    -- Update frame dengan nilai cache
+    -- Periodic update
     local function StartPeriodicUpdate()
         task.spawn(function()
             while true do
                 task.wait(0.5)
-                
                 if config.extraToggle1 == true then
                     pcall(function()
                         if not backpackGui then return end
-                        
                         local backpackFrame = backpackGui:FindFirstChild("Backpack")
                         if backpackFrame then
                             local inventory = backpackFrame:FindFirstChild("Inventory")
-                            
                             if inventory and inventory.Visible then
                                 local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
                                 if backpackTotal and backpackTotal.Visible then
@@ -1159,7 +969,6 @@ do
                                         valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
                                     end
                                 end
-                                
                                 local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
                                 if gardenTotal and gardenTotal.Visible then
                                     local valueLabel = gardenTotal:FindFirstChild("Value")
@@ -1179,11 +988,9 @@ do
     local function SetupGardenWatcher()
         local gardensFolder = workspace:FindFirstChild("Gardens")
         if not gardensFolder then return end
-        
         for _, plot in gardensFolder:GetChildren() do
             plot.DescendantAdded:Connect(function(descendant)
                 if not config.extraToggle1 then return end
-                
                 if descendant:IsA("Model") then
                     local corePartName = descendant:GetAttribute("CorePartName")
                     if corePartName then
@@ -1195,10 +1002,8 @@ do
                     end
                 end
             end)
-            
             plot.DescendantRemoving:Connect(function(descendant)
                 if not config.extraToggle1 then return end
-                
                 if descendant:IsA("Model") then
                     local corePartName = descendant:GetAttribute("CorePartName")
                     if corePartName then
@@ -1217,52 +1022,37 @@ do
     local function SetupFruitWatcher()
         local backpack = player:FindFirstChild("Backpack")
         if not backpack then return end
-        
         backpack.ChildAdded:Connect(function(instance)
             if not config.extraToggle1 then return end
-            
             if IsFruitInstance(instance) then
                 task.wait(0.5)
                 pcall(function()
                     valueCache.backpackTotal = CalculateBackpackTotalValue()
                     valueCache.lastBackpackUpdate = os.time()
                 end)
-                pcall(InitializeAllSlots)
+                pcall(InitializeInventorySlots)
             end
         end)
-        
         backpack.ChildRemoved:Connect(function(instance)
             if not config.extraToggle1 then return end
-            
             if IsFruitInstance(instance) then
                 task.wait(0.3)
                 pcall(function()
                     valueCache.backpackTotal = CalculateBackpackTotalValue()
                     valueCache.lastBackpackUpdate = os.time()
                 end)
-                pcall(InitializeAllSlots)
+                pcall(InitializeInventorySlots)
             end
         end)
     end
     
-    -- Initialize dengan pengecekan penuh
+    -- Initialize
     task.wait(3)
     
     pcall(function()
-        if not player then
-            print("[AoneHub] ❌ Player not found!")
-            return
-        end
-        
-        if not playerGui then
-            print("[AoneHub] ❌ playerGui not found!")
-            return
-        end
-        
-        if not backpackGui then
-            print("[AoneHub] ❌ BackpackGui not found!")
-            return
-        end
+        if not player then print("[AoneHub] ❌ Player not found!"); return end
+        if not playerGui then print("[AoneHub] ❌ playerGui not found!"); return end
+        if not backpackGui then print("[AoneHub] ❌ BackpackGui not found!"); return end
         
         pcall(SetupFruitWatcher)
         pcall(SetupGardenWatcher)
@@ -1280,7 +1070,7 @@ do
                     
                     CreateBackpackTotalFrame()
                     CreateGardenTotalFrame()
-                    InitializeAllSlots()
+                    InitializeInventorySlots()
                 end)
             end)
         else
