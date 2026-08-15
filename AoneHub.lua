@@ -606,6 +606,13 @@ valueDisplayBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+if config.isValueDisplayRunning then
+    valueDisplayRunning = true
+    valueDisplayBtn.Text = "💰 VALUE DISPLAY: ON"
+    valueDisplayBtn.BackgroundColor3 = C.green
+    task.delay(5, startValueDisplay)
+end
+    
     -- ==================================================================
     -- TAB 1: AUTO BUY
     -- ==================================================================
@@ -1782,7 +1789,7 @@ print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
     if config.isRunningSell then task.delay(3,function() if net and net.NPCS and net.NPCS.SellAll then isRunningSell=true; task.spawn(sellLoop); updateSellUI() end end) end
     if config.isAutoMailRunning then task.delay(4,function() if config.mailTargetUsername ~= "" then isAutoRunning=true; userBox.Text=config.mailTargetUsername; updatePlayerInfo(config.mailTargetUsername); autoBtn.Text = "⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50); autoStatusLabel.Text = "🔄 Auto Mail: ON"; autoStatusLabel.TextColor3 = C.green end end) end
     if config.isAutoClaimRunning then task.delay(5,function() isClaimRunning = true; claimBtn.Text = "⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 120); claimStatusLabel.Text = "📬 Auto Claim: ON"; claimStatusLabel.TextColor3 = Color3.fromRGB(200, 100, 255) end) end
-    if config.isValueDisplayRunning then valueDisplayRunning = true; valueDisplayBtn.Text = "💰 VALUE DISPLAY: ON"; valueDisplayBtn.BackgroundColor3 = C.green; task.delay(5, startValueDisplay) end
+    
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
 end
