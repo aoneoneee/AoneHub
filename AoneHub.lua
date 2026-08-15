@@ -260,11 +260,11 @@ local function safeRequireModule(parent, moduleName)
     return nil
 end
 
-local SellValueData = safeRequireModule(ReplicatedStorage.SharedModules, "SellValueData")
-local FruitValueCalc = safeRequireModule(ReplicatedStorage.SharedModules, "FruitValueCalc")
-local SellFlags = safeRequireModule(ReplicatedStorage.SharedModules:WaitForChild("Flags", 10), "SellFlags")
-local NumberUtils = safeRequireModule(ReplicatedStorage.SharedModules, "NumberUtils")
-local Worlds = safeRequireModule(ReplicatedStorage.SharedModules, "Worlds")
+local SellValueData = safeRequire(ReplicatedStorage.SharedModules.SellValueData)
+local FruitValueCalc = safeRequire(ReplicatedStorage.SharedModules.FruitValueCalc)
+local SellFlags = safeRequire(ReplicatedStorage.SharedModules.Flags.SellFlags)
+local NumberUtils = safeRequire(ReplicatedStorage.SharedModules.NumberUtils)
+local Worlds = safeRequire(ReplicatedStorage.SharedModules.Worlds)
 
 local backpackGui = nil
 local function findBackpackGui()
@@ -320,9 +320,19 @@ end
 
 local function formatValue(value)
     if not value or value <= 0 then return "0" end
+    
+    if not NumberUtils or not Worlds then
+        return tostring(value)
+    end
+    
     local success, result = pcall(function()
-        return NumberUtils.Abbreviate(value) .. Worlds.Current.CurrencySuffix
+        local suffix = ""
+        if Worlds.Current and Worlds.Current.CurrencySuffix then
+            suffix = Worlds.Current.CurrencySuffix
+        end
+        return NumberUtils.Abbreviate(value) .. suffix
     end)
+    
     if success then return result end
     return tostring(value)
 end
