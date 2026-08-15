@@ -27,7 +27,7 @@ local function main()
         searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
         isRunningBuy = false, isRunningSell = false,
         selectedSellFruits = {}, sellTargets = {},
-        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = false, extraToggle3 = false, valueDisplayEnabled = false,
+        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = true, extraToggle3 = false, valueDisplayEnabled = false,
     }
 
     local function loadConfig()
@@ -309,7 +309,6 @@ do local f = tabFrames["Ekstra"]
     -- Special handling untuk Value Display (Toggle 1)
     if configKey == "extraToggle1" then
         if config[configKey] then
-            -- Aktifkan Value Display
             print("[AoneHub] ✅ Value Display: ON")
             task.wait(0.5)
             pcall(function()
@@ -317,7 +316,6 @@ do local f = tabFrames["Ekstra"]
                 if backpackGui then
                     local backpackFrame = backpackGui:FindFirstChild("Backpack")
                     if backpackFrame then
-                        -- Update toggle button di game
                         local gameToggle = backpackFrame:FindFirstChild("ValueToggleButton")
                         if gameToggle then
                             gameToggle.Text = "ON"
@@ -327,21 +325,18 @@ do local f = tabFrames["Ekstra"]
                 end
             end)
         else
-            -- Nonaktifkan Value Display
             print("[AoneHub] ❌ Value Display: OFF")
             pcall(function()
                 local backpackGui = playerGui:FindFirstChild("BackpackGui")
                 if backpackGui then
                     local backpackFrame = backpackGui:FindFirstChild("Backpack")
                     if backpackFrame then
-                        -- Update toggle button di game
                         local gameToggle = backpackFrame:FindFirstChild("ValueToggleButton")
                         if gameToggle then
                             gameToggle.Text = "OFF"
                             gameToggle.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
                         end
                         
-                        -- Cleanup labels
                         local function removeLabels(container)
                             if not container then return end
                             for _, slot in container:GetChildren() do
@@ -372,6 +367,15 @@ do local f = tabFrames["Ekstra"]
                     end
                 end
             end)
+        end
+    end
+    
+    -- Special handling untuk Anti-AFK (Toggle 2)
+    if configKey == "extraToggle2" then
+        if config[configKey] then
+            print("[AoneHub] ✅ Anti-AFK: ON")
+        else
+            print("[AoneHub] ❌ Anti-AFK: OFF")
         end
     end
 end)
@@ -1267,6 +1271,89 @@ do
         
         print("[AoneHub] ✅ Value Display system initialized with cache!")
     end)
+    end
+
+-- ==================================================================
+-- ANTI-AFK SYSTEM (DENGAN TOGGLE DI TAB 5)
+-- ==================================================================
+do
+    local antiAFKEnabled = config.extraToggle2  -- Default sesuai config
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    local antiAFKActive = false
+    
+    -- Fungsi untuk menjalankan Anti-AFK
+    local function StartAntiAFK()
+        if antiAFKActive then return end
+        antiAFKActive = true
+        
+        task.spawn(function()
+            while antiAFKActive and config.extraToggle2 do
+                -- Simulasi mouse movement
+                pcall(function()
+                    VirtualInputManager:SendMouseMoveEvent(
+                        math.random(100, 500), 
+                        math.random(100, 500), 
+                        nil
+                    )
+                end)
+                
+                -- Simulasi key press
+                pcall(function()
+                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, nil)
+                    task.wait(0.1)
+                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, nil)
+                end)
+                
+                -- Gerakin karakter dikit (bonus)
+                pcall(function()
+                    local char = player.Character
+                    if char and char:FindFirstChild("Humanoid") then
+                        char.Humanoid:Move(Vector3.new(math.random(-5, 5), 0, math.random(-5, 5)))
+                    end
+                end)
+                
+                -- Tunggu 7-10 menit sebelum simulasi lagi
+                task.wait(420 + math.random() * 180)
+            end
+            
+            antiAFKActive = false
+        end)
+        
+        print("[AoneHub] ✅ Anti-AFK: ON")
+    end
+    
+    -- Fungsi untuk menghentikan Anti-AFK
+    local function StopAntiAFK()
+        antiAFKActive = false
+        print("[AoneHub] ❌ Anti-AFK: OFF")
+    end
+    
+    -- Monitor config.extraToggle2 untuk perubahan
+    task.spawn(function()
+        while true do
+            task.wait(0.5)
+            
+            if config.extraToggle2 then
+                -- Toggle ON, jalankan Anti-AFK
+                if not antiAFKActive then
+                    StartAntiAFK()
+                end
+            else
+                -- Toggle OFF, hentikan Anti-AFK
+                if antiAFKActive then
+                    StopAntiAFK()
+                end
+            end
+        end
+    end)
+    
+    -- Auto-start jika config true
+    if config.extraToggle2 then
+        task.delay(1, function()
+            StartAntiAFK()
+            print("[AoneHub] ✅ Anti-AFK auto-started!")
+        end)
+    end
     end
     
     -- ==================================================================
@@ -2445,52 +2532,22 @@ print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
     if config.isRunningSell then task.delay(3,function() if net and net.NPCS and net.NPCS.SellAll then isRunningSell=true; task.spawn(sellLoop); updateSellUI() end end) end
     if config.isAutoMailRunning then task.delay(4,function() if config.mailTargetUsername ~= "" then isAutoRunning=true; userBox.Text=config.mailTargetUsername; updatePlayerInfo(config.mailTargetUsername); autoBtn.Text = "⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50); autoStatusLabel.Text = "🔄 Auto Mail: ON"; autoStatusLabel.TextColor3 = C.green end end) end
     if config.isAutoClaimRunning then task.delay(5,function() isClaimRunning = true; claimBtn.Text = "⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 120); claimStatusLabel.Text = "📬 Auto Claim: ON"; claimStatusLabel.TextColor3 = Color3.fromRGB(200, 100, 255) end) end
-    if config.extraToggle1 then
+    -- Auto-start Value Display
+if config.extraToggle1 then
     task.delay(6, function()
         print("[AoneHub] ✅ Value Display auto-started!")
     end)
 end
+
+-- Auto-start Anti-AFK (default ON)
+if config.extraToggle2 then
+    task.delay(1, function()
+        print("[AoneHub] ✅ Anti-AFK auto-started!")
+    end)
+    end
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
 end
-
--- ==================================================================
--- ANTI-AFK (LANGSUNG AKTIF TANPA TOGGLE)
--- ==================================================================
-task.spawn(function()
-    local VirtualInputManager = game:GetService("VirtualInputManager")
-    
-    while true do
-        -- Simulasi mouse movement
-        pcall(function()
-            VirtualInputManager:SendMouseMoveEvent(
-                math.random(100, 500), 
-                math.random(100, 500), 
-                nil
-            )
-        end)
-        
-        -- Simulasi key press
-        pcall(function()
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, nil)
-            task.wait(0.1)
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, nil)
-        end)
-        
-        -- Gerakin karakter dikit (bonus)
-        pcall(function()
-            local char = player.Character
-            if char and char:FindFirstChild("Humanoid") then
-                char.Humanoid:Move(Vector3.new(math.random(-5, 5), 0, math.random(-5, 5)))
-            end
-        end)
-        
-        -- Tunggu 60 detik sebelum simulasi lagi
-        task.wait(420+math.random()*180)
-    end
-end)
-
-print("[AoneHub] ✅ Anti-AFK aktif otomatis!")
 
 local s, e = pcall(main)
 if not s then warn("[AoneHub] ERROR: " .. tostring(e)) end
