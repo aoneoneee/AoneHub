@@ -27,13 +27,13 @@ local function main()
         searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
         isRunningBuy = false, isRunningSell = false,
         selectedSellFruits = {}, sellTargets = {},
-        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, isValueDisplayRunning = false,
+        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false,
     }
 
     local function loadConfig()
         local s, d = pcall(readfile, SAVE_FILE)
         if s and d then local s2, loaded = pcall(HttpService.JSONDecode, HttpService, d)
-            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; if config.isValueDisplayRunning == nil then config.isValueDisplayRunning = false end; return true end
+            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; return true end
         end; return false
     end
     local function saveConfig()
@@ -190,7 +190,7 @@ local function main()
     for _, tab in ipairs(tabs) do tabBtns[tab.name].MouseButton1Click:Connect(function() switchTab(tab.name) end) end
 
 -- ==================================================================
--- TAB 5: EKSTRA (VALUE DISPLAY TOGGLE)
+-- TAB 5: EKSTRA (VALUE DISPLAY - LANGSUNG ON)
 -- ==================================================================
 local parentExtra = tabFrames["Ekstra"]
 
@@ -201,102 +201,58 @@ end
 
 local extraScroll = Instance.new("ScrollingFrame")
 extraScroll.Size = UDim2.new(1, 0, 1, 0)
-extraScroll.CanvasSize = UDim2.new(0, 0, 0, 200)
+extraScroll.CanvasSize = UDim2.new(0, 0, 0, 100)
 extraScroll.ScrollBarThickness = 3
 extraScroll.BackgroundTransparency = 1
 extraScroll.BorderSizePixel = 0
 extraScroll.Parent = parentExtra
 
-local y = 10
-
--- Header
 local extraHdr = Instance.new("TextLabel")
 extraHdr.Size = UDim2.new(1, -12, 0, 20)
-extraHdr.Position = UDim2.new(0, 6, 0, y)
-extraHdr.Text = "⚙️  Ekstra Tools"
+extraHdr.Position = UDim2.new(0, 6, 0, 10)
+extraHdr.Text = "💰 Value Display"
 extraHdr.TextColor3 = C.text
 extraHdr.Font = Enum.Font.GothamBold
 extraHdr.TextSize = 11
 extraHdr.TextXAlignment = Enum.TextXAlignment.Left
 extraHdr.BackgroundTransparency = 1
 extraHdr.Parent = extraScroll
-y += 26
 
--- Value Display Toggle
-local valueDisplayRunning = config.isValueDisplayRunning or false
-local valueDisplayBtn = Instance.new("TextButton")
-valueDisplayBtn.Size = UDim2.new(1, -12, 0, 32)
-valueDisplayBtn.Position = UDim2.new(0, 6, 0, y)
-valueDisplayBtn.Text = valueDisplayRunning and "💰 VALUE DISPLAY: ON" or "💰 VALUE DISPLAY: OFF"
-valueDisplayBtn.TextColor3 = C.text
-valueDisplayBtn.Font = Enum.Font.GothamBold
-valueDisplayBtn.TextSize = 10
-valueDisplayBtn.BackgroundColor3 = valueDisplayRunning and C.green or Color3.fromRGB(50, 50, 60)
-valueDisplayBtn.BorderSizePixel = 0
-valueDisplayBtn.AutoButtonColor = false
-valueDisplayBtn.Parent = extraScroll
-Instance.new("UICorner", valueDisplayBtn).CornerRadius = UDim.new(0, 5)
-y += 38
-
-local valueDisplayStatus = Instance.new("TextLabel")
-valueDisplayStatus.Size = UDim2.new(1, -12, 0, 12)
-valueDisplayStatus.Position = UDim2.new(0, 6, 0, y)
-valueDisplayStatus.BackgroundTransparency = 1
-valueDisplayStatus.Text = valueDisplayRunning and "Status: ON" or "Status: OFF"
-valueDisplayStatus.TextColor3 = valueDisplayRunning and C.green or Color3.fromRGB(150, 150, 160)
-valueDisplayStatus.Font = Enum.Font.Gotham
-valueDisplayStatus.TextSize = 9
-valueDisplayStatus.TextXAlignment = Enum.TextXAlignment.Left
-valueDisplayStatus.Parent = extraScroll
+local extraStatus = Instance.new("TextLabel")
+extraStatus.Size = UDim2.new(1, -12, 0, 14)
+extraStatus.Position = UDim2.new(0, 6, 0, 34)
+extraStatus.BackgroundTransparency = 1
+extraStatus.Text = "Status: AUTO ON"
+extraStatus.TextColor3 = C.green
+extraStatus.Font = Enum.Font.Gotham
+extraStatus.TextSize = 9
+extraStatus.TextXAlignment = Enum.TextXAlignment.Left
+extraStatus.Parent = extraScroll
 
 -- ==================================================================
--- VALUE DISPLAY ENGINE (diintegrasikan)
+-- VALUE DISPLAY ENGINE (LANGSUNG JALAN TANPA TOGGLE)
 -- ==================================================================
-local function safeRequireModule(parent, moduleName)
-    local success, module = pcall(function()
-        return require(parent:WaitForChild(moduleName, 10))
-    end)
-    if success then return module end
-    return nil
-end
-
 local SellValueData = safeRequire(ReplicatedStorage.SharedModules.SellValueData)
 local FruitValueCalc = safeRequire(ReplicatedStorage.SharedModules.FruitValueCalc)
 local SellFlags = safeRequire(ReplicatedStorage.SharedModules.Flags.SellFlags)
 local NumberUtils = safeRequire(ReplicatedStorage.SharedModules.NumberUtils)
 local Worlds = safeRequire(ReplicatedStorage.SharedModules.Worlds)
 
-local backpackGui = nil
-local function findBackpackGui()
+local function formatValue(value)
+    if not value or value <= 0 then return "0" end
+    if not NumberUtils or not Worlds then return tostring(value) end
+    
     local success, result = pcall(function()
-        return playerGui:WaitForChild("BackpackGui", 10)
+        local suffix = ""
+        if Worlds.Current and Worlds.Current.CurrencySuffix then
+            suffix = Worlds.Current.CurrencySuffix
+        end
+        return NumberUtils.Abbreviate(value) .. suffix
     end)
-    if success and result then
-        backpackGui = result
-        return true
-    end
-    return false
-end
-
-local function getFriendBoostPercentage()
-    local success, result = pcall(function()
-        local hud = playerGui:FindFirstChild("HUD")
-        if not hud then return 0 end
-        local currencies = hud:FindFirstChild("Currencies")
-        if not currencies then return 0 end
-        local friendBoost = currencies:FindFirstChild("FriendBoost")
-        if not friendBoost then return 0 end
-        local textLabel = friendBoost:FindFirstChild("TextLabel")
-        if not textLabel or not textLabel:IsA("TextLabel") then return 0 end
-        local percentage = textLabel.Text:match("(%d+)%%")
-        if percentage then return tonumber(percentage) or 0 end
-        return 0
-    end)
+    
     if success then return result end
-    return 0
+    return tostring(value)
 end
-
-local FRIEND_BOOST_PERCENT = 0
 
 local function calculateFruitValue(fruitName, sizeMultiplier, mutation)
     if not fruitName or not SellValueData or not SellValueData[fruitName] then return nil end
@@ -311,30 +267,7 @@ local function calculateFruitValue(fruitName, sizeMultiplier, mutation)
     end)
     if not success2 or not valueWithBoost then return nil end
     
-    if FRIEND_BOOST_PERCENT > 0 then
-        valueWithBoost = valueWithBoost / (1 + FRIEND_BOOST_PERCENT / 100)
-    end
-    
     return math.floor(valueWithBoost)
-end
-
-local function formatValue(value)
-    if not value or value <= 0 then return "0" end
-    
-    if not NumberUtils or not Worlds then
-        return tostring(value)
-    end
-    
-    local success, result = pcall(function()
-        local suffix = ""
-        if Worlds.Current and Worlds.Current.CurrencySuffix then
-            suffix = Worlds.Current.CurrencySuffix
-        end
-        return NumberUtils.Abbreviate(value) .. suffix
-    end)
-    
-    if success then return result end
-    return tostring(value)
 end
 
 local function isFruitInstance(instance)
@@ -343,16 +276,6 @@ local function isFruitInstance(instance)
         return fruitName ~= nil and fruitName ~= ""
     end
     return false
-end
-
-local function getFruitAttributes(instance)
-    return {
-        fruitName = instance:GetAttribute("FruitName"),
-        sizeMultiplier = instance:GetAttribute("SizeMultiplier") or 1,
-        mutation = instance:GetAttribute("Mutation"),
-        weight = instance:GetAttribute("Weight"),
-        id = instance:GetAttribute("Id")
-    }
 end
 
 local function createLabelForSlot(slot)
@@ -370,7 +293,11 @@ local function createLabelForSlot(slot)
     if backpack then
         for _, instance in backpack:GetChildren() do
             if isFruitInstance(instance) then
-                local attrs = getFruitAttributes(instance)
+                local attrs = {
+                    fruitName = instance:GetAttribute("FruitName"),
+                    sizeMultiplier = instance:GetAttribute("SizeMultiplier") or 1,
+                    mutation = instance:GetAttribute("Mutation"),
+                }
                 if attrs.fruitName == fruitName then
                     fruitData = attrs
                     break
@@ -396,13 +323,7 @@ local function createLabelForSlot(slot)
     
     if value then
         sellValueLabel.Text = "💰 " .. formatValue(value)
-        if value >= 1000000 then
-            sellValueLabel.TextColor3 = Color3.fromRGB(255, 100, 255)
-        elseif value >= 100000 then
-            sellValueLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-        else
-            sellValueLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-        end
+        sellValueLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
     else
         sellValueLabel.Text = "💰 N/A"
         sellValueLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
@@ -412,7 +333,9 @@ local function createLabelForSlot(slot)
 end
 
 local function initializeAllSlots()
+    local backpackGui = playerGui:FindFirstChild("BackpackGui")
     if not backpackGui then return end
+    
     local backpackFrame = backpackGui:FindFirstChild("Backpack")
     if not backpackFrame then return end
     
@@ -443,182 +366,23 @@ local function initializeAllSlots()
     end
 end
 
-local function calculateBackpackTotal()
-    local backpack = player:FindFirstChild("Backpack")
-    if not backpack then return 0 end
-    
-    local total = 0
-    for _, instance in backpack:GetChildren() do
-        if isFruitInstance(instance) then
-            local attrs = getFruitAttributes(instance)
-            local value = calculateFruitValue(attrs.fruitName, attrs.sizeMultiplier, attrs.mutation)
-            if value then total = total + value end
-        end
+-- LANGSUNG JALAN
+task.delay(3, function()
+    for i = 1, 5 do
+        pcall(initializeAllSlots)
+        task.wait(0.5)
     end
-    return total
-end
+    print("[AoneHub] ✅ Value Display aktif!")
+end)
 
-local function createBackpackTotalFrame()
-    if not backpackGui then return end
-    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-    if not backpackFrame then return end
-    local inventory = backpackFrame:FindFirstChild("Inventory")
-    if not inventory then return end
-    
-    local existing = backpackFrame:FindFirstChild("BackpackTotalFrame")
-    if existing then existing:Destroy() end
-    
-    local totalValue = calculateBackpackTotal()
-    
-    local totalFrame = Instance.new("Frame")
-    totalFrame.Name = "BackpackTotalFrame"
-    totalFrame.Size = UDim2.new(0, 140, 0, 25)
-    totalFrame.Position = UDim2.new(inventory.Position.X.Scale, inventory.Position.X.Offset, inventory.Position.Y.Scale, inventory.Position.Y.Offset - 29)
-    totalFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    totalFrame.BorderSizePixel = 0
-    totalFrame.ZIndex = 10
-    totalFrame.Parent = backpackFrame
-    
-    Instance.new("UICorner", totalFrame).CornerRadius = UDim.new(0, 4)
-    
-    local valueLabel = Instance.new("TextLabel")
-    valueLabel.Name = "Value"
-    valueLabel.Size = UDim2.new(1, 0, 1, 0)
-    valueLabel.BackgroundTransparency = 1
-    valueLabel.Text = "💰 " .. formatValue(totalValue)
-    valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
-    valueLabel.Font = Enum.Font.GothamBold
-    valueLabel.TextSize = 14
-    valueLabel.TextXAlignment = Enum.TextXAlignment.Center
-    valueLabel.ZIndex = 11
-    valueLabel.Parent = totalFrame
-    
-    return totalFrame
-end
-
-local function updateBackpackTotal()
-    if not backpackGui then return end
-    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-    if not backpackFrame then return end
-    
-    local totalFrame = backpackFrame:FindFirstChild("BackpackTotalFrame")
-    if not totalFrame then
-        totalFrame = createBackpackTotalFrame()
-    end
-    
-    if not totalFrame then return end
-    
-    local valueLabel = totalFrame:FindFirstChild("Value")
-    if valueLabel then
-        local totalValue = calculateBackpackTotal()
-        valueLabel.Text = "💰 " .. formatValue(totalValue)
-    end
-end
-
-local valueDisplayTask = nil
-
-local function startValueDisplay()
-    if valueDisplayTask then return end
-    
-    FRIEND_BOOST_PERCENT = getFriendBoostPercentage()
-    
-    if not findBackpackGui() then
-        valueDisplayStatus.Text = "❌ BackpackGui not found!"
-        valueDisplayStatus.TextColor3 = C.red
-        return
-    end
-    
-    if not SellValueData or not FruitValueCalc or not SellFlags or not NumberUtils or not Worlds then
-        valueDisplayStatus.Text = "❌ Modules failed!"
-        valueDisplayStatus.TextColor3 = C.red
-        return
-    end
-    
-    valueDisplayStatus.Text = "Status: ON"
-    valueDisplayStatus.TextColor3 = C.green
-    
-    valueDisplayTask = task.spawn(function()
-        while valueDisplayRunning do
-            pcall(function()
-                initializeAllSlots()
-                updateBackpackTotal()
-            end)
-            task.wait(2)
-        end
-    end)
-    
-    -- Initial run
-    task.delay(2, function()
-        for i = 1, 5 do
-            pcall(function()
-                initializeAllSlots()
-                updateBackpackTotal()
-            end)
-            task.wait(0.5)
-        end
-    end)
-end
-
-local function stopValueDisplay()
-    valueDisplayRunning = false
-    config.isValueDisplayRunning = false
-    saveConfig()
-    
-    if valueDisplayTask then
-        task.cancel(valueDisplayTask)
-        valueDisplayTask = nil
-    end
-    
-    -- Hapus label yang sudah dibuat
-    if backpackGui then
-        local backpackFrame = backpackGui:FindFirstChild("Backpack")
-        if backpackFrame then
-            -- Hapus total frame
-            local totalFrame = backpackFrame:FindFirstChild("BackpackTotalFrame")
-            if totalFrame then totalFrame:Destroy() end
-            
-            -- Hapus SellValue labels
-            for _, child in backpackFrame:GetDescendants() do
-                if child.Name == "SellValue" then
-                    child:Destroy()
-                end
-            end
-        end
-    end
-    
-    valueDisplayStatus.Text = "Status: OFF"
-    valueDisplayStatus.TextColor3 = Color3.fromRGB(150, 150, 160)
-end
-
-valueDisplayBtn.MouseButton1Click:Connect(function()
-    valueDisplayRunning = not valueDisplayRunning
-    config.isValueDisplayRunning = valueDisplayRunning
-    saveConfig()
-    
-    if valueDisplayRunning then
-        valueDisplayBtn.Text = "💰 VALUE DISPLAY: ON"
-        valueDisplayBtn.BackgroundColor3 = C.green
-        startValueDisplay()
-    else
-        valueDisplayBtn.Text = "💰 VALUE DISPLAY: OFF"
-        valueDisplayBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-        stopValueDisplay()
+-- Loop berkala
+task.spawn(function()
+    while parentExtra.Parent do
+        task.wait(5)
+        pcall(initializeAllSlots)
     end
 end)
 
-if config.isValueDisplayRunning then
-    pcall(function()
-        valueDisplayRunning = true
-        if valueDisplayBtn then
-            valueDisplayBtn.Text = "💰 VALUE DISPLAY: ON"
-            valueDisplayBtn.BackgroundColor3 = C.green
-        end
-        if startValueDisplay then
-            task.delay(5, startValueDisplay)
-        end
-    end)
-end
-    
     -- ==================================================================
     -- TAB 1: AUTO BUY
     -- ==================================================================
