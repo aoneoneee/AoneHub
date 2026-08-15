@@ -374,9 +374,15 @@ end)
 end
 
 -- ==================================================================
--- VALUE DISPLAY SYSTEM (OPTIMIZED - UIStroke untuk Hotbar)
+-- VALUE DISPLAY SYSTEM (FULL FIXED - NO ERROR)
 -- ==================================================================
 do
+    -- Cek playerGui dulu
+    if not playerGui then
+        print("[AoneHub] ❌ playerGui not found!")
+        return
+    end
+    
     local valueDisplaySystem = {
         initialized = false,
         backpackTotalFrame = nil,
@@ -393,14 +399,20 @@ do
     
     -- Safe require
     local function SafeRequireVD(parent, moduleName)
+        if not parent then return nil end
         local success, module = pcall(function()
             return require(parent:WaitForChild(moduleName, 10))
         end)
         if success then return module else return nil end
     end
     
-    -- Load modules
-    local sharedModules = ReplicatedStorage:WaitForChild("SharedModules", 10)
+    -- Load modules dengan pengecekan
+    if not ReplicatedStorage then
+        print("[AoneHub] ❌ ReplicatedStorage not found!")
+        return
+    end
+    
+    local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
     if not sharedModules then
         print("[AoneHub] ❌ SharedModules not found!")
         return
@@ -408,12 +420,38 @@ do
     
     local SellValueData = SafeRequireVD(sharedModules, "SellValueData")
     local FruitValueCalc = SafeRequireVD(sharedModules, "FruitValueCalc")
-    local SellFlags = SafeRequireVD(sharedModules:FindFirstChild("Flags") or sharedModules, "SellFlags")
+    
+    local flagsModule = sharedModules:FindFirstChild("Flags")
+    local SellFlags = nil
+    if flagsModule then
+        SellFlags = SafeRequireVD(flagsModule, "SellFlags")
+    end
+    
     local NumberUtils = SafeRequireVD(sharedModules, "NumberUtils")
     local Worlds = SafeRequireVD(sharedModules, "Worlds")
     
-    if not (SellValueData and FruitValueCalc and SellFlags and NumberUtils and Worlds) then
-        print("[AoneHub] ❌ Value Display modules not found!")
+    if not SellValueData then
+        print("[AoneHub] ❌ SellValueData not found!")
+        return
+    end
+    
+    if not FruitValueCalc then
+        print("[AoneHub] ❌ FruitValueCalc not found!")
+        return
+    end
+    
+    if not SellFlags then
+        print("[AoneHub] ❌ SellFlags not found!")
+        return
+    end
+    
+    if not NumberUtils then
+        print("[AoneHub] ❌ NumberUtils not found!")
+        return
+    end
+    
+    if not Worlds then
+        print("[AoneHub] ❌ Worlds not found!")
         return
     end
     
@@ -427,19 +465,26 @@ do
     
     -- Friend Boost
     local function GetFriendBoostPercentage()
+        if not playerGui then return 0 end
+        
         local success, result = pcall(function()
             local hud = playerGui:FindFirstChild("HUD")
             if not hud then return 0 end
+            
             local currencies = hud:FindFirstChild("Currencies")
             if not currencies then return 0 end
+            
             local friendBoost = currencies:FindFirstChild("FriendBoost")
             if not friendBoost then return 0 end
+            
             local textLabel = friendBoost:FindFirstChild("TextLabel")
             if not textLabel then return 0 end
+            
             local percentage = textLabel.Text:match("(%d+)%%")
             if percentage then return tonumber(percentage) or 0 end
             return 0
         end)
+        
         if success then return result else return 0 end
     end
     
@@ -469,9 +514,21 @@ do
     -- Format value
     local function FormatValue(value)
         if not value or value <= 0 then return "0" end
+        
+        if not NumberUtils then return tostring(value) end
+        if not Worlds then return tostring(value) end
+        
         local success, result = pcall(function()
-            return NumberUtils.Abbreviate(value) .. Worlds.Current.CurrencySuffix
+            local abbreviated = NumberUtils.Abbreviate(value)
+            local suffix = ""
+            
+            if Worlds.Current then
+                suffix = Worlds.Current.CurrencySuffix or ""
+            end
+            
+            return abbreviated .. suffix
         end)
+        
         if success then return result else return tostring(value) end
     end
     
@@ -585,7 +642,7 @@ do
         end
     end
     
-    -- Create label for INVENTORY slot (pakai label, karena ada space)
+    -- Create label for INVENTORY slot
     local function CreateLabelForInventorySlot(slot)
         if not config.extraToggle1 then return end
         if not slot or not slot:IsA("TextButton") then return end
@@ -632,11 +689,6 @@ do
         sellValueLabel.BorderSizePixel = 0
         sellValueLabel.ZIndex = 5
         
-        -- Non-interaktif
-        sellValueLabel.Active = false
-        sellValueLabel.Selectable = false
-        sellValueLabel.Interactable = false
-        
         if toolCountLabel then
             sellValueLabel.Size = UDim2.new(1, -8, 0, 14)
             sellValueLabel.Position = UDim2.new(
@@ -659,7 +711,7 @@ do
         sellValueLabel.Parent = slot
     end
     
-    -- Initialize inventory slots (pakai label)
+    -- Initialize inventory slots
     local function InitializeInventorySlots()
         if not config.extraToggle1 then return end
         if not backpackGui then return end
@@ -684,141 +736,14 @@ do
             end
         end
     end
-
--- ============ HOTBAR VALUE PANEL (TERPISAH, TIDAK MENYENTUH SLOT) ============
-
-local function CreateHotbarValuePanel()
-    if not config.extraToggle1 then return end
-    if not backpackGui then return end
     
-    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-    if not backpackFrame then return end
-    
-    local existingPanel = backpackFrame:FindFirstChild("HotbarValuePanel")
-    if existingPanel then existingPanel:Destroy() end
-    
-    local hotbar = backpackFrame:FindFirstChild("Hotbar")
-    if not hotbar then return end
-    
-    local panel = Instance.new("Frame")
-    panel.Name = "HotbarValuePanel"
-    panel.Size = UDim2.new(0, 200, 0, 20)
-    -- Posisi relatif terhadap hotbar
-    panel.Position = UDim2.new(
-        hotbar.Position.X.Scale,
-        hotbar.Position.X.Offset,
-        0,
-        hotbar.Position.Y.Offset - 25
-    )
-    panel.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-    panel.BackgroundTransparency = 0.1
-    panel.BorderSizePixel = 0
-    panel.ZIndex = 10
-    panel.Parent = backpackFrame
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 4)
-    corner.Parent = panel
-    
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(255, 255, 255)
-    stroke.Thickness = 1
-    stroke.Transparency = 0.7
-    stroke.Parent = panel
-    
-    local valueLabel = Instance.new("TextLabel")
-    valueLabel.Name = "Value"
-    valueLabel.Size = UDim2.new(1, 0, 1, 0)
-    valueLabel.BackgroundTransparency = 1
-    valueLabel.Text = "🎒 Hotbar: -"
-    valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    valueLabel.Font = Enum.Font.GothamBold
-    valueLabel.TextSize = 10
-    valueLabel.TextXAlignment = Enum.TextXAlignment.Center
-    valueLabel.TextYAlignment = Enum.TextYAlignment.Center
-    valueLabel.ZIndex = 11
-    valueLabel.Parent = panel
-    
-    panel.Visible = hotbar.Visible and config.extraToggle1
-    
-    print("[DEBUG] Hotbar panel created at: " .. tostring(panel.Position))
-    
-    return panel 
-end
-
-local function UpdateHotbarValuePanel()
-    if not config.extraToggle1 then return end
-    if not backpackGui then return end
-    
-    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-    if not backpackFrame then return end
-    
-    local panel = backpackFrame:FindFirstChild("HotbarValuePanel")
-    if not panel then
-        panel = CreateHotbarValuePanel()
+    -- Initialize all slots
+    local function InitializeAllSlots()
+        if not config.extraToggle1 then return end
+        pcall(InitializeInventorySlots)
     end
     
-    if not panel then return end
-    
-    local hotbar = backpackFrame:FindFirstChild("Hotbar")
-    
-    -- Update posisi panel mengikuti hotbar
-    if hotbar then
-        panel.Position = UDim2.new(
-            hotbar.Position.X.Scale,
-            hotbar.Position.X.Offset,
-            0,
-            hotbar.Position.Y.Offset - 25
-        )
-        
-        panel.Visible = hotbar.Visible and config.extraToggle1
-    else
-        panel.Visible = false
-        return
-    end
-    
-    -- Hitung total nilai di hotbar (dari character, bukan dari slot)
-    local totalHotbarValue = 0
-    local itemCount = 0
-    local itemNames = {}
-    
-    local character = player.Character
-    if character then
-        for _, item in character:GetChildren() do
-            if IsFruitInstance(item) then
-                local attrs = GetFruitAttributes(item)
-                if attrs then
-                    local value = CalculateFruitValue(attrs.fruitName, attrs.sizeMultiplier, attrs.mutation)
-                    if value then
-                        totalHotbarValue = totalHotbarValue + value
-                        itemCount = itemCount + 1
-                        table.insert(itemNames, attrs.fruitName)
-                    end
-                end
-            end
-        end
-    end
-    
-    local valueLabel = panel:FindFirstChild("Value")
-    if valueLabel then
-        if itemCount > 0 then
-            valueLabel.Text = "🎒 Hotbar: " .. FormatValue(totalHotbarValue) .. " (" .. itemCount .. " buah)"
-            valueLabel.TextColor3 = GetValueColor(totalHotbarValue)
-        else
-            valueLabel.Text = "🎒 Hotbar: Kosong"
-            valueLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-        end
-    end
-end
-        
-    -- Initialize all slots (HANYA INVENTORY + PANEL HOTBAR)
-local function InitializeAllSlots()
-    if not config.extraToggle1 then return end
-    pcall(InitializeInventorySlots)
-    pcall(UpdateHotbarValuePanel)  -- ← TAMBAH INI
-        end
-    
-    -- Calculate backpack total value (HANYA JIKA TOGGLE ON)
+    -- Calculate backpack total value
     local function CalculateBackpackTotalValue()
         if not config.extraToggle1 then return 0 end
         
@@ -841,7 +766,7 @@ local function InitializeAllSlots()
         return totalValue
     end
     
-    -- Calculate garden total value (HANYA JIKA TOGGLE ON)
+    -- Calculate garden total value
     local function CalculateGardenTotalValue()
         if not config.extraToggle1 then return 0 end
         
@@ -890,6 +815,8 @@ local function InitializeAllSlots()
     
     -- Create backpack total frame
     local function CreateBackpackTotalFrame()
+        if not backpackGui then return end
+        
         local backpackFrame = backpackGui:FindFirstChild("Backpack")
         if not backpackFrame then return end
         
@@ -945,6 +872,8 @@ local function InitializeAllSlots()
     
     -- Create garden total frame
     local function CreateGardenTotalFrame()
+        if not backpackGui then return end
+        
         local backpackFrame = backpackGui:FindFirstChild("Backpack")
         if not backpackFrame then return end
         
@@ -1011,9 +940,10 @@ local function InitializeAllSlots()
         return totalFrame
     end
     
-    -- Update backpack total value (gunakan cache)
+    -- Update backpack total value
     local function UpdateBackpackTotalValue()
         if not config.extraToggle1 then return end
+        if not backpackGui then return end
         
         local backpackFrame = backpackGui:FindFirstChild("Backpack")
         if not backpackFrame then return end
@@ -1050,9 +980,10 @@ local function InitializeAllSlots()
         end
     end
     
-    -- Update garden total value (gunakan cache)
+    -- Update garden total value
     local function UpdateGardenTotalValue()
         if not config.extraToggle1 then return end
+        if not backpackGui then return end
         
         local backpackFrame = backpackGui:FindFirstChild("Backpack")
         if not backpackFrame then return end
@@ -1090,47 +1021,42 @@ local function InitializeAllSlots()
     end
     
     -- Cleanup semua label dan frame
-local function CleanupAll()
-    local function removeLabels(container)
-        if not container then return end
-        for _, slot in container:GetChildren() do
-            if slot:IsA("TextButton") or slot:IsA("Frame") then
-                local label = slot:FindFirstChild("SellValue")
-                if label then label:Destroy() end
-            end
-        end
-    end
-    
-    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-    if backpackFrame then
-        local inventory = backpackFrame:FindFirstChild("Inventory")
-        if inventory then
-            local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
-            if scrollingFrame then
-                local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
-                removeLabels(gridFrame)
+    local function CleanupAll()
+        if not backpackGui then return end
+        
+        local function removeLabels(container)
+            if not container then return end
+            for _, slot in container:GetChildren() do
+                if slot:IsA("TextButton") or slot:IsA("Frame") then
+                    local label = slot:FindFirstChild("SellValue")
+                    if label then label:Destroy() end
+                end
             end
         end
         
-        -- JANGAN SENTUH HOTBAR
+        local backpackFrame = backpackGui:FindFirstChild("Backpack")
+        if backpackFrame then
+            local inventory = backpackFrame:FindFirstChild("Inventory")
+            if inventory then
+                local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
+                if scrollingFrame then
+                    local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
+                    removeLabels(gridFrame)
+                end
+            end
+            
+            local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+            if backpackTotal then backpackTotal:Destroy() end
+            
+            local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+            if gardenTotal then gardenTotal:Destroy() end
+        end
         
-        -- Hapus panel hotbar
-        local hotbarPanel = backpackFrame:FindFirstChild("HotbarValuePanel")
-        if hotbarPanel then hotbarPanel:Destroy() end
-        
-        local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
-        if backpackTotal then backpackTotal:Destroy() end
-        
-        local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
-        if gardenTotal then gardenTotal:Destroy() end
+        valueCache.backpackTotal = 0
+        valueCache.gardenTotal = 0
     end
     
-    -- Reset cache
-    valueCache.backpackTotal = 0
-    valueCache.gardenTotal = 0
-end
-    
-    -- Update cache di background (HANYA JIKA TOGGLE ON)
+    -- Update cache di background
     local function UpdateCacheInBackground()
         task.spawn(function()
             while true do
@@ -1153,8 +1079,10 @@ end
         end)
     end
     
-    -- Watch Inventory visibility (INSTANT menggunakan cache)
+    -- Watch Inventory visibility
     local function SetupInventoryWatcher()
+        if not backpackGui then return end
+        
         local backpackFrame = backpackGui:FindFirstChild("Backpack")
         if not backpackFrame then return end
         
@@ -1209,46 +1137,45 @@ end
         end)
     end
     
-    -- Update frame dengan nilai cache (cepat)
+    -- Update frame dengan nilai cache
     local function StartPeriodicUpdate()
-    task.spawn(function()
-        while true do
-            task.wait(0.5)
-            
-            if config.extraToggle1 == true then
-                pcall(function()
-                    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-                    if backpackFrame then
-                        local inventory = backpackFrame:FindFirstChild("Inventory")
+        task.spawn(function()
+            while true do
+                task.wait(0.5)
+                
+                if config.extraToggle1 == true then
+                    pcall(function()
+                        if not backpackGui then return end
                         
-                        if inventory and inventory.Visible then
-                            local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
-                            if backpackTotal and backpackTotal.Visible then
-                                local valueLabel = backpackTotal:FindFirstChild("Value")
-                                if valueLabel then
-                                    valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
-                                end
-                            end
+                        local backpackFrame = backpackGui:FindFirstChild("Backpack")
+                        if backpackFrame then
+                            local inventory = backpackFrame:FindFirstChild("Inventory")
                             
-                            local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
-                            if gardenTotal and gardenTotal.Visible then
-                                local valueLabel = gardenTotal:FindFirstChild("Value")
-                                if valueLabel then
-                                    valueLabel.Text = "💰 " .. FormatValue(valueCache.gardenTotal)
+                            if inventory and inventory.Visible then
+                                local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                                if backpackTotal and backpackTotal.Visible then
+                                    local valueLabel = backpackTotal:FindFirstChild("Value")
+                                    if valueLabel then
+                                        valueLabel.Text = "💰 " .. FormatValue(valueCache.backpackTotal)
+                                    end
+                                end
+                                
+                                local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                                if gardenTotal and gardenTotal.Visible then
+                                    local valueLabel = gardenTotal:FindFirstChild("Value")
+                                    if valueLabel then
+                                        valueLabel.Text = "💰 " .. FormatValue(valueCache.gardenTotal)
+                                    end
                                 end
                             end
                         end
-                        
-                        -- SELALU update panel hotbar
-                        UpdateHotbarValuePanel()
-                    end
-                end)
+                    end)
+                end
             end
-        end
-    end)
-end
+        end)
+    end
     
-    -- Watch garden (HANYA JIKA TOGGLE ON)
+    -- Watch garden
     local function SetupGardenWatcher()
         local gardensFolder = workspace:FindFirstChild("Gardens")
         if not gardensFolder then return end
@@ -1286,7 +1213,7 @@ end
         end
     end
     
-    -- Watch backpack (HANYA JIKA TOGGLE ON)
+    -- Watch backpack
     local function SetupFruitWatcher()
         local backpack = player:FindFirstChild("Backpack")
         if not backpack then return end
@@ -1318,49 +1245,51 @@ end
         end)
     end
     
-    -- Initialize
-task.wait(2)
-
-pcall(function()
-    -- DEBUG: Cek struktur hotbar
-    DebugHotbarPosition()
+    -- Initialize dengan pengecekan penuh
+    task.wait(3)
     
-    SetupFruitWatcher()
-    SetupGardenWatcher()
-    SetupInventoryWatcher()
-    
-    UpdateCacheInBackground()
-    StartPeriodicUpdate()
-    
-    if config.extraToggle1 == true then
-        task.spawn(function()
-            pcall(function()
-                valueCache.backpackTotal = CalculateBackpackTotalValue()
-                valueCache.gardenTotal = CalculateGardenTotalValue()
-                valueCache.lastBackpackUpdate = os.time()
-                valueCache.lastGardenUpdate = os.time()
-                
-                -- Buat panel hotbar
-                CreateHotbarValuePanel()
-                
-                local backpackFrame = backpackGui:FindFirstChild("Backpack")
-                if backpackFrame then
-                    local inventory = backpackFrame:FindFirstChild("Inventory")
-                    if inventory and inventory.Visible then
-                        CreateBackpackTotalFrame()
-                        CreateGardenTotalFrame()
-                        InitializeAllSlots()
-                    end
-                end
+    pcall(function()
+        if not player then
+            print("[AoneHub] ❌ Player not found!")
+            return
+        end
+        
+        if not playerGui then
+            print("[AoneHub] ❌ playerGui not found!")
+            return
+        end
+        
+        if not backpackGui then
+            print("[AoneHub] ❌ BackpackGui not found!")
+            return
+        end
+        
+        pcall(SetupFruitWatcher)
+        pcall(SetupGardenWatcher)
+        pcall(SetupInventoryWatcher)
+        pcall(UpdateCacheInBackground)
+        pcall(StartPeriodicUpdate)
+        
+        if config.extraToggle1 == true then
+            task.spawn(function()
+                pcall(function()
+                    valueCache.backpackTotal = CalculateBackpackTotalValue()
+                    valueCache.gardenTotal = CalculateGardenTotalValue()
+                    valueCache.lastBackpackUpdate = os.time()
+                    valueCache.lastGardenUpdate = os.time()
+                    
+                    CreateBackpackTotalFrame()
+                    CreateGardenTotalFrame()
+                    InitializeAllSlots()
+                end)
             end)
-        end)
-    else
-        pcall(CleanupAll)
-        print("[AoneHub] Value Display: OFF (default)")
-    end
-    
-    print("[AoneHub] ✅ Value Display system initialized!")
-end)
+        else
+            pcall(CleanupAll)
+        end
+        
+        print("[AoneHub] ✅ Value Display system initialized!")
+    end)
+end
 
 -- ==================================================================
 -- ANTI-AFK SYSTEM (DENGAN TOGGLE DI TAB 5)
