@@ -190,7 +190,7 @@ local function main()
     for _, tab in ipairs(tabs) do tabBtns[tab.name].MouseButton1Click:Connect(function() switchTab(tab.name) end) end
 
 -- ==================================================================
--- TAB 5: EKSTRA (VALUE DISPLAY + ANTI-AFK)
+-- TAB 5: EKSTRA (TOGGLE SAJA DULU)
 -- ==================================================================
 local parentExtra = tabFrames["Ekstra"]
 
@@ -201,7 +201,7 @@ end
 
 local extraScroll = Instance.new("ScrollingFrame")
 extraScroll.Size = UDim2.new(1, 0, 1, 0)
-extraScroll.CanvasSize = UDim2.new(0, 0, 0, 300)
+extraScroll.CanvasSize = UDim2.new(0, 0, 0, 200)
 extraScroll.ScrollBarThickness = 3
 extraScroll.BackgroundTransparency = 1
 extraScroll.BorderSizePixel = 0
@@ -226,6 +226,7 @@ ey += 26
 -- VALUE DISPLAY TOGGLE
 -- ==================================================================
 local valueDisplayRunning = false
+
 local valueDisplayBtn = Instance.new("TextButton")
 valueDisplayBtn.Size = UDim2.new(1, -12, 0, 32)
 valueDisplayBtn.Position = UDim2.new(0, 6, 0, ey)
@@ -256,6 +257,7 @@ ey += 18
 -- ANTI-AFK TOGGLE
 -- ==================================================================
 local antiAfkRunning = false
+
 local antiAfkBtn = Instance.new("TextButton")
 antiAfkBtn.Size = UDim2.new(1, -12, 0, 32)
 antiAfkBtn.Position = UDim2.new(0, 6, 0, ey)
@@ -283,243 +285,31 @@ antiAfkStatus.Parent = extraScroll
 ey += 18
 
 -- ==================================================================
--- VALUE DISPLAY FUNCTIONS (dari script yang kamu kasih)
+-- TOGGLE HANDLERS
 -- ==================================================================
-local valueDisplayModules = {
-    SellValueData = nil,
-    FruitValueCalc = nil,
-    SellFlags = nil,
-    NumberUtils = nil,
-    Worlds = nil,
-}
 
-local function initValueDisplayModules()
-    local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
-    if not sharedModules then return false end
-    
-    valueDisplayModules.SellValueData = safeRequire(sharedModules:FindFirstChild("SellValueData"))
-    valueDisplayModules.FruitValueCalc = safeRequire(sharedModules:FindFirstChild("FruitValueCalc"))
-    
-    local flags = sharedModules:FindFirstChild("Flags")
-    if flags then
-        valueDisplayModules.SellFlags = safeRequire(flags:FindFirstChild("SellFlags"))
-    end
-    
-    valueDisplayModules.NumberUtils = safeRequire(sharedModules:FindFirstChild("NumberUtils"))
-    valueDisplayModules.Worlds = safeRequire(sharedModules:FindFirstChild("Worlds"))
-    
-    return valueDisplayModules.SellValueData ~= nil 
-        and valueDisplayModules.FruitValueCalc ~= nil
-        and valueDisplayModules.SellFlags ~= nil
-        and valueDisplayModules.NumberUtils ~= nil
-end
-
-local function calculateValue(fruitName, sizeMultiplier, mutation)
-    local mods = valueDisplayModules
-    if not mods.SellValueData or not mods.SellValueData[fruitName] then return nil end
-    
-    local success, baseValue = pcall(function()
-        return mods.FruitValueCalc(fruitName, sizeMultiplier or 1, mutation, player, nil)
-    end)
-    if not success or not baseValue then return nil end
-    
-    local success2, valueWithBoost = pcall(function()
-        return mods.SellFlags.Apply(fruitName, baseValue)
-    end)
-    if not success2 or not valueWithBoost then return nil end
-    
-    return math.floor(valueWithBoost)
-end
-
-local function formatValue(value)
-    if not value or value <= 0 then return "0" end
-    local success, result = pcall(function()
-        return valueDisplayModules.NumberUtils.Abbreviate(value) .. valueDisplayModules.Worlds.Current.CurrencySuffix
-    end)
-    if success then return result end
-    return tostring(value)
-end
-
-local function findFruitInBackpack(fruitName, weight)
-    local backpack = player:FindFirstChild("Backpack")
-    if not backpack then return nil end
-    
-    local matchingFruits = {}
-    
-    for _, instance in backpack:GetChildren() do
-        if instance:IsA("Configuration") or instance:IsA("Tool") then
-            local fn = instance:GetAttribute("FruitName")
-            if fn == fruitName then
-                local fruitWeight = instance:GetAttribute("Weight")
-                local sizeMulti = instance:GetAttribute("SizeMultiplier") or 1
-                local mutation = instance:GetAttribute("Mutation")
-                
-                if weight and fruitWeight then
-                    local diff = math.abs((fruitWeight or 0) - (weight or 0))
-                    table.insert(matchingFruits, {name=fn, size=sizeMulti, mutation=mutation, weight=fruitWeight, diff=diff})
-                else
-                    table.insert(matchingFruits, {name=fn, size=sizeMulti, mutation=mutation, weight=fruitWeight, diff=0})
-                end
-            end
-        end
-    end
-    
-    if #matchingFruits == 0 then return nil end
-    
-    table.sort(matchingFruits, function(a, b) return a.diff < b.diff end)
-    return matchingFruits[1]
-end
-
-local function createLabelForSlot(slot)
-    if not slot or slot:FindFirstChild("SellValue") then return end
-    
-    local toolNameLabel = slot:FindFirstChild("ToolName")
-    if not toolNameLabel then
-        for _, child in slot:GetDescendants() do
-            if child:IsA("TextLabel") and child.Name == "ToolName" then
-                toolNameLabel = child
-                break
-            end
-        end
-    end
-    
-    if not toolNameLabel or not toolNameLabel:IsA("TextLabel") then return end
-    
-    local fruitName = toolNameLabel.Text
-    if fruitName == "" then return end
-    
-    -- Parse weight dari ToolCount
-    local toolCountLabel = slot:FindFirstChild("ToolCount")
-    local weight = nil
-    if toolCountLabel and toolCountLabel:IsA("TextLabel") then
-        weight = tonumber(toolCountLabel.Text:gsub("kg", ""):gsub(" ", ""))
-    end
-    
-    local fruitData = findFruitInBackpack(fruitName, weight)
-    if not fruitData then return end
-    
-    local value = calculateValue(fruitData.name, fruitData.size, fruitData.mutation)
-    
-    local sellValueLabel = Instance.new("TextLabel")
-    sellValueLabel.Name = "SellValue"
-    sellValueLabel.BackgroundTransparency = 1
-    sellValueLabel.Font = Enum.Font.GothamSemibold
-    sellValueLabel.TextSize = 10
-    sellValueLabel.TextXAlignment = Enum.TextXAlignment.Left
-    sellValueLabel.BorderSizePixel = 0
-    sellValueLabel.ZIndex = 5
-    sellValueLabel.Size = UDim2.new(1, -8, 0, 14)
-    sellValueLabel.Position = UDim2.new(0, 4, 0, 40)
-    
-    if value then
-        sellValueLabel.Text = "💰 " .. formatValue(value)
-        if value >= 1000000 then sellValueLabel.TextColor3 = Color3.fromRGB(255, 100, 255)
-        elseif value >= 100000 then sellValueLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-        elseif value >= 10000 then sellValueLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
-        else sellValueLabel.TextColor3 = Color3.fromRGB(200, 200, 200) end
-    else
-        sellValueLabel.Text = "💰 N/A"
-        sellValueLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-    end
-    
-    sellValueLabel.Parent = slot
-end
-
-local function initializeAllSlots()
-    local backpackGui2 = playerGui:FindFirstChild("BackpackGui")
-    if not backpackGui2 then return end
-    
-    local backpackFrame = backpackGui2:FindFirstChild("Backpack")
-    if not backpackFrame then return end
-    
-    -- Inventory
-    local inventory = backpackFrame:FindFirstChild("Inventory")
-    if inventory then
-        local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
-        if scrollingFrame then
-            local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
-            if gridFrame then
-                for _, slot in gridFrame:GetChildren() do
-                    if slot:IsA("TextButton") then
-                        pcall(function() createLabelForSlot(slot) end)
-                    end
-                end
-            end
-        end
-    end
-    
-    -- Hotbar
-    local hotbar = backpackFrame:FindFirstChild("Hotbar")
-    if hotbar then
-        for _, slot in hotbar:GetChildren() do
-            if slot:IsA("TextButton") or slot:IsA("Frame") then
-                pcall(function() createLabelForSlot(slot) end)
-            end
-        end
-    end
-end
-
-local function removeAllValueLabels()
-    local backpackGui2 = playerGui:FindFirstChild("BackpackGui")
-    if not backpackGui2 then return end
-    
-    local backpackFrame = backpackGui2:FindFirstChild("Backpack")
-    if not backpackFrame then return end
-    
-    for _, slot in backpackFrame:GetDescendants() do
-        if slot:IsA("TextButton") or slot:IsA("Frame") then
-            local label = slot:FindFirstChild("SellValue")
-            if label then label:Destroy() end
-        end
-    end
-end
-
-local valueDisplayLoop = nil
-
--- ==================================================================
--- VALUE DISPLAY TOGGLE HANDLER
--- ==================================================================
+-- Value Display Toggle
 valueDisplayBtn.MouseButton1Click:Connect(function()
     valueDisplayRunning = not valueDisplayRunning
     
     if valueDisplayRunning then
-        if not initValueDisplayModules() then
-            valueDisplayStatus.Text = "❌ Module tidak ditemukan!"
-            valueDisplayStatus.TextColor3 = C.red
-            valueDisplayRunning = false
-            return
-        end
-        
         valueDisplayBtn.Text = "💰 VALUE DISPLAY: ON"
         valueDisplayBtn.BackgroundColor3 = C.green
         valueDisplayStatus.Text = "Status: ON"
         valueDisplayStatus.TextColor3 = C.green
-        
-        -- Mulai loop
-        valueDisplayLoop = task.spawn(function()
-            while valueDisplayRunning do
-                pcall(initializeAllSlots)
-                task.wait(3)
-            end
-        end)
+        print("[AoneHub] ✅ Value Display ON")
+        -- TODO: Tambahkan script value display di sini nanti
     else
         valueDisplayBtn.Text = "💰 VALUE DISPLAY: OFF"
         valueDisplayBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
         valueDisplayStatus.Text = "Status: OFF"
         valueDisplayStatus.TextColor3 = Color3.fromRGB(150, 150, 160)
-        
-        if valueDisplayLoop then
-            task.cancel(valueDisplayLoop)
-            valueDisplayLoop = nil
-        end
-        
-        removeAllValueLabels()
+        print("[AoneHub] ⏹️ Value Display OFF")
+        -- TODO: Hapus label value display nanti
     end
 end)
 
--- ==================================================================
--- ANTI-AFK TOGGLE HANDLER
--- ==================================================================
+-- Anti-AFK Toggle
 antiAfkBtn.MouseButton1Click:Connect(function()
     antiAfkRunning = not antiAfkRunning
     
@@ -528,7 +318,9 @@ antiAfkBtn.MouseButton1Click:Connect(function()
         antiAfkBtn.BackgroundColor3 = C.green
         antiAfkStatus.Text = "Status: ON"
         antiAfkStatus.TextColor3 = C.green
+        print("[AoneHub] ✅ Anti-AFK ON")
         
+        -- Loop anti-AFK
         task.spawn(function()
             while antiAfkRunning do
                 pcall(function()
@@ -552,20 +344,17 @@ antiAfkBtn.MouseButton1Click:Connect(function()
         antiAfkBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
         antiAfkStatus.Text = "Status: OFF"
         antiAfkStatus.TextColor3 = Color3.fromRGB(150, 150, 160)
+        print("[AoneHub] ⏹️ Anti-AFK OFF")
     end
 end)
 
--- Cleanup saat tab di-destroy
+-- Cleanup saat destroy
 parentExtra.Destroying:Connect(function()
     valueDisplayRunning = false
     antiAfkRunning = false
-    if valueDisplayLoop then
-        task.cancel(valueDisplayLoop)
-    end
-    removeAllValueLabels()
 end)
 
-print("[AoneHub] ✅ Tab Ekstra Ready (Value Display + Anti-AFK)")
+print("[AoneHub] ✅ Tab Ekstra Ready (Toggle)")
 
     -- ==================================================================
     -- TAB 1: AUTO BUY
