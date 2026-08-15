@@ -27,7 +27,7 @@ local function main()
         searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
         isRunningBuy = false, isRunningSell = false,
         selectedSellFruits = {}, sellTargets = {},
-        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false,
+        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = false, extraToggle3 = false, is valueDisplayEnabled = false,
     }
 
     local function loadConfig()
@@ -189,16 +189,881 @@ local function main()
     end
     for _, tab in ipairs(tabs) do tabBtns[tab.name].MouseButton1Click:Connect(function() switchTab(tab.name) end) end
 
-    -- Placeholder Tab 5
-    do local f = tabFrames["Ekstra"]
-        local ic = Instance.new("TextLabel"); ic.Size = UDim2.new(1, 0, 0, 32); ic.Position = UDim2.new(0, 0, 0.35, -16)
-        ic.Text = "⚙️"; ic.Font = Enum.Font.Gotham; ic.TextSize = 28; ic.BackgroundTransparency = 1; ic.Parent = f
-        local tt = Instance.new("TextLabel"); tt.Size = UDim2.new(1, 0, 0, 18); tt.Position = UDim2.new(0, 0, 0.45, 0)
-        tt.Text = "Ekstra"; tt.TextColor3 = C.text; tt.Font = Enum.Font.GothamBold; tt.TextSize = 12; tt.BackgroundTransparency = 1; tt.Parent = f
-        local st = Instance.new("TextLabel"); st.Size = UDim2.new(1, 0, 0, 12); st.Position = UDim2.new(0, 0, 0.52, 0)
-        st.Text = "Coming soon..."; st.TextColor3 = C.textDim; st.Font = Enum.Font.Gotham; st.TextSize = 9; st.BackgroundTransparency = 1; st.Parent = f
+    -- ==================================================================
+-- TAB 5: EKSTRA (DENGAN TOGGLES)
+-- ==================================================================
+do local f = tabFrames["Ekstra"]
+    -- Scroll untuk konten
+    local extraScroll = Instance.new("ScrollingFrame")
+    extraScroll.Size = UDim2.new(1, 0, 1, 0)
+    extraScroll.CanvasSize = UDim2.new(0, 0, 0, 400)
+    extraScroll.ScrollBarThickness = 3
+    extraScroll.BackgroundTransparency = 1
+    extraScroll.BorderSizePixel = 0
+    extraScroll.Parent = f
+    
+    local extraLayout = Instance.new("UIListLayout")
+    extraLayout.Padding = UDim.new(0, 6)
+    extraLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    extraLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    extraLayout.Parent = extraScroll
+    
+    -- Header
+    local extraHdr = Instance.new("TextLabel")
+    extraHdr.Size = UDim2.new(1, -12, 0, 24)
+    extraHdr.LayoutOrder = 1
+    extraHdr.Text = "⚙️  Ekstra Settings"
+    extraHdr.TextColor3 = C.text
+    extraHdr.Font = Enum.Font.GothamBold
+    extraHdr.TextSize = 12
+    extraHdr.TextXAlignment = Enum.TextXAlignment.Left
+    extraHdr.BackgroundTransparency = 1
+    extraHdr.Parent = extraScroll
+    
+    -- ============ FUNGSI MEMBUAT TOGGLE ============
+    local function createToggle(title, description, configKey, layoutOrder, defaultColor)
+        local container = Instance.new("Frame")
+        container.Size = UDim2.new(1, -12, 0, 44)
+        container.LayoutOrder = layoutOrder
+        container.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+        container.BorderSizePixel = 0
+        container.Parent = extraScroll
+        Instance.new("UICorner", container).CornerRadius = UDim.new(0, 6)
+        
+        -- Title
+        local titleLabel = Instance.new("TextLabel")
+        titleLabel.Size = UDim2.new(1, -50, 0, 16)
+        titleLabel.Position = UDim2.new(0, 10, 0, 4)
+        titleLabel.Text = title
+        titleLabel.TextColor3 = C.text
+        titleLabel.Font = Enum.Font.GothamSemibold
+        titleLabel.TextSize = 10
+        titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+        titleLabel.BackgroundTransparency = 1
+        titleLabel.Parent = container
+        
+        -- Description
+        local descLabel = Instance.new("TextLabel")
+        descLabel.Size = UDim2.new(1, -50, 0, 14)
+        descLabel.Position = UDim2.new(0, 10, 0, 20)
+        descLabel.Text = description
+        descLabel.TextColor3 = C.textDim
+        descLabel.Font = Enum.Font.Gotham
+        descLabel.TextSize = 8
+        descLabel.TextXAlignment = Enum.TextXAlignment.Left
+        descLabel.BackgroundTransparency = 1
+        descLabel.Parent = container
+        
+        -- Toggle Button
+        local toggleBtn = Instance.new("TextButton")
+        toggleBtn.Size = UDim2.new(0, 36, 0, 18)
+        toggleBtn.Position = UDim2.new(1, -42, 0.5, -9)
+        toggleBtn.Text = ""
+        toggleBtn.BorderSizePixel = 0
+        toggleBtn.AutoButtonColor = false
+        toggleBtn.Parent = container
+        Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
+        
+        -- Toggle dot
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.new(0, 12, 0, 12)
+        dot.Position = UDim2.new(0, 3, 0.5, -6)
+        dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        dot.BorderSizePixel = 0
+        dot.Parent = toggleBtn
+        Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+        
+        -- Status label
+        local statusLabel = Instance.new("TextLabel")
+        statusLabel.Size = UDim2.new(0, 34, 1, 0)
+        statusLabel.Position = UDim2.new(1, -82, 0, 0)
+        statusLabel.Text = config[configKey] and "ON" or "OFF"
+        statusLabel.TextColor3 = config[configKey] and C.green or C.red
+        statusLabel.Font = Enum.Font.GothamBold
+        statusLabel.TextSize = 7
+        statusLabel.TextXAlignment = Enum.TextXAlignment.Right
+        statusLabel.BackgroundTransparency = 1
+        statusLabel.Parent = container
+        
+        -- Update function
+        local function updateToggle()
+            local isOn = config[configKey]
+            if isOn then
+                toggleBtn.BackgroundColor3 = C.green
+                dot.Position = UDim2.new(1, -15, 0.5, -6)
+                statusLabel.Text = "ON"
+                statusLabel.TextColor3 = C.green
+            else
+                toggleBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 75)
+                dot.Position = UDim2.new(0, 3, 0.5, -6)
+                statusLabel.Text = "OFF"
+                statusLabel.TextColor3 = C.red
+            end
+        end
+        
+        toggleBtn.MouseButton1Click:Connect(function()
+    config[configKey] = not config[configKey]
+    saveConfig()
+    updateToggle()
+    
+    -- Special handling untuk Value Display (Toggle 1)
+    if configKey == "extraToggle1" then
+        if config[configKey] then
+            print("[AoneHub] ✅ Value Display: ON")
+            StartValueDisplay()
+        else
+            print("[AoneHub] ❌ Value Display: OFF")
+            StopValueDisplay()
+        end
     end
+end)
+        
+        updateToggle()
+        return container
+    end
+    
+    -- Toggle 1: Auto Reconnect
+    createToggle("👁 Value Display", "Tampilkan nilai buah di inventory & garden", "extraToggle1", 2)
+    
+    -- Toggle 2: Auto Farm
+    createToggle("Auto Farm", "Otomatis farming buah ketika idle", "extraToggle2", 3)
+    
+    -- Toggle 3: Notifikasi
+    createToggle("Notifikasi", "Tampilkan notifikasi saat ada event penting", "extraToggle3", 4)
+    
+    -- Info tambahan
+    local infoLabel = Instance.new("TextLabel")
+    infoLabel.Size = UDim2.new(1, -12, 0, 30)
+    infoLabel.LayoutOrder = 99
+    infoLabel.Text = "More features coming soon..."
+    infoLabel.TextColor3 = C.textDim
+    infoLabel.Font = Enum.Font.Gotham
+    infoLabel.TextSize = 8
+    infoLabel.TextXAlignment = Enum.TextXAlignment.Center
+    infoLabel.BackgroundTransparency = 1
+    infoLabel.Parent = extraScroll
+end
 
+-- ==================================================================
+-- VALUE DISPLAY SYSTEM (COMPLETE v21 INTEGRATION)
+-- ==================================================================
+local ValueDisplaySystem = {
+    isRunning = false,
+    backpackGui = nil,
+    SellValueData = nil,
+    FruitValueCalc = nil,
+    SellFlags = nil,
+    NumberUtils = nil,
+    Worlds = nil,
+    FRIEND_BOOST_PERCENT = 0,
+}
+
+-- Safe require
+local function SafeRequireVD(parent, moduleName)
+    local success, module = pcall(function()
+        return require(parent:WaitForChild(moduleName, 10))
+    end)
+    if success then return module else return nil end
+end
+
+-- Initialize Value Display System
+local function InitializeValueDisplay()
+    local sharedModules = ReplicatedStorage:WaitForChild("SharedModules", 10)
+    if not sharedModules then return false end
+    
+    ValueDisplaySystem.SellValueData = SafeRequireVD(sharedModules, "SellValueData")
+    ValueDisplaySystem.FruitValueCalc = SafeRequireVD(sharedModules, "FruitValueCalc")
+    ValueDisplaySystem.SellFlags = SafeRequireVD(sharedModules:FindFirstChild("Flags") or sharedModules, "SellFlags")
+    ValueDisplaySystem.NumberUtils = SafeRequireVD(sharedModules, "NumberUtils")
+    ValueDisplaySystem.Worlds = SafeRequireVD(sharedModules, "Worlds")
+    
+    if not (ValueDisplaySystem.SellValueData and ValueDisplaySystem.FruitValueCalc and ValueDisplaySystem.SellFlags and ValueDisplaySystem.NumberUtils and ValueDisplaySystem.Worlds) then
+        return false
+    end
+    
+    ValueDisplaySystem.backpackGui = playerGui:FindFirstChild("BackpackGui")
+    if not ValueDisplaySystem.backpackGui then
+        return false
+    end
+    
+    -- Get Friend Boost
+    local success, result = pcall(function()
+        local hud = playerGui:FindFirstChild("HUD")
+        if not hud then return 0 end
+        local currencies = hud:FindFirstChild("Currencies")
+        if not currencies then return 0 end
+        local friendBoost = currencies:FindFirstChild("FriendBoost")
+        if not friendBoost then return 0 end
+        local textLabel = friendBoost:FindFirstChild("TextLabel")
+        if not textLabel or not textLabel:IsA("TextLabel") then return 0 end
+        local percentage = textLabel.Text:match("(%d+)%%")
+        if percentage then return tonumber(percentage) or 0 end
+        return 0
+    end)
+    
+    ValueDisplaySystem.FRIEND_BOOST_PERCENT = success and result or 0
+    
+    return true
+end
+
+-- Calculate fruit value
+local function CalculateFruitValueVD(fruitName, sizeMultiplier, mutation)
+    if not fruitName then return nil end
+    if not ValueDisplaySystem.SellValueData[fruitName] then return nil end
+    
+    local success, baseValue = pcall(function()
+        return ValueDisplaySystem.FruitValueCalc(fruitName, sizeMultiplier or 1, mutation, player, nil)
+    end)
+    if not success or not baseValue then return nil end
+    
+    local success2, valueWithBoost = pcall(function()
+        return ValueDisplaySystem.SellFlags.Apply(fruitName, baseValue)
+    end)
+    if not success2 or not valueWithBoost then return nil end
+    
+    if ValueDisplaySystem.FRIEND_BOOST_PERCENT > 0 then
+        valueWithBoost = valueWithBoost / (1 + ValueDisplaySystem.FRIEND_BOOST_PERCENT / 100)
+    end
+    
+    return math.floor(valueWithBoost)
+end
+
+-- Format value
+local function FormatValueVD(value)
+    if not value or value <= 0 then return "0" end
+    local success, result = pcall(function()
+        return ValueDisplaySystem.NumberUtils.Abbreviate(value) .. ValueDisplaySystem.Worlds.Current.CurrencySuffix
+    end)
+    if success then return result else return tostring(value) end
+end
+
+-- Parse tool count
+local function ParseToolCountVD(toolCountText)
+    if not toolCountText then return nil end
+    local cleaned = toolCountText:gsub("kg", ""):gsub(" ", "")
+    return tonumber(cleaned)
+end
+
+-- Check if instance is fruit
+local function IsFruitInstanceVD(instance)
+    if instance:IsA("Configuration") or instance:IsA("Tool") then
+        local success, fruitName = pcall(function()
+            return instance:GetAttribute("FruitName")
+        end)
+        return success and fruitName ~= nil and fruitName ~= ""
+    end
+    return false
+end
+
+-- Get fruit attributes
+local function GetFruitAttributesVD(instance)
+    local success, attrs = pcall(function()
+        return {
+            fruitName = instance:GetAttribute("FruitName"),
+            sizeMultiplier = instance:GetAttribute("SizeMultiplier") or 1,
+            mutation = instance:GetAttribute("Mutation"),
+            weight = instance:GetAttribute("Weight"),
+            id = instance:GetAttribute("Id")
+        }
+    end)
+    if success then return attrs end
+    return nil
+end
+
+-- Find fruit by count and name
+local function FindFruitByCountAndNameVD(toolCountText, fruitName)
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return nil end
+    
+    local character = player.Character
+    local uiWeight = ParseToolCountVD(toolCountText)
+    local matchingFruits = {}
+    
+    for _, instance in backpack:GetChildren() do
+        if IsFruitInstanceVD(instance) then
+            local attrs = GetFruitAttributesVD(instance)
+            if attrs and attrs.fruitName == fruitName then
+                table.insert(matchingFruits, attrs)
+            end
+        end
+    end
+    
+    if character then
+        for _, instance in character:GetChildren() do
+            if IsFruitInstanceVD(instance) then
+                local attrs = GetFruitAttributesVD(instance)
+                if attrs and attrs.fruitName == fruitName then
+                    table.insert(matchingFruits, attrs)
+                end
+            end
+        end
+    end
+    
+    if #matchingFruits == 0 then return nil end
+    if #matchingFruits == 1 then return matchingFruits[1] end
+    
+    if uiWeight then
+        local bestMatch = nil
+        local closestDifference = math.huge
+        
+        for _, attrs in matchingFruits do
+            local fruitWeight = attrs.weight
+            if fruitWeight then
+                local roundedUiWeight = math.floor(uiWeight * 100 + 0.5) / 100
+                local roundedFruitWeight = math.floor(fruitWeight * 100 + 0.5) / 100
+                local difference = math.abs(roundedFruitWeight - roundedUiWeight)
+                
+                if difference < 0.005 then
+                    return attrs
+                elseif difference < closestDifference then
+                    closestDifference = difference
+                    bestMatch = attrs
+                end
+            end
+        end
+        
+        if bestMatch and closestDifference < 0.1 then
+            return bestMatch
+        end
+    end
+    
+    return nil
+end
+
+-- Create label for slot
+local function CreateLabelForSlotVD(slot)
+    if not config.extraToggle1 then return end
+    if not slot or not slot:IsA("TextButton") then return end
+    if slot:FindFirstChild("SellValue") then return end
+    
+    local toolNameLabel = slot:FindFirstChild("ToolName")
+    local toolCountLabel = slot:FindFirstChild("ToolCount")
+    
+    if not toolNameLabel then
+        for _, child in slot:GetDescendants() do
+            if child:IsA("TextLabel") and child.Name == "ToolName" then
+                toolNameLabel = child
+                break
+            end
+        end
+    end
+    
+    if not toolCountLabel then
+        for _, child in slot:GetDescendants() do
+            if child:IsA("TextLabel") and child.Name == "ToolCount" then
+                toolCountLabel = child
+                break
+            end
+        end
+    end
+    
+    if not toolNameLabel or not toolNameLabel:IsA("TextLabel") then return end
+    
+    local fruitName = toolNameLabel.Text
+    if fruitName == "" then return end
+    
+    local toolCountText = toolCountLabel and toolCountLabel.Text or ""
+    local fruitData = FindFruitByCountAndNameVD(toolCountText, fruitName)
+    if not fruitData then return end
+    
+    local value = CalculateFruitValueVD(fruitData.fruitName, fruitData.sizeMultiplier, fruitData.mutation)
+    
+    local sellValueLabel = Instance.new("TextLabel")
+    sellValueLabel.Name = "SellValue"
+    sellValueLabel.BackgroundTransparency = 1
+    sellValueLabel.Font = Enum.Font.GothamSemibold
+    sellValueLabel.TextSize = 11
+    sellValueLabel.TextXAlignment = Enum.TextXAlignment.Left
+    sellValueLabel.BorderSizePixel = 0
+    sellValueLabel.ZIndex = 5
+    
+    if toolCountLabel then
+        sellValueLabel.Size = UDim2.new(1, -8, 0, 14)
+        sellValueLabel.Position = UDim2.new(
+            toolCountLabel.Position.X.Scale,
+            toolCountLabel.Position.X.Offset,
+            0,
+            toolCountLabel.Position.Y.Offset + toolCountLabel.Size.Y.Offset + 2
+        )
+    elseif toolNameLabel then
+        sellValueLabel.Size = UDim2.new(1, -8, 0, 14)
+        sellValueLabel.Position = UDim2.new(
+            toolNameLabel.Position.X.Scale,
+            toolNameLabel.Position.X.Offset,
+            0,
+            toolNameLabel.Position.Y.Offset + toolNameLabel.Size.Y.Offset + 2
+        )
+    else
+        sellValueLabel.Size = UDim2.new(1, -8, 0, 14)
+        sellValueLabel.Position = UDim2.new(0, 4, 0, 40)
+    end
+    
+    sellValueLabel:SetAttribute("FruitId", fruitData.id or "unknown")
+    sellValueLabel:SetAttribute("FruitName", fruitName)
+    
+    local displayText = value and ("💰 " .. FormatValueVD(value)) or "💰 N/A"
+    sellValueLabel.Text = displayText
+    
+    if value then
+        if value >= 1000000 then
+            sellValueLabel.TextColor3 = Color3.fromRGB(255, 100, 255)
+        elseif value >= 100000 then
+            sellValueLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+        elseif value >= 10000 then
+            sellValueLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
+        else
+            sellValueLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+    else
+        sellValueLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    end
+    
+    sellValueLabel.Parent = slot
+end
+
+-- Initialize all slots
+local function InitializeAllSlotsVD()
+    if not config.extraToggle1 then return end
+    if not ValueDisplaySystem.backpackGui then return end
+    
+    pcall(function()
+        local backpackFrame = ValueDisplaySystem.backpackGui:FindFirstChild("Backpack")
+        if not backpackFrame then return end
+        
+        local inventory = backpackFrame:FindFirstChild("Inventory")
+        if inventory then
+            local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
+            if scrollingFrame then
+                local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
+                if gridFrame then
+                    for _, slot in gridFrame:GetChildren() do
+                        if slot:IsA("TextButton") then
+                            pcall(function() CreateLabelForSlotVD(slot) end)
+                        end
+                    end
+                end
+            end
+        end
+        
+        local hotbar = backpackFrame:FindFirstChild("Hotbar")
+        if hotbar then
+            for _, slot in hotbar:GetChildren() do
+                if slot:IsA("TextButton") or slot:IsA("Frame") then
+                    pcall(function() CreateLabelForSlotVD(slot) end)
+                end
+            end
+        end
+    end)
+end
+
+-- Calculate backpack total value
+local function CalculateBackpackTotalValueVD()
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return 0 end
+    
+    local totalValue = 0
+    for _, instance in backpack:GetChildren() do
+        if IsFruitInstanceVD(instance) then
+            local attrs = GetFruitAttributesVD(instance)
+            if attrs then
+                local value = CalculateFruitValueVD(attrs.fruitName, attrs.sizeMultiplier, attrs.mutation)
+                if value then
+                    totalValue = totalValue + value
+                end
+            end
+        end
+    end
+    
+    return totalValue
+end
+
+-- Create backpack total frame
+local function CreateBackpackTotalFrameVD()
+    local backpackFrame = ValueDisplaySystem.backpackGui:FindFirstChild("Backpack")
+    if not backpackFrame then return end
+    
+    local inventory = backpackFrame:FindFirstChild("Inventory")
+    if not inventory then return end
+    
+    local existingFrame = backpackFrame:FindFirstChild("BackpackTotalFrame")
+    if existingFrame then existingFrame:Destroy() end
+    
+    local invX = inventory.Position.X.Scale
+    local invXOffset = inventory.Position.X.Offset
+    local invY = inventory.Position.Y.Scale
+    local invYOffset = inventory.Position.Y.Offset
+    
+    local totalFrame = Instance.new("Frame")
+    totalFrame.Name = "BackpackTotalFrame"
+    totalFrame.Size = UDim2.new(0, 140, 0, 25)
+    totalFrame.Position = UDim2.new(invX, invXOffset, invY, invYOffset - 29)
+    totalFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    totalFrame.BorderSizePixel = 0
+    totalFrame.ZIndex = 10
+    totalFrame.Parent = backpackFrame
+    
+    Instance.new("UICorner", totalFrame).CornerRadius = UDim.new(0, 4)
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 1
+    stroke.Transparency = 0.5
+    stroke.Parent = totalFrame
+    
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Name = "Value"
+    valueLabel.Size = UDim2.new(1, 0, 1, 0)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.Text = "💰 " .. FormatValueVD(CalculateBackpackTotalValueVD())
+    valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+    valueLabel.Font = Enum.Font.GothamBold
+    valueLabel.TextSize = 14
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Center
+    valueLabel.TextYAlignment = Enum.TextYAlignment.Center
+    valueLabel.ZIndex = 11
+    valueLabel.Parent = totalFrame
+    
+    totalFrame.Visible = inventory.Visible and config.extraToggle1
+    
+    return totalFrame
+end
+
+-- Update backpack total value
+local function UpdateBackpackTotalValueVD()
+    if not config.extraToggle1 then return end
+    
+    local totalValue = CalculateBackpackTotalValueVD()
+    local backpackFrame = ValueDisplaySystem.backpackGui:FindFirstChild("Backpack")
+    if not backpackFrame then return end
+    
+    local totalFrame = backpackFrame:FindFirstChild("BackpackTotalFrame")
+    if not totalFrame then
+        totalFrame = CreateBackpackTotalFrameVD()
+    end
+    
+    if not totalFrame then return end
+    
+    local inventory = backpackFrame:FindFirstChild("Inventory")
+    if inventory and not inventory.Visible then
+        totalFrame.Visible = false
+        return
+    end
+    
+    totalFrame.Visible = true
+    
+    local valueLabel = totalFrame:FindFirstChild("Value")
+    if valueLabel then
+        valueLabel.Text = "💰 " .. FormatValueVD(totalValue)
+        
+        if totalValue >= 10000000 then
+            valueLabel.TextColor3 = Color3.fromRGB(255, 0, 255)
+        elseif totalValue >= 1000000 then
+            valueLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+        elseif totalValue >= 100000 then
+            valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        else
+            valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        end
+    end
+end
+
+-- Calculate garden total value
+local function CalculateGardenTotalValueVD()
+    local gardensFolder = workspace:FindFirstChild("Gardens")
+    if not gardensFolder then return 0 end
+    
+    local userId = player.UserId
+    local totalValue = 0
+    
+    for _, plot in gardensFolder:GetChildren() do
+        local ownerId = plot:GetAttribute("OwnerUserId")
+        local plotUserId = plot:GetAttribute("UserId")
+        
+        if ownerId == userId or plotUserId == userId then
+            local plants = plot:FindFirstChild("Plants")
+            if plants then
+                for _, plant in plants:GetChildren() do
+                    if plant:IsA("Model") then
+                        local fruitsFolder = plant:FindFirstChild("Fruits")
+                        if fruitsFolder then
+                            for _, fruit in fruitsFolder:GetChildren() do
+                                if fruit:IsA("Model") then
+                                    local fruitName = fruit:GetAttribute("CorePartName")
+                                    local sizeMulti = fruit:GetAttribute("SizeMulti") or 1
+                                    local mutation = fruit:GetAttribute("Mutation")
+                                    if mutation == "" then mutation = nil end
+                                    
+                                    if fruitName then
+                                        local value = CalculateFruitValueVD(fruitName, sizeMulti, mutation)
+                                        if value then
+                                            totalValue = totalValue + value
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    return totalValue
+end
+
+-- Create garden total frame
+local function CreateGardenTotalFrameVD()
+    local backpackFrame = ValueDisplaySystem.backpackGui:FindFirstChild("Backpack")
+    if not backpackFrame then return end
+    
+    local inventory = backpackFrame:FindFirstChild("Inventory")
+    if not inventory then return end
+    
+    local existingFrame = backpackFrame:FindFirstChild("GardenTotalFrame")
+    if existingFrame then existingFrame:Destroy() end
+    
+    local invX = inventory.Position.X.Scale
+    local invXOffset = inventory.Position.X.Offset
+    local invY = inventory.Position.Y.Scale
+    local invYOffset = inventory.Position.Y.Offset
+    
+    local totalFrame = Instance.new("Frame")
+    totalFrame.Name = "GardenTotalFrame"
+    totalFrame.Size = UDim2.new(0, 140, 0, 25)
+    totalFrame.Position = UDim2.new(invX, invXOffset + 190, invY, invYOffset - 29)
+    totalFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    totalFrame.BorderSizePixel = 0
+    totalFrame.ZIndex = 10
+    totalFrame.Parent = backpackFrame
+    
+    Instance.new("UICorner", totalFrame).CornerRadius = UDim.new(0, 4)
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 1
+    stroke.Transparency = 0.5
+    stroke.Parent = totalFrame
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Name = "Title"
+    titleLabel.Size = UDim2.new(1, 0, 0, 10)
+    titleLabel.Position = UDim2.new(0, 0, 0, 1)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = "GARDEN"
+    titleLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 8
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Center
+    titleLabel.ZIndex = 11
+    titleLabel.Parent = totalFrame
+    
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Name = "Value"
+    valueLabel.Size = UDim2.new(1, 0, 0, 13)
+    valueLabel.Position = UDim2.new(0, 0, 0, 11)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.Text = "💰 " .. FormatValueVD(CalculateGardenTotalValueVD())
+    valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+    valueLabel.Font = Enum.Font.GothamBold
+    valueLabel.TextSize = 12
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Center
+    valueLabel.TextYAlignment = Enum.TextYAlignment.Center
+    valueLabel.ZIndex = 11
+    valueLabel.Parent = totalFrame
+    
+    totalFrame.Visible = inventory.Visible and config.extraToggle1
+    
+    return totalFrame
+end
+
+-- Update garden total value
+local function UpdateGardenTotalValueVD()
+    if not config.extraToggle1 then return end
+    
+    local totalValue = CalculateGardenTotalValueVD()
+    local backpackFrame = ValueDisplaySystem.backpackGui:FindFirstChild("Backpack")
+    if not backpackFrame then return end
+    
+    local totalFrame = backpackFrame:FindFirstChild("GardenTotalFrame")
+    if not totalFrame then
+        totalFrame = CreateGardenTotalFrameVD()
+    end
+    
+    if not totalFrame then return end
+    
+    local inventory = backpackFrame:FindFirstChild("Inventory")
+    if inventory and not inventory.Visible then
+        totalFrame.Visible = false
+        return
+    end
+    
+    totalFrame.Visible = true
+    
+    local valueLabel = totalFrame:FindFirstChild("Value")
+    if valueLabel then
+        valueLabel.Text = "💰 " .. FormatValueVD(totalValue)
+        
+        if totalValue >= 10000000 then
+            valueLabel.TextColor3 = Color3.fromRGB(255, 0, 255)
+        elseif totalValue >= 1000000 then
+            valueLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+        elseif totalValue >= 100000 then
+            valueLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        else
+            valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+        end
+    end
+end
+
+-- Cleanup all labels
+local function CleanAllLabelsVD()
+    if not ValueDisplaySystem.backpackGui then return end
+    
+    pcall(function()
+        local backpackFrame = ValueDisplaySystem.backpackGui:FindFirstChild("Backpack")
+        if not backpackFrame then return end
+        
+        local function removeLabels(container)
+            if not container then return end
+            for _, slot in container:GetChildren() do
+                if slot:IsA("TextButton") or slot:IsA("Frame") then
+                    local label = slot:FindFirstChild("SellValue")
+                    if label then label:Destroy() end
+                end
+            end
+        end
+        
+        local inventory = backpackFrame:FindFirstChild("Inventory")
+        if inventory then
+            local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
+            if scrollingFrame then
+                local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
+                removeLabels(gridFrame)
+            end
+        end
+        
+        local hotbar = backpackFrame:FindFirstChild("Hotbar")
+        removeLabels(hotbar)
+        
+        local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+        if backpackTotal then backpackTotal:Destroy() end
+        
+        local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+        if gardenTotal then gardenTotal:Destroy() end
+    end)
+end
+
+-- Watchers
+local function SetupFruitWatcherVD()
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return end
+    
+    backpack.ChildAdded:Connect(function(instance)
+        if not config.extraToggle1 then return end
+        if IsFruitInstanceVD(instance) then
+            task.wait(0.5)
+            pcall(InitializeAllSlotsVD)
+            pcall(UpdateBackpackTotalValueVD)
+        end
+    end)
+    
+    backpack.ChildRemoved:Connect(function(instance)
+        if not config.extraToggle1 then return end
+        if IsFruitInstanceVD(instance) then
+            task.wait(0.3)
+            pcall(UpdateBackpackTotalValueVD)
+            pcall(InitializeAllSlotsVD)
+        end
+    end)
+end
+
+local function SetupGardenWatcherVD()
+    local gardensFolder = workspace:FindFirstChild("Gardens")
+    if not gardensFolder then return end
+    
+    for _, plot in gardensFolder:GetChildren() do
+        plot.DescendantAdded:Connect(function(descendant)
+            if not config.extraToggle1 then return end
+            if descendant:IsA("Model") then
+                local corePartName = descendant:GetAttribute("CorePartName")
+                if corePartName then
+                    task.wait(0.3)
+                    pcall(UpdateGardenTotalValueVD)
+                end
+            end
+        end)
+        
+        plot.DescendantRemoving:Connect(function(descendant)
+            if not config.extraToggle1 then return end
+            if descendant:IsA("Model") then
+                local corePartName = descendant:GetAttribute("CorePartName")
+                if corePartName then
+                    task.wait(0.3)
+                    pcall(UpdateGardenTotalValueVD)
+                end
+            end
+        end)
+    end
+end
+
+-- Periodic update
+local function StartPeriodicCheckVD()
+    task.spawn(function()
+        while true do
+            task.wait(5)
+            if config.extraToggle1 then
+                pcall(function()
+                    InitializeAllSlotsVD()
+                    UpdateBackpackTotalValueVD()
+                    UpdateGardenTotalValueVD()
+                end)
+            end
+        end
+    end)
+end
+
+-- Start Value Display
+function StartValueDisplay()
+    if ValueDisplaySystem.isRunning then return end
+    
+    if not InitializeValueDisplay() then
+        print("[AoneHub] ❌ Failed to initialize Value Display!")
+        return
+    end
+    
+    ValueDisplaySystem.isRunning = true
+    print("[AoneHub] ✅ Value Display started!")
+    
+    task.spawn(function()
+        SetupFruitWatcherVD()
+        SetupGardenWatcherVD()
+        CreateBackpackTotalFrameVD()
+        CreateGardenTotalFrameVD()
+        StartPeriodicCheckVD()
+        
+        for i = 1, 10 do
+            InitializeAllSlotsVD()
+            UpdateBackpackTotalValueVD()
+            UpdateGardenTotalValueVD()
+            task.wait(0.5)
+        end
+    end)
+end
+
+-- Stop Value Display
+function StopValueDisplay()
+    ValueDisplaySystem.isRunning = false
+    CleanAllLabelsVD()
+    print("[AoneHub] ❌ Value Display stopped!")
+end
+
+-- Initialize if toggle is ON
+if config.extraToggle1 then
+    task.delay(3, function()
+        StartValueDisplay()
+    end)
+    end
+    
     -- ==================================================================
     -- TAB 1: AUTO BUY
     -- ==================================================================
@@ -1375,7 +2240,11 @@ print("[AoneHub] ✅ Tab Mail Fruit Ready (with Real Values)")
     if config.isRunningSell then task.delay(3,function() if net and net.NPCS and net.NPCS.SellAll then isRunningSell=true; task.spawn(sellLoop); updateSellUI() end end) end
     if config.isAutoMailRunning then task.delay(4,function() if config.mailTargetUsername ~= "" then isAutoRunning=true; userBox.Text=config.mailTargetUsername; updatePlayerInfo(config.mailTargetUsername); autoBtn.Text = "⏸ STOP AUTO MAIL"; autoBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50); autoStatusLabel.Text = "🔄 Auto Mail: ON"; autoStatusLabel.TextColor3 = C.green end end) end
     if config.isAutoClaimRunning then task.delay(5,function() isClaimRunning = true; claimBtn.Text = "⏸ STOP AUTO CLAIM"; claimBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 120); claimStatusLabel.Text = "📬 Auto Claim: ON"; claimStatusLabel.TextColor3 = Color3.fromRGB(200, 100, 255) end) end
-    
+    if config.extraToggle1 then
+    task.delay(6, function()
+        StartValueDisplay()
+    end)
+    end
     saveConfig()
     print("[AoneHub] ✅ Complete! All 5 tabs ready. Config: " .. SAVE_FILE)
 end
