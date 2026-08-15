@@ -607,10 +607,16 @@ valueDisplayBtn.MouseButton1Click:Connect(function()
 end)
 
 if config.isValueDisplayRunning then
-    valueDisplayRunning = true
-    valueDisplayBtn.Text = "💰 VALUE DISPLAY: ON"
-    valueDisplayBtn.BackgroundColor3 = C.green
-    task.delay(5, startValueDisplay)
+    pcall(function()
+        valueDisplayRunning = true
+        if valueDisplayBtn then
+            valueDisplayBtn.Text = "💰 VALUE DISPLAY: ON"
+            valueDisplayBtn.BackgroundColor3 = C.green
+        end
+        if startValueDisplay then
+            task.delay(5, startValueDisplay)
+        end
+    end)
 end
     
     -- ==================================================================
