@@ -387,9 +387,8 @@ end)
     -- Toggle 1: Auto Reconnect
     createToggle("👁 Value Display", "Tampilkan nilai buah di inventory & garden", "extraToggle1", 2)
     
-    -- Toggle 2: Auto Farm
-    createToggle("Auto Farm", "Otomatis farming buah ketika idle", "extraToggle2", 3)
-    
+    createToggle("🛡️ Anti-AFK", "Cegah kick karena idle/afk", "extraToggle2", 3)
+        
     -- Toggle 3: Notifikasi
     createToggle("Notifikasi", "Tampilkan notifikasi saat ada event penting", "extraToggle3", 4)
     
