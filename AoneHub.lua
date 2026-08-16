@@ -1370,7 +1370,7 @@ do
 end
 
 -- ==================================================================
--- ANTI-AFK SYSTEM (PC & MOBILE - CAMERA MOVEMENT - TIDAK MENGGANGGU DRAG)
+-- ANTI-AFK SYSTEM (SUPPORT MOBILE & PC)
 -- ==================================================================
 do
     local antiAFKActive = false
@@ -1379,45 +1379,52 @@ do
     local antiAFKCooldown = 0
     local isDragging = false
     local isMobile = false
-    local isZoomedIn = false
     
     -- Deteksi device
     pcall(function()
         isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-        if isMobile then
+        if UserInputService.TouchEnabled then
             print("[AoneHub] 📱 Mobile device detected!")
         else
             print("[AoneHub] 🖥️ PC device detected!")
         end
     end)
     
-    -- ==================================================================
-    -- DETEKSI AKTIVITAS USER
-    -- ==================================================================
-    
-    -- PC: Mouse & Keyboard
+    -- Deteksi aktivitas user (PC)
     UserInputService.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or
            input.UserInputType == Enum.UserInputType.MouseButton2 or
-           input.UserInputType == Enum.UserInputType.Keyboard then
+           input.UserInputType == Enum.UserInputType.Keyboard or
+           input.UserInputType == Enum.UserInputType.Touch or
+           input.UserInputType == Enum.UserInputType.Gamepad1 then
             lastUserActivity = os.time()
         end
     end)
     
     UserInputService.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement then
+        if input.UserInputType == Enum.UserInputType.MouseMovement or
+           input.UserInputType == Enum.UserInputType.Touch then
             lastUserActivity = os.time()
         end
     end)
     
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or
+           input.UserInputType == Enum.UserInputType.Touch then
             isDragging = false
             lastUserActivity = os.time()
         end
     end)
     
-    -- Mobile: Touch
+    -- Deteksi drag (PC dan Mobile)
+    UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or
+           input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = true
+        end
+    end)
+    
+    -- Watch Touch events untuk mobile
     UserInputService.TouchStarted:Connect(function(touch, gameProcessed)
         isDragging = true
         lastUserActivity = os.time()
@@ -1428,145 +1435,82 @@ do
         lastUserActivity = os.time()
     end)
     
-    -- PC: Drag detection
-    UserInputService.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            isDragging = true
-        end
-    end)
-    
-    -- ==================================================================
-    -- FUNGSI ANTI-AFK
-    -- ==================================================================
-    
-    -- Camera Movement (PC & Mobile - Paling Aman)
-    local function CameraMovementAntiAFK()
-        pcall(function()
-            local camera = workspace.CurrentCamera
-            if not camera then return end
-            
-            -- Simpan posisi camera awal
-            local originalCFrame = camera.CFrame
-            
-            -- Gerakkan camera sedikit (random)
-            local randomRotation = CFrame.Angles(
-                math.rad(math.random(-5, 5)),
-                math.rad(math.random(-10, 10)),
-                0
-            )
-            
-            camera.CFrame = originalCFrame * randomRotation
-            
-            -- Kembalikan camera
-            task.wait(0.5)
-            camera.CFrame = originalCFrame
-        end)
-    end
-    
-    -- Character Movement (PC & Mobile)
-    local function CharacterMovementAntiAFK()
+    -- Fungsi Anti-AFK untuk MOBILE
+    local function MobileAntiAFK()
         pcall(function()
             local char = player.Character
             if char and char:FindFirstChild("Humanoid") then
-                -- Gerakkan karakter sedikit
+                -- Di mobile, gerakkan karakter lebih sering
                 char.Humanoid:Move(Vector3.new(
-                    math.random(-10, 10), 
+                    math.random(-15, 15), 
                     0, 
-                    math.random(-10, 10)
+                    math.random(-15, 15)
                 ))
                 
-                -- Kadang lompat
-                if math.random(1, 4) == 1 then
+                -- Lompat lebih sering di mobile
+                if math.random(1, 2) == 1 then
                     char.Humanoid.Jump = true
                 end
                 
-                -- Berhenti setelah 1 detik
                 task.wait(1)
                 char.Humanoid:Move(Vector3.new(0, 0, 0))
             end
         end)
     end
     
-    -- Camera Zoom (Mobile Friendly)
-    local function CameraZoomAntiAFK()
+    -- Fungsi Anti-AFK untuk PC
+    local function PCAntiAFK()
         pcall(function()
-            local camera = workspace.CurrentCamera
-            if not camera then return end
-            
-            if not isZoomedIn then
-                -- Zoom in
-                camera.CFrame = camera.CFrame * CFrame.new(0, 0, 5)
-                isZoomedIn = true
-            else
-                -- Zoom out
-                camera.CFrame = camera.CFrame * CFrame.new(0, 0, -5)
-                isZoomedIn = false
+            local char = player.Character
+            if char and char:FindFirstChild("Humanoid") then
+                char.Humanoid:Move(Vector3.new(
+                    math.random(-10, 10), 
+                    0, 
+                    math.random(-10, 10)
+                ))
+                
+                if math.random(1, 4) == 1 then
+                    char.Humanoid.Jump = true
+                end
+                
+                task.wait(1)
+                char.Humanoid:Move(Vector3.new(0, 0, 0))
             end
         end)
     end
     
-    -- Pilih metode anti-AFK berdasarkan device
-    local function PerformAntiAFK()
-        if isMobile then
-            -- Mobile: Gunakan Camera Movement atau Zoom (lebih aman)
-            local method = math.random(1, 2)
-            
-            if method == 1 then
-                CameraMovementAntiAFK()
-            else
-                CameraZoomAntiAFK()
-            end
-        else
-            -- PC: Gunakan Camera Movement atau Character Movement
-            local method = math.random(1, 2)
-            
-            if method == 1 then
-                CameraMovementAntiAFK()
-            else
-                CharacterMovementAntiAFK()
-            end
-        end
-    end
-    
-    -- ==================================================================
-    -- START/STOP ANTI-AFK
-    -- ==================================================================
-    
+    -- Fungsi untuk menjalankan Anti-AFK
     local function StartAntiAFK()
         if antiAFKActive then return end
         antiAFKActive = true
         
         task.spawn(function()
             while antiAFKActive and config.extraToggle2 do
-                -- Interval cek:
-                -- Mobile: 60 detik (lebih sering)
-                -- PC: 60 detik
+                -- Mobile: cek lebih sering (setiap 60 detik)
+                -- PC: cek setiap 60 detik
                 local checkInterval = isMobile and 60 or 60
                 task.wait(checkInterval)
                 
                 if not config.extraToggle2 then break end
                 
-                -- Hitung idle time
                 local idleTime = os.time() - lastUserActivity
                 
-                -- Idle threshold:
-                -- Mobile: 8 menit (lebih pendek)
-                -- PC: 8 menit
+                -- Mobile: idle threshold lebih pendek (8 menit)
+                -- PC: idle threshold 8 menit
                 local idleThreshold = isMobile and 480 or 480
                 
-                -- HANYA lakukan anti-AFK jika:
-                -- 1. User idle melebihi threshold
-                -- 2. TIDAK sedang drag item
-                -- 3. Cooldown sudah lewat
                 if idleTime > idleThreshold and not isDragging and os.time() >= antiAFKCooldown then
-                    PerformAntiAFK()
+                    -- Jalankan anti-AFK sesuai device
+                    if isMobile then
+                        MobileAntiAFK()
+                    else
+                        PCAntiAFK()
+                    end
                     
-                    -- Cooldown:
-                    -- Mobile: 10 menit
-                    -- PC: 10 menit
+                    -- Cooldown: Mobile 10 menit, PC 10 menit
                     antiAFKCooldown = os.time() + (isMobile and 600 or 600)
                     
-                    print("[AoneHub] ✅ Anti-AFK action (idle " .. idleTime .. "s, " .. (isMobile and "mobile" or "PC") .. ")")
+                    print("[AoneHub] ✅ Anti-AFK action (idle " .. idleTime .. "s)")
                 end
             end
             
@@ -1576,26 +1520,22 @@ do
         print("[AoneHub] ✅ Anti-AFK: ON (" .. (isMobile and "mobile" or "PC") .. " mode)")
     end
     
+    -- Fungsi untuk menghentikan Anti-AFK
     local function StopAntiAFK()
         antiAFKActive = false
         print("[AoneHub] ❌ Anti-AFK: OFF")
     end
     
-    -- ==================================================================
-    -- MONITOR TOGGLE
-    -- ==================================================================
-    
+    -- Monitor config.extraToggle2 untuk perubahan
     task.spawn(function()
         while true do
             task.wait(0.5)
             
             if config.extraToggle2 then
-                -- Toggle ON, jalankan Anti-AFK
                 if not antiAFKActive then
                     StartAntiAFK()
                 end
             else
-                -- Toggle OFF, hentikan Anti-AFK
                 if antiAFKActive then
                     StopAntiAFK()
                 end
@@ -1610,7 +1550,7 @@ do
             print("[AoneHub] ✅ Anti-AFK auto-started!")
         end)
     end
-    end
+end
     
     -- ==================================================================
     -- TAB 1: AUTO BUY
