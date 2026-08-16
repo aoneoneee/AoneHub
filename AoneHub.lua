@@ -1370,15 +1370,18 @@ do
 end
 
 -- ==================================================================
--- ANTI-AFK SYSTEM (SUPPORT MOBILE & PC)
+-- ANTI-AFK SYSTEM (MOBILE DENGAN CURSOR DETECTION)
 -- ==================================================================
 do
     local antiAFKActive = false
     local UserInputService = game:GetService("UserInputService")
+    local Mouse = player:GetMouse()
     local lastUserActivity = os.time()
     local antiAFKCooldown = 0
     local isDragging = false
     local isMobile = false
+    local lastCursorPosition = Vector2.new(0, 0)
+    local cursorMoved = false
     
     -- Deteksi device
     pcall(function()
@@ -1390,64 +1393,136 @@ do
         end
     end)
     
-    -- Deteksi aktivitas user (PC)
-    UserInputService.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or
-           input.UserInputType == Enum.UserInputType.MouseButton2 or
-           input.UserInputType == Enum.UserInputType.Keyboard or
-           input.UserInputType == Enum.UserInputType.Touch or
-           input.UserInputType == Enum.UserInputType.Gamepad1 then
+    -- ==================================================================
+    -- MOBILE: Deteksi pergerakan cursor
+    -- ==================================================================
+    if isMobile then
+        -- Munculkan cursor di mobile
+        pcall(function()
+            UserInputService.MouseIconEnabled = true  -- Tampilkan cursor
+        end)
+        
+        -- Simpan posisi cursor awal
+        pcall(function()
+            lastCursorPosition = Vector2.new(Mouse.X, Mouse.Y)
+        end)
+        
+        -- Deteksi pergerakan cursor (mobile)
+        task.spawn(function()
+            while true do
+                task.wait(1)  -- Cek setiap 1 detik
+                
+                pcall(function()
+                    local currentPosition = Vector2.new(Mouse.X, Mouse.Y)
+                    
+                    -- Jika cursor bergerak, user aktif
+                    if (currentPosition - lastCursorPosition).Magnitude > 5 then
+                        cursorMoved = true
+                        lastUserActivity = os.time()
+                        lastCursorPosition = currentPosition
+                    else
+                        cursorMoved = false
+                    end
+                end)
+            end
+        end)
+        
+        -- Touch events
+        UserInputService.TouchStarted:Connect(function(touch, gameProcessed)
+            isDragging = true
             lastUserActivity = os.time()
-        end
-    end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or
-           input.UserInputType == Enum.UserInputType.Touch then
+            pcall(function()
+                lastCursorPosition = Vector2.new(touch.Position.X, touch.Position.Y)
+            end)
+        end)
+        
+        UserInputService.TouchMoved:Connect(function(touch, gameProcessed)
             lastUserActivity = os.time()
-        end
-    end)
-    
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or
-           input.UserInputType == Enum.UserInputType.Touch then
+            pcall(function()
+                lastCursorPosition = Vector2.new(touch.Position.X, touch.Position.Y)
+            end)
+        end)
+        
+        UserInputService.TouchEnded:Connect(function(touch, gameProcessed)
             isDragging = false
             lastUserActivity = os.time()
-        end
-    end)
+            pcall(function()
+                lastCursorPosition = Vector2.new(touch.Position.X, touch.Position.Y)
+            end)
+        end)
+        
+        -- Mobile: Mouse click (jika ada mouse eksternal)
+        UserInputService.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or
+               input.UserInputType == Enum.UserInputType.MouseButton2 then
+                lastUserActivity = os.time()
+            end
+        end)
+        
+        UserInputService.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement then
+                lastUserActivity = os.time()
+                pcall(function()
+                    lastCursorPosition = Vector2.new(Mouse.X, Mouse.Y)
+                end)
+            end
+        end)
+        
+        -- Mobile: Keyboard (jika ada keyboard eksternal)
+        UserInputService.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                lastUserActivity = os.time()
+            end
+        end)
+    else
+        -- ==================================================================
+        -- PC: Deteksi aktivitas normal
+        -- ==================================================================
+        UserInputService.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or
+               input.UserInputType == Enum.UserInputType.MouseButton2 or
+               input.UserInputType == Enum.UserInputType.Keyboard then
+                lastUserActivity = os.time()
+            end
+        end)
+        
+        UserInputService.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement then
+                lastUserActivity = os.time()
+            end
+        end)
+        
+        UserInputService.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                isDragging = true
+            end
+        end)
+        
+        UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                isDragging = false
+                lastUserActivity = os.time()
+            end
+        end)
+    end
     
-    -- Deteksi drag (PC dan Mobile)
-    UserInputService.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or
-           input.UserInputType == Enum.UserInputType.Touch then
-            isDragging = true
-        end
-    end)
+    -- ==================================================================
+    -- Anti-AFK Actions
+    -- ==================================================================
     
-    -- Watch Touch events untuk mobile
-    UserInputService.TouchStarted:Connect(function(touch, gameProcessed)
-        isDragging = true
-        lastUserActivity = os.time()
-    end)
-    
-    UserInputService.TouchEnded:Connect(function(touch, gameProcessed)
-        isDragging = false
-        lastUserActivity = os.time()
-    end)
-    
-    -- Fungsi Anti-AFK untuk MOBILE
+    -- Fungsi Anti-AFK untuk MOBILE (lebih agresif)
     local function MobileAntiAFK()
         pcall(function()
             local char = player.Character
             if char and char:FindFirstChild("Humanoid") then
-                -- Di mobile, gerakkan karakter lebih sering
+                -- Gerakkan karakter
                 char.Humanoid:Move(Vector3.new(
                     math.random(-15, 15), 
                     0, 
                     math.random(-15, 15)
                 ))
                 
-                -- Lompat lebih sering di mobile
+                -- Lompat
                 if math.random(1, 2) == 1 then
                     char.Humanoid.Jump = true
                 end
@@ -1479,26 +1554,27 @@ do
         end)
     end
     
-    -- Fungsi untuk menjalankan Anti-AFK
+    -- ==================================================================
+    -- Main Anti-AFK Loop
+    -- ==================================================================
     local function StartAntiAFK()
         if antiAFKActive then return end
         antiAFKActive = true
         
         task.spawn(function()
             while antiAFKActive and config.extraToggle2 do
-                -- Mobile: cek lebih sering (setiap 60 detik)
-                -- PC: cek setiap 60 detik
-                local checkInterval = isMobile and 60 or 60
+                -- Mobile: cek setiap 15 detik, PC: 30 detik
+                local checkInterval = isMobile and 15 or 30
                 task.wait(checkInterval)
                 
                 if not config.extraToggle2 then break end
                 
                 local idleTime = os.time() - lastUserActivity
                 
-                -- Mobile: idle threshold lebih pendek (8 menit)
-                -- PC: idle threshold 8 menit
-                local idleThreshold = isMobile and 480 or 480
+                -- Mobile: idle threshold 3 menit, PC: 5 menit
+                local idleThreshold = isMobile and 180 or 300
                 
+                -- Cek apakah user idle
                 if idleTime > idleThreshold and not isDragging and os.time() >= antiAFKCooldown then
                     -- Jalankan anti-AFK sesuai device
                     if isMobile then
@@ -1507,8 +1583,8 @@ do
                         PCAntiAFK()
                     end
                     
-                    -- Cooldown: Mobile 10 menit, PC 10 menit
-                    antiAFKCooldown = os.time() + (isMobile and 600 or 600)
+                    -- Cooldown: Mobile 5 menit, PC 10 menit
+                    antiAFKCooldown = os.time() + (isMobile and 300 or 600)
                     
                     print("[AoneHub] ✅ Anti-AFK action (idle " .. idleTime .. "s)")
                 end
@@ -1520,13 +1596,12 @@ do
         print("[AoneHub] ✅ Anti-AFK: ON (" .. (isMobile and "mobile" or "PC") .. " mode)")
     end
     
-    -- Fungsi untuk menghentikan Anti-AFK
     local function StopAntiAFK()
         antiAFKActive = false
         print("[AoneHub] ❌ Anti-AFK: OFF")
     end
     
-    -- Monitor config.extraToggle2 untuk perubahan
+    -- Monitor config.extraToggle2
     task.spawn(function()
         while true do
             task.wait(0.5)
