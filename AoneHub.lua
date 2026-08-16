@@ -1370,259 +1370,157 @@ do
 end
 
 -- ==================================================================
--- ANTI-AFK SYSTEM (MOBILE DENGAN CURSOR DETECTION)
+-- ANTI-AFK SYSTEM (DENGAN DELAY AWAL)
 -- ==================================================================
 do
+    local antiAFKEnabled = config.extraToggle2  -- Default sesuai config
+    local VirtualInputManager = game:GetService("VirtualInputManager")
     local antiAFKActive = false
-    local UserInputService = game:GetService("UserInputService")
-    local Mouse = player:GetMouse()
-    local lastUserActivity = os.time()
-    local antiAFKCooldown = 0
-    local isDragging = false
-    local isMobile = false
-    local lastCursorPosition = Vector2.new(0, 0)
-    local cursorMoved = false
+    local antiAFKDelayActive = false  -- Menandakan sedang dalam masa delay
+    local antiAFKFirstRun = true      -- Menandakan pertama kali dijalankan
     
-    -- Deteksi device
-    pcall(function()
-        isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-        if UserInputService.TouchEnabled then
-            print("[AoneHub] 📱 Mobile device detected!")
-        else
-            print("[AoneHub] 🖥️ PC device detected!")
-        end
-    end)
-    
-    -- ==================================================================
-    -- MOBILE: Deteksi pergerakan cursor
-    -- ==================================================================
-    if isMobile then
-        -- Munculkan cursor di mobile
+    -- Fungsi untuk menjalankan simulasi Anti-AFK
+    local function PerformAntiAFKAction()
+        -- Simulasi mouse movement
         pcall(function()
-            UserInputService.MouseIconEnabled = true  -- Tampilkan cursor
+            VirtualInputManager:SendMouseMoveEvent(
+                math.random(100, 500), 
+                math.random(100, 500), 
+                nil
+            )
         end)
         
-        -- Simpan posisi cursor awal
+        -- Simulasi key press
         pcall(function()
-            lastCursorPosition = Vector2.new(Mouse.X, Mouse.Y)
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, nil)
+            task.wait(0.1)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, nil)
         end)
         
-        -- Deteksi pergerakan cursor (mobile)
-        task.spawn(function()
-            while true do
-                task.wait(1)  -- Cek setiap 1 detik
-                
-                pcall(function()
-                    local currentPosition = Vector2.new(Mouse.X, Mouse.Y)
-                    
-                    -- Jika cursor bergerak, user aktif
-                    if (currentPosition - lastCursorPosition).Magnitude > 5 then
-                        cursorMoved = true
-                        lastUserActivity = os.time()
-                        lastCursorPosition = currentPosition
-                    else
-                        cursorMoved = false
-                    end
-                end)
-            end
-        end)
-        
-        -- Touch events
-        UserInputService.TouchStarted:Connect(function(touch, gameProcessed)
-            isDragging = true
-            lastUserActivity = os.time()
-            pcall(function()
-                lastCursorPosition = Vector2.new(touch.Position.X, touch.Position.Y)
-            end)
-        end)
-        
-        UserInputService.TouchMoved:Connect(function(touch, gameProcessed)
-            lastUserActivity = os.time()
-            pcall(function()
-                lastCursorPosition = Vector2.new(touch.Position.X, touch.Position.Y)
-            end)
-        end)
-        
-        UserInputService.TouchEnded:Connect(function(touch, gameProcessed)
-            isDragging = false
-            lastUserActivity = os.time()
-            pcall(function()
-                lastCursorPosition = Vector2.new(touch.Position.X, touch.Position.Y)
-            end)
-        end)
-        
-        -- Mobile: Mouse click (jika ada mouse eksternal)
-        UserInputService.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or
-               input.UserInputType == Enum.UserInputType.MouseButton2 then
-                lastUserActivity = os.time()
-            end
-        end)
-        
-        UserInputService.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement then
-                lastUserActivity = os.time()
-                pcall(function()
-                    lastCursorPosition = Vector2.new(Mouse.X, Mouse.Y)
-                end)
-            end
-        end)
-        
-        -- Mobile: Keyboard (jika ada keyboard eksternal)
-        UserInputService.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                lastUserActivity = os.time()
-            end
-        end)
-    else
-        -- ==================================================================
-        -- PC: Deteksi aktivitas normal
-        -- ==================================================================
-        UserInputService.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or
-               input.UserInputType == Enum.UserInputType.MouseButton2 or
-               input.UserInputType == Enum.UserInputType.Keyboard then
-                lastUserActivity = os.time()
-            end
-        end)
-        
-        UserInputService.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement then
-                lastUserActivity = os.time()
-            end
-        end)
-        
-        UserInputService.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                isDragging = true
-            end
-        end)
-        
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                isDragging = false
-                lastUserActivity = os.time()
-            end
-        end)
-    end
-    
-    -- ==================================================================
-    -- Anti-AFK Actions
-    -- ==================================================================
-    
-    -- Fungsi Anti-AFK untuk MOBILE (lebih agresif)
-    local function MobileAntiAFK()
+        -- Gerakin karakter dikit (bonus)
         pcall(function()
             local char = player.Character
             if char and char:FindFirstChild("Humanoid") then
-                -- Gerakkan karakter
-                char.Humanoid:Move(Vector3.new(
-                    math.random(-15, 15), 
-                    0, 
-                    math.random(-15, 15)
-                ))
-                
-                -- Lompat
-                if math.random(1, 2) == 1 then
-                    char.Humanoid.Jump = true
-                end
-                
-                task.wait(1)
-                char.Humanoid:Move(Vector3.new(0, 0, 0))
+                char.Humanoid:Move(Vector3.new(math.random(-5, 5), 0, math.random(-5, 5)))
             end
         end)
     end
     
-    -- Fungsi Anti-AFK untuk PC
-    local function PCAntiAFK()
-        pcall(function()
-            local char = player.Character
-            if char and char:FindFirstChild("Humanoid") then
-                char.Humanoid:Move(Vector3.new(
-                    math.random(-10, 10), 
-                    0, 
-                    math.random(-10, 10)
-                ))
-                
-                if math.random(1, 4) == 1 then
-                    char.Humanoid.Jump = true
-                end
-                
-                task.wait(1)
-                char.Humanoid:Move(Vector3.new(0, 0, 0))
-            end
-        end)
-    end
-    
-    -- ==================================================================
-    -- Main Anti-AFK Loop
-    -- ==================================================================
+    -- Fungsi untuk menjalankan Anti-AFK (dengan delay awal)
     local function StartAntiAFK()
-        if antiAFKActive then return end
-        antiAFKActive = true
+        if antiAFKActive or antiAFKDelayActive then return end
+        
+        -- Tentukan delay awal
+        local initialDelay
+        
+        if antiAFKFirstRun then
+            -- Pertama kali auto-start: delay 10 menit (600 detik)
+            initialDelay = 600
+            antiAFKFirstRun = false
+            print("[AoneHub] ⏳ Anti-AFK: Delay 10 menit (auto-start awal)")
+        else
+            -- Di-on-kan manual: delay 15 menit (900 detik)
+            initialDelay = 900
+            print("[AoneHub] ⏳ Anti-AFK: Delay 15 menit (di-on-kan manual)")
+        end
+        
+        antiAFKDelayActive = true
         
         task.spawn(function()
-            while antiAFKActive and config.extraToggle2 do
-                -- Mobile: cek setiap 15 detik, PC: 30 detik
-                local checkInterval = isMobile and 15 or 30
-                task.wait(checkInterval)
-                
-                if not config.extraToggle2 then break end
-                
-                local idleTime = os.time() - lastUserActivity
-                
-                -- Mobile: idle threshold 3 menit, PC: 5 menit
-                local idleThreshold = isMobile and 180 or 300
-                
-                -- Cek apakah user idle
-                if idleTime > idleThreshold and not isDragging and os.time() >= antiAFKCooldown then
-                    -- Jalankan anti-AFK sesuai device
-                    if isMobile then
-                        MobileAntiAFK()
-                    else
-                        PCAntiAFK()
-                    end
-                    
-                    -- Cooldown: Mobile 5 menit, PC 10 menit
-                    antiAFKCooldown = os.time() + (isMobile and 300 or 600)
-                    
-                    print("[AoneHub] ✅ Anti-AFK action (idle " .. idleTime .. "s)")
+            -- Tunggu selama delay awal
+            local remainingDelay = initialDelay
+            
+            while remainingDelay > 0 do
+                if not config.extraToggle2 then
+                    -- Toggle dimatikan saat delay
+                    antiAFKDelayActive = false
+                    print("[AoneHub] ❌ Anti-AFK: Dibatalkan saat delay")
+                    return
                 end
+                
+                -- Update status setiap 60 detik
+                if remainingDelay % 60 == 0 or remainingDelay <= 10 then
+                    local minutes = math.floor(remainingDelay / 60)
+                    local seconds = remainingDelay % 60
+                    if minutes > 0 then
+                        print("[AoneHub] ⏳ Anti-AFK aktif dalam: " .. minutes .. " menit " .. seconds .. " detik")
+                    else
+                        print("[AoneHub] ⏳ Anti-AFK aktif dalam: " .. seconds .. " detik")
+                    end
+                end
+                
+                task.wait(1)
+                remainingDelay = remainingDelay - 1
             end
             
-            antiAFKActive = false
+            -- Delay selesai, mulai Anti-AFK
+            if config.extraToggle2 then
+                antiAFKDelayActive = false
+                antiAFKActive = true
+                print("[AoneHub] ✅ Anti-AFK: AKTIF!")
+                
+                -- Loop Anti-AFK
+                while antiAFKActive and config.extraToggle2 do
+                    PerformAntiAFKAction()
+                    
+                    -- Tunggu 7-10 menit sebelum simulasi lagi
+                    local waitTime = 420 + math.random() * 180
+                    
+                    -- Wait dengan pengecekan toggle
+                    local waited = 0
+                    while waited < waitTime and antiAFKActive and config.extraToggle2 do
+                        task.wait(1)
+                        waited = waited + 1
+                    end
+                end
+                
+                antiAFKActive = false
+            else
+                antiAFKDelayActive = false
+                print("[AoneHub] ❌ Anti-AFK: OFF (toggle dimatikan)")
+            end
         end)
-        
-        print("[AoneHub] ✅ Anti-AFK: ON (" .. (isMobile and "mobile" or "PC") .. " mode)")
     end
     
+    -- Fungsi untuk menghentikan Anti-AFK
     local function StopAntiAFK()
         antiAFKActive = false
+        antiAFKDelayActive = false
         print("[AoneHub] ❌ Anti-AFK: OFF")
     end
     
-    -- Monitor config.extraToggle2
+    -- Monitor config.extraToggle2 untuk perubahan
     task.spawn(function()
+        local lastToggleState = config.extraToggle2
+        
         while true do
             task.wait(0.5)
             
-            if config.extraToggle2 then
-                if not antiAFKActive then
-                    StartAntiAFK()
-                end
-            else
-                if antiAFKActive then
+            -- Deteksi perubahan toggle
+            if config.extraToggle2 ~= lastToggleState then
+                lastToggleState = config.extraToggle2
+                
+                if config.extraToggle2 then
+                    -- Toggle di-ON-kan manual
+                    if not antiAFKActive and not antiAFKDelayActive then
+                        antiAFKFirstRun = false  -- Ini manual, bukan auto-start
+                        StartAntiAFK()
+                    end
+                else
+                    -- Toggle di-OFF-kan
                     StopAntiAFK()
                 end
             end
         end
     end)
     
-    -- Auto-start jika config true
+    -- Auto-start jika config true (delay 10 menit)
     if config.extraToggle2 then
         task.delay(1, function()
-            StartAntiAFK()
-            print("[AoneHub] ✅ Anti-AFK auto-started!")
+            if config.extraToggle2 then
+                StartAntiAFK()
+                print("[AoneHub] ✅ Anti-AFK auto-started dengan delay 10 menit!")
+            end
         end)
     end
 end
