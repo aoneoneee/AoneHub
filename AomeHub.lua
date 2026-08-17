@@ -161,7 +161,7 @@ local function main()
     local sep = Instance.new("Frame"); sep.Size = UDim2.new(0.7, 0, 0, 1); sep.Position = UDim2.new(0.15, 0, 0, 26)
     sep.BackgroundColor3 = Color3.fromRGB(60, 60, 70); sep.BorderSizePixel = 0; sep.Parent = sidebar
 
-    local tabs = {{name="AutoBuy", label="🛒 Buy"}, {name="AutoSell", label="💰 Sell"}, {name="AutoMail", label="📧 Mail"}, {name="MailFruit", label="🎯 Fruit"}, {name="Ekstra", label="⚙️ Extra"}}
+    local tabs = {{name="Tools", label="🔧 Tools"}, {name="AutoBuy", label="🛒 Buy"}, {name="AutoSell", label="💰 Sell"}, {name="AutoMail", label="📧 Mail"}, {name="MailFruit", label="🎯 Fruit"}, {name="Ekstra", label="⚙️ Extra"}}
     local tabBtns = {}; local activeTab = nil
     for i, tab in ipairs(tabs) do
         local btn = Instance.new("TextButton"); btn.Size = UDim2.new(0.82, 0, 0, 22); btn.Position = UDim2.new(0.09, 0, 0, 30 + (i-1)*27)
