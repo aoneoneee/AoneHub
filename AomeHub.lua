@@ -115,37 +115,49 @@ local function main()
     local screenGui = Instance.new("ScreenGui"); screenGui.Name = "AoneHub"; screenGui.Parent = playerGui; screenGui.ResetOnSpawn = false
     screenGui.Destroying:Connect(function() config.isRunningBuy = isRunningBuy; config.isRunningSell = isRunningSell; config.toolsIsAutoSprinkler = false; config.toolsIsTrowelRunning = false; config.weightIsRunning = false; saveConfig() end)
 
-    -- Minimized Logo Button (Rounded Square dengan Image)
-local minimizedCircle = Instance.new("TextButton")
-minimizedCircle.Size = UDim2.new(0, 50, 0, 50)
-minimizedCircle.Position = UDim2.new(0.5, -25, 0.5, -25)
-minimizedCircle.Text = ""  -- Kosongkan text
-minimizedCircle.BackgroundColor3 = Color3.fromRGB(30, 30, 35)  -- Background gelap
-minimizedCircle.BorderSizePixel = 0
-minimizedCircle.Visible = false
-minimizedCircle.AutoButtonColor = false
-minimizedCircle.Draggable = true
-minimizedCircle.Parent = screenGui
+    -- ============================================
+-- MINIMIZED BUTTON - ROUNDED SQUARE DENGAN LOGO
+-- ============================================
+local minimizedBtn = Instance.new("TextButton")
+minimizedBtn.Size = UDim2.new(0, 65, 0, 65)  -- Ukuran 65x65
+minimizedBtn.Position = UDim2.new(0.5, -32.5, 0.5, -32.5)
+minimizedBtn.Text = ""
+minimizedBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
+minimizedBtn.BorderSizePixel = 0
+minimizedBtn.Visible = false
+minimizedBtn.AutoButtonColor = false
+minimizedBtn.Draggable = true
+minimizedBtn.Parent = screenGui
 
--- Rounded square corner (bukan circle penuh)
-Instance.new("UICorner", minimizedCircle).CornerRadius = UDim.new(0, 12)
+-- Rounded square dengan radius 12px
+Instance.new("UICorner", minimizedBtn).CornerRadius = UDim.new(0, 12)
 
--- Stroke/Outline
+-- Stroke/Outline dengan warna accent
 local minimizedStroke = Instance.new("UIStroke")
-minimizedStroke.Color = Color3.fromRGB(90, 140, 255)  -- Warna accent
+minimizedStroke.Color = C.accent
 minimizedStroke.Thickness = 2
-minimizedStroke.Transparency = 0
-minimizedStroke.Parent = minimizedCircle
+minimizedStroke.Transparency = 0.3
+minimizedStroke.Parent = minimizedBtn
 
 -- Logo Image
 local minimizedLogo = Instance.new("ImageLabel")
-minimizedLogo.Size = UDim2.new(1, -8, 1, -8)  -- Padding 4px dari tepi
-minimizedLogo.Position = UDim2.new(0, 4, 0, 4)
+minimizedLogo.Size = UDim2.new(1, -12, 1, -12)  -- Padding 6px dari setiap sisi
+minimizedLogo.Position = UDim2.new(0, 6, 0, 6)
 minimizedLogo.BackgroundTransparency = 1
-minimizedLogo.Image = "rbxassetid://78929291660435"
+minimizedLogo.Image = "rbxassetid://78929291660435"  -- Logo Anda
 minimizedLogo.ScaleType = Enum.ScaleType.Fit
-minimizedLogo.Parent = minimizedCircle
-Instance.new("UICorner", minimizedLogo).CornerRadius = UDim.new(0, 8)
+minimizedLogo.Parent = minimizedBtn
+
+-- Hover effect
+minimizedBtn.MouseEnter:Connect(function()
+    minimizedBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    minimizedStroke.Transparency = 0
+end)
+
+minimizedBtn.MouseLeave:Connect(function()
+    minimizedBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
+    minimizedStroke.Transparency = 0.3
+end)
     
     local mainFrame = Instance.new("Frame"); mainFrame.Size = UDim2.new(0, 580, 0, 300); mainFrame.Position = UDim2.new(0.5, -290, 0.5, -150)
     mainFrame.BackgroundColor3 = C.bg; mainFrame.BorderSizePixel = 0; mainFrame.ClipsDescendants = true
@@ -159,37 +171,26 @@ Instance.new("UICorner", minimizedLogo).CornerRadius = UDim.new(0, 8)
     local titleLabel = Instance.new("TextLabel"); titleLabel.Size = UDim2.new(0.6, 0, 1, 0); titleLabel.Position = UDim2.new(0, 12, 0, 0)
     titleLabel.Text = "AoneHub"; titleLabel.TextColor3 = C.text; titleLabel.Font = Enum.Font.GothamBold; titleLabel.TextSize = 11
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left; titleLabel.BackgroundTransparency = 1; titleLabel.Parent = titleBar
-    local minimizeBtn = Instance.new("TextButton"); minimizeBtn.Size = UDim2.new(0, 22, 0, 22); minimizeBtn.Position = UDim2.new(1, -50, 0, 3)
-    minimizeBtn.Text = "–"; minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200); minimizeBtn.Font = Enum.Font.GothamBold; minimizeBtn.TextSize = 14
-    minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); minimizeBtn.BorderSizePixel = 0; minimizeBtn.AutoButtonColor = false; minimizeBtn.Parent = titleBar
-    Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 4)
     
     local closeBtn = Instance.new("TextButton"); closeBtn.Size = UDim2.new(0, 22, 0, 22); closeBtn.Position = UDim2.new(1, -25, 0, 3)
+closlocal closeBtn = Instance.new("TextButton"); closeBtn.Size = UDim2.new(0, 22, 0, 22); closeBtn.Position = UDim2.new(1, -25, 0, 3)
 closeBtn.Text = "✕"; closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 11
 closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); closeBtn.BorderSizePixel = 0; closeBtn.AutoButtonColor = false; closeBtn.Parent = titleBar
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
 
+-- ============================================
+-- MINIMIZE HANDLERS (SETELAH minimizeBtn & closeBtn)
+-- ============================================
 minimizeBtn.MouseButton1Click:Connect(function()
-    minimizedCircle.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
+    minimizedBtn.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
     mainFrame.Visible = false
-    minimizedCircle.Visible = true
+    minimizedBtn.Visible = true
 end)
 
-minimizedCircle.MouseButton1Click:Connect(function()
-    mainFrame.Position = UDim2.new(0, minimizedCircle.AbsolutePosition.X, 0, minimizedCircle.AbsolutePosition.Y)
-    minimizedCircle.Visible = false
+minimizedBtn.MouseButton1Click:Connect(function()
+    mainFrame.Position = UDim2.new(0, minimizedBtn.AbsolutePosition.X, 0, minimizedBtn.AbsolutePosition.Y)
+    minimizedBtn.Visible = false
     mainFrame.Visible = true
-end)
-
--- Hover effect untuk minimized button
-minimizedCircle.MouseEnter:Connect(function()
-    minimizedCircle.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-    minimizedStroke.Color = Color3.fromRGB(120, 160, 255)
-end)
-
-minimizedCircle.MouseLeave:Connect(function()
-    minimizedCircle.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-    minimizedStroke.Color = Color3.fromRGB(90, 140, 255)
 end)
 
 closeBtn.MouseButton1Click:Connect(function() 
@@ -201,6 +202,7 @@ closeBtn.MouseButton1Click:Connect(function()
     saveConfig(); 
     screenGui:Destroy() 
 end)
+    
     local sidebar = Instance.new("Frame"); sidebar.Size = UDim2.new(0.2, 0, 1, -28); sidebar.Position = UDim2.new(0, 0, 0, 28)
     sidebar.BackgroundColor3 = C.sidebar; sidebar.BorderSizePixel = 0; sidebar.Parent = mainFrame; Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 10)
     local sidebarFill = Instance.new("Frame"); sidebarFill.Size = UDim2.new(1, 0, 0.3, 0); sidebarFill.Position = UDim2.new(0, 0, 0.85, 0)
