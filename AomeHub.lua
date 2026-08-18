@@ -2481,42 +2481,64 @@ do
     end
     
     -- Initialize
-    task.wait(2)
+task.wait(2)
+
+pcall(function()
+    SetupFruitWatcher()
+    SetupGardenWatcher()
+    SetupInventoryWatcher()
     
-    pcall(function()
-        SetupFruitWatcher()
-        SetupGardenWatcher()
-        SetupInventoryWatcher()
-        
-        UpdateCacheInBackground()
-        StartPeriodicUpdate()
-        
-        if config.extraToggle1 == true then
-            task.spawn(function()
-                pcall(function()
-                    valueCache.backpackTotal = CalculateBackpackTotalValue()
-                    valueCache.gardenTotal = CalculateGardenTotalValue()
-                    valueCache.lastBackpackUpdate = os.time()
-                    valueCache.lastGardenUpdate = os.time()
+    UpdateCacheInBackground()
+    StartPeriodicUpdate()
+    
+    if config.extraToggle1 == true then
+        task.spawn(function()
+            pcall(function()
+                valueCache.backpackTotal = CalculateBackpackTotalValue()
+                valueCache.gardenTotal = CalculateGardenTotalValue()
+                valueCache.lastBackpackUpdate = os.time()
+                valueCache.lastGardenUpdate = os.time()
+                
+                -- Cek dan buat frame
+                local backpackFrame = backpackGui:FindFirstChild("Backpack")
+                if backpackFrame then
+                    local inventory = backpackFrame:FindFirstChild("Inventory")
                     
-                    local backpackFrame = backpackGui:FindFirstChild("Backpack")
-                    if backpackFrame then
-                        local inventory = backpackFrame:FindFirstChild("Inventory")
-                        if inventory and inventory.Visible then
-                            CreateBackpackTotalFrame()
-                            CreateGardenTotalFrame()
+                    if inventory then
+                        -- SELALU buat frame (tidak peduli visibility)
+                        CreateBackpackTotalFrame()
+                        CreateGardenTotalFrame()
+                        
+                        -- Set visibility sesuai inventory
+                        local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                        if backpackTotal then
+                            backpackTotal.Visible = inventory.Visible
+                        end
+                        
+                        local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                        if gardenTotal then
+                            gardenTotal.Visible = inventory.Visible
+                        end
+                        
+                        -- Initialize slots jika visible
+                        if inventory.Visible then
                             InitializeAllSlots()
-                        end                    end
-                end)
+                        end
+                    else
+                        print("[AoneHub] ⚠️ Inventory tidak ditemukan!")
+                    end
+                else
+                    print("[AoneHub] ⚠️ BackpackFrame tidak ditemukan!")
+                end
             end)
-        else
-            pcall(CleanupAll)
-            print("[AoneHub] Value Display: OFF (default)")
-        end
-        
-        print("[AoneHub] ✅ Value Display system initialized!")
-    end)
-end
+        end)
+    else
+        pcall(CleanupAll)
+        print("[AoneHub] Value Display: OFF (default)")
+    end
+    
+    print("[AoneHub] ✅ Value Display system initialized!")
+end)
 
 -- ==================================================================
 -- ANTI-AFK SYSTEM (DENGAN DELAY AWAL)
