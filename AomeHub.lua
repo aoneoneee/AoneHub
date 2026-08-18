@@ -27,13 +27,13 @@ local function main()
         searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
         isRunningBuy = false, isRunningSell = false,
         selectedSellFruits = {}, sellTargets = {},
-        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = false, extraToggle3 = false, valueDisplayEnabled = false, toolsSprinklerSelected = {}, toolsSprinklerAmounts = {}, toolsWateringCan = "", toolsWateringInterval = 30, toolsTrowelSelected = {}, toolsTrowelInterval = 1.0, toolsIsAutoSprinkler = false, toolsIsTrowelRunning = false, weightSelectedPlants = {}, weightAllSelected = true, weightMaxWeight = 50, weightDelayMin = 1.0, weightDelayMax = 2.0, weightIsRunning = false, weightSearchText = "",
+        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = false, extraToggle3 = false, valueDisplayEnabled = false, toolsSprinklerSelected = {}, toolsSprinklerAmounts = {}, toolsWateringCan = "", toolsWateringInterval = 30, toolsTrowelSelected = {}, toolsTrowelInterval = 1.0, toolsIsAutoSprinkler = false, toolsIsTrowelRunning = false, weightSelectedPlants = {}, weightAllSelected = true, weightMaxWeight = 50, weightDelayMin = 1.0, weightDelayMax = 2.0, weightIsRunning = false, weightSearchText = "", farmSelectedFruits = {}, farmSelectedMutations = {}, farmIncludeNone = true, farmSearchText = "", farmMaxKg = 0, farmJitterMin = 0.5, farmJitterMax = 1.5, farmFruitAccordionOpen = true, farmMutationAccordionOpen = true,
     }
 
     local function loadConfig()
         local s, d = pcall(readfile, SAVE_FILE)
         if s and d then local s2, loaded = pcall(HttpService.JSONDecode, HttpService, d)
-            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; if config.extraToggle1 == nil then config.extraToggle1 = false end; if config.extraToggle2 == nil then config.extraToggle2 = false end; if config.extraToggle3 == nil then config.extraToggle3 = false end; if config.toolsSprinklerSelected == nil then config.toolsSprinklerSelected = {} end; if config.toolsSprinklerAmounts == nil then config.toolsSprinklerAmounts = {} end; if config.toolsWateringCan == nil then config.toolsWateringCan = "" end; if config.toolsWateringInterval == nil then config.toolsWateringInterval = 30 end; if config.toolsTrowelSelected == nil then config.toolsTrowelSelected = {} end; if config.toolsTrowelInterval == nil then config.toolsTrowelInterval = 1.0 end; if config.toolsIsAutoSprinkler == nil then config.toolsIsAutoSprinkler = false end; if config.toolsIsTrowelRunning == nil then config.toolsIsTrowelRunning = false end; if config.weightSelectedPlants == nil then config.weightSelectedPlants = {} end; if config.weightAllSelected == nil then config.weightAllSelected = true end; if config.weightMaxWeight == nil then config.weightMaxWeight = 50 end; if config.weightDelayMin == nil then config.weightDelayMin = 1.0 end; if config.weightDelayMax == nil then config.weightDelayMax = 2.0 end; if config.weightIsRunning == nil then config.weightIsRunning = false end; if config.weightSearchText == nil then config.weightSearchText = "" end; return true end
+            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; if config.extraToggle1 == nil then config.extraToggle1 = false end; if config.extraToggle2 == nil then config.extraToggle2 = false end; if config.extraToggle3 == nil then config.extraToggle3 = false end; if config.toolsSprinklerSelected == nil then config.toolsSprinklerSelected = {} end; if config.toolsSprinklerAmounts == nil then config.toolsSprinklerAmounts = {} end; if config.toolsWateringCan == nil then config.toolsWateringCan = "" end; if config.toolsWateringInterval == nil then config.toolsWateringInterval = 30 end; if config.toolsTrowelSelected == nil then config.toolsTrowelSelected = {} end; if config.toolsTrowelInterval == nil then config.toolsTrowelInterval = 1.0 end; if config.toolsIsAutoSprinkler == nil then config.toolsIsAutoSprinkler = false end; if config.toolsIsTrowelRunning == nil then config.toolsIsTrowelRunning = false end; if config.weightSelectedPlants == nil then config.weightSelectedPlants = {} end; if config.weightAllSelected == nil then config.weightAllSelected = true end; if config.weightMaxWeight == nil then config.weightMaxWeight = 50 end; if config.weightDelayMin == nil then config.weightDelayMin = 1.0 end; if config.weightDelayMax == nil then config.weightDelayMax = 2.0 end; if config.weightIsRunning == nil then config.weightIsRunning = false end; if config.weightSearchText == nil then config.weightSearchText = "" end; if config.farmSelectedFruits == nil then config.farmSelectedFruits = {} end; if config.farmSelectedMutations == nil then config.farmSelectedMutations = {} end; if config.farmIncludeNone == nil then config.farmIncludeNone = true end; if config.farmSearchText == nil then config.farmSearchText = "" end; if config.farmMaxKg == nil then config.farmMaxKg = 0 end; if config.farmJitterMin == nil then config.farmJitterMin = 0.5 end; if config.farmJitterMax == nil then config.farmJitterMax = 1.5 end; if config.farmFruitAccordionOpen == nil then config.farmFruitAccordionOpen = true end; if config.farmMutationAccordionOpen == nil then config.farmMutationAccordionOpen = true end; return true end
         end; return false
     end
     local function saveConfig()
@@ -161,7 +161,7 @@ local function main()
     local sep = Instance.new("Frame"); sep.Size = UDim2.new(0.7, 0, 0, 1); sep.Position = UDim2.new(0.15, 0, 0, 26)
     sep.BackgroundColor3 = Color3.fromRGB(60, 60, 70); sep.BorderSizePixel = 0; sep.Parent = sidebar
 
-    local tabs = {{name="Weight", label="⚖️ Weight"}, {name="Tools", label="🔧 Tools"}, {name="AutoBuy", label="🛒 Buy"}, {name="AutoSell", label="💰 Sell"}, {name="AutoMail", label="📧 Mail"}, {name="MailFruit", label="🎯 Fruit"}, {name="Ekstra", label="⚙️ Extra"}}
+    local tabs = {{name="Farm", label="🌾 Farm"}, {name="Weight", label="⚖️ Weight"}, {name="Tools", label="🔧 Tools"}, {name="AutoBuy", label="🛒 Buy"}, {name="AutoSell", label="💰 Sell"}, {name="AutoMail", label="📧 Mail"}, {name="MailFruit", label="🎯 Fruit"}, {name="Ekstra", label="⚙️ Extra"}}
     local tabBtns = {}; local activeTab = nil
     for i, tab in ipairs(tabs) do
         local btn = Instance.new("TextButton"); btn.Size = UDim2.new(0.82, 0, 0, 22); btn.Position = UDim2.new(0.09, 0, 0, 30 + (i-1)*27)
@@ -189,6 +189,832 @@ local function main()
     end
     for _, tab in ipairs(tabs) do tabBtns[tab.name].MouseButton1Click:Connect(function() switchTab(tab.name) end) end
 
+-- ==================================================================
+-- TAB FARM: AUTO HARVEST + SELL ALL + FAVORIT + MAX KG
+-- ==================================================================
+do
+    local parentFarm = tabFrames["Farm"]
+    
+    -- Load networking
+    local networkingFarm = safeRequire(ReplicatedStorage.SharedModules.Networking)
+    if not networkingFarm then
+        print("[AoneHub] ❌ Networking not found for Farm!")
+        return
+    end
+    
+    -- Load seed data
+    local allSeedNames = {}
+    pcall(function()
+        local mod = safeRequire(ReplicatedStorage.SharedModules.SeedData)
+        if mod then
+            for _, d in ipairs(mod) do
+                if d.SeedName and not d.MutationSeed then table.insert(allSeedNames, d.SeedName) end
+            end
+        end
+        table.sort(allSeedNames)
+    end)
+    
+    -- Load mutations
+    local allMutations = {}
+    pcall(function()
+        local mutationFolder = ReplicatedStorage.SharedModules:FindFirstChild("MutationData")
+        if mutationFolder then
+            for _, child in ipairs(mutationFolder:GetChildren()) do
+                if child:IsA("ModuleScript") then table.insert(allMutations, child.Name) end
+            end
+        end
+        table.sort(allMutations)
+    end)
+    
+    -- Load base weights
+    local BASE_WEIGHTS = {}
+    pcall(function()
+        local fruitsFolder = ReplicatedStorage:FindFirstChild("PlantGenerationModules")
+        if fruitsFolder then fruitsFolder = fruitsFolder:FindFirstChild("Fruits") end
+        if fruitsFolder then
+            for _, fruitModule in ipairs(fruitsFolder:GetChildren()) do
+                if fruitModule:IsA("ModuleScript") then
+                    pcall(function()
+                        local data = require(fruitModule)
+                        if data and data.GrowData and data.GrowData.BaseWeight then
+                            BASE_WEIGHTS[fruitModule.Name] = data.GrowData.BaseWeight
+                        end
+                    end)
+                end
+            end
+        end
+    end)
+    
+    local function getBaseWeight(seedName)
+        if BASE_WEIGHTS[seedName] then return BASE_WEIGHTS[seedName] end
+        local baseName = seedName:gsub("Maple ", "")
+        if BASE_WEIGHTS[baseName] then return BASE_WEIGHTS[baseName] end
+        return 10
+    end
+    
+    -- State
+    local selectedFruits = config.farmSelectedFruits or {}
+    local selectedMutations = config.farmSelectedMutations or {}
+    local includeNone = config.farmIncludeNone or true
+    local searchText = config.farmSearchText or ""
+    local maxKg = config.farmMaxKg or 0
+    local isRunning = false
+    local isAutoSellRunning = false
+    local jitterMin = config.farmJitterMin or 0.5
+    local jitterMax = config.farmJitterMax or 1.5
+    local fruitAccordionOpen = config.farmFruitAccordionOpen or true
+    local mutationAccordionOpen = config.farmMutationAccordionOpen or true
+    
+    -- Functions
+    local function hasSelection(tbl)
+        for _ in pairs(tbl) do return true end
+        return false
+    end
+    
+    local function findMyPlot()
+        local gardens = workspace:FindFirstChild("Gardens")
+        if not gardens then return nil end
+        for _, plot in ipairs(gardens:GetChildren()) do
+            if plot:IsA("Model") and plot:GetAttribute("OwnerUserId") == player.UserId then
+                return plot
+            end
+        end
+        return nil
+    end
+    
+    local function scanFruits()
+        local plot = findMyPlot()
+        if not plot then return {} end
+        local plantsFolder = plot:FindFirstChild("Plants")
+        if not plantsFolder then return {} end
+        
+        local fruits = {}
+        local hasFruitSelection = hasSelection(selectedFruits)
+        local hasMutationSelection = hasSelection(selectedMutations)
+        
+        if not hasFruitSelection and not hasMutationSelection then return {} end
+        
+        for _, plantModel in ipairs(plantsFolder:GetChildren()) do
+            if plantModel:IsA("Model") then
+                local seedName = plantModel:GetAttribute("SeedName")
+                if selectedFruits[seedName] then
+                    local fruitsFolder = plantModel:FindFirstChild("Fruits")
+                    if fruitsFolder then
+                        for _, fruitModel in ipairs(fruitsFolder:GetChildren()) do
+                            if fruitModel:IsA("Model") then
+                                local fruitId = fruitModel:GetAttribute("FruitId")
+                                local plantId = fruitModel:GetAttribute("PlantId")
+                                local mutation = fruitModel:GetAttribute("Mutation") or ""
+                                local sizeMulti = fruitModel:GetAttribute("SizeMulti") or 1
+                                local age = fruitModel:GetAttribute("Age")
+                                local maxAge = fruitModel:GetAttribute("MaxAge")
+                                
+                                local isRipe = true
+                                if age and maxAge then
+                                    isRipe = tonumber(age) >= tonumber(maxAge)
+                                end
+                                
+                                if fruitId and plantId and isRipe then
+                                    local totalWeight = getBaseWeight(seedName) * sizeMulti
+                                    
+                                    if maxKg <= 0 or totalWeight <= maxKg then
+                                        local mutationMatch = false
+                                        if not hasMutationSelection then
+                                            mutationMatch = true
+                                        elseif mutation == "" then
+                                            mutationMatch = includeNone
+                                        else
+                                            mutationMatch = selectedMutations[mutation] == true
+                                        end
+                                        
+                                        if mutationMatch then
+                                            table.insert(fruits, {
+                                                fruitId = fruitId,
+                                                plantId = plantId,
+                                                seedName = seedName,
+                                                mutation = mutation,
+                                            })
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        return fruits
+    end
+    
+    local function harvestFruit(plantId, fruitId)
+        pcall(function()
+            networkingFarm.Garden.CollectFruit:Fire(plantId, fruitId)
+        end)
+    end
+    
+    local function getFruitsInBackpackFiltered()
+        local result = {}
+        local bp = player:FindFirstChild("Backpack")
+        if not bp then return result end
+        
+        local hasFruitSelection = hasSelection(selectedFruits)
+        local hasMutationSelection = hasSelection(selectedMutations)
+        
+        for _, item in ipairs(bp:GetChildren()) do
+            if item:IsA("Tool") or item:IsA("Configuration") then
+                local fruitId = item:GetAttribute("Id")
+                local fruitName = item:GetAttribute("FruitName") or item.Name
+                local mutation = item:GetAttribute("Mutation") or ""
+                
+                if fruitId then
+                    local nameMatch = not hasFruitSelection or selectedFruits[fruitName]
+                    local mutationMatch = false
+                    
+                    if not hasMutationSelection then
+                        mutationMatch = true
+                    elseif mutation == "" then
+                        mutationMatch = includeNone
+                    else
+                        mutationMatch = selectedMutations[mutation] == true
+                    end
+                    
+                    if nameMatch and mutationMatch then
+                        table.insert(result, fruitId)
+                    end
+                end
+            end
+        end
+        
+        return result
+    end
+    
+    local function getAllFruitsInBackpack()
+        local result = {}
+        local bp = player:FindFirstChild("Backpack")
+        if bp then
+            for _, item in ipairs(bp:GetChildren()) do
+                if item:IsA("Tool") or item:IsA("Configuration") then
+                    local fruitId = item:GetAttribute("Id")
+                    if fruitId then table.insert(result, fruitId) end
+                end
+            end
+        end
+        return result
+    end
+    
+    local function favoriteFruit(fruitId)
+        pcall(function() networkingFarm.Backpack.SetFruitFavorite:Fire(fruitId, true) end)
+    end
+    
+    local function unfavoriteFruit(fruitId)
+        pcall(function() networkingFarm.Backpack.SetFruitFavorite:Fire(fruitId, false) end)
+    end
+    
+    -- ============================================
+    -- BUILD FARM UI
+    -- ============================================
+    local farmScroll = Instance.new("ScrollingFrame")
+    farmScroll.Size = UDim2.new(1, 0, 1, 0)
+    farmScroll.CanvasSize = UDim2.new(0, 0, 0, 700)
+    farmScroll.ScrollBarThickness = 3
+    farmScroll.BackgroundTransparency = 1
+    farmScroll.BorderSizePixel = 0
+    farmScroll.Parent = parentFarm
+    
+    local farmLayout = Instance.new("UIListLayout")
+    farmLayout.Padding = UDim.new(0, 4)
+    farmLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    farmLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    farmLayout.Parent = farmScroll
+    
+    -- Header
+    local farmHeader = Instance.new("TextLabel")
+    farmHeader.Size = UDim2.new(1, -12, 0, 20)
+    farmHeader.LayoutOrder = 1
+    farmHeader.Text = "🌾  Auto Harvest + Sell All + Favorit"
+    farmHeader.TextColor3 = C.text
+    farmHeader.Font = Enum.Font.GothamBold
+    farmHeader.TextSize = 10
+    farmHeader.TextXAlignment = Enum.TextXAlignment.Left
+    farmHeader.BackgroundTransparency = 1
+    farmHeader.Parent = farmScroll
+    
+    -- Status
+    local farmStatus = Instance.new("TextLabel")
+    farmStatus.Size = UDim2.new(1, -12, 0, 14)
+    farmStatus.LayoutOrder = 2
+    farmStatus.Text = "✅ SIAP"
+    farmStatus.TextColor3 = C.green
+    farmStatus.Font = Enum.Font.GothamBold
+    farmStatus.TextSize = 9
+    farmStatus.TextXAlignment = Enum.TextXAlignment.Left
+    farmStatus.BackgroundTransparency = 1
+    farmStatus.Parent = farmScroll
+    
+    -- Max KG
+    local maxKgLabel = Instance.new("TextLabel")
+    maxKgLabel.Size = UDim2.new(1, -12, 0, 12)
+    maxKgLabel.LayoutOrder = 3
+    maxKgLabel.Text = "🔽 Max KG (0 = semua):"
+    maxKgLabel.TextColor3 = C.textDim
+    maxKgLabel.Font = Enum.Font.Gotham
+    maxKgLabel.TextSize = 8
+    maxKgLabel.TextXAlignment = Enum.TextXAlignment.Left
+    maxKgLabel.BackgroundTransparency = 1
+    maxKgLabel.Parent = farmScroll
+    
+    local maxKgInput = Instance.new("TextBox")
+    maxKgInput.Size = UDim2.new(1, -12, 0, 22)
+    maxKgInput.LayoutOrder = 4
+    maxKgInput.BackgroundColor3 = C.input
+    maxKgInput.TextColor3 = C.text
+    maxKgInput.PlaceholderText = "0 = semua"
+    maxKgInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+    maxKgInput.Font = Enum.Font.Gotham
+    maxKgInput.TextSize = 10
+    maxKgInput.Text = tostring(maxKg)
+    maxKgInput.Parent = farmScroll
+    Instance.new("UICorner", maxKgInput).CornerRadius = UDim.new(0, 4)
+    
+    -- Jitter Inputs
+    local jitterMinInput = Instance.new("TextBox")
+    jitterMinInput.Size = UDim2.new(0.48, 0, 0, 22)
+    jitterMinInput.LayoutOrder = 5
+    jitterMinInput.BackgroundColor3 = C.input
+    jitterMinInput.TextColor3 = C.text
+    jitterMinInput.PlaceholderText = "Min (0.5)"
+    jitterMinInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+    jitterMinInput.Font = Enum.Font.Gotham
+    jitterMinInput.TextSize = 10
+    jitterMinInput.Text = tostring(jitterMin)
+    jitterMinInput.Parent = farmScroll
+    Instance.new("UICorner", jitterMinInput).CornerRadius = UDim.new(0, 4)
+    
+    local jitterMaxInput = Instance.new("TextBox")
+    jitterMaxInput.Size = UDim2.new(0.48, 0, 0, 22)
+    jitterMaxInput.LayoutOrder = 6
+    jitterMaxInput.BackgroundColor3 = C.input
+    jitterMaxInput.TextColor3 = C.text
+    jitterMaxInput.PlaceholderText = "Max (1.5)"
+    jitterMaxInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+    jitterMaxInput.Font = Enum.Font.Gotham
+    jitterMaxInput.TextSize = 10
+    jitterMaxInput.Text = tostring(jitterMax)
+    jitterMaxInput.Parent = farmScroll
+    Instance.new("UICorner", jitterMaxInput).CornerRadius = UDim.new(0, 4)
+    
+    -- Mutation Accordion
+    local mutationAccordion = Instance.new("TextButton")
+    mutationAccordion.Size = UDim2.new(1, -12, 0, 22)
+    mutationAccordion.LayoutOrder = 7
+    mutationAccordion.BackgroundColor3 = C.accordionProp
+    mutationAccordion.Text = mutationAccordionOpen and "🧬 Mutasi ▼" or "🧬 Mutasi ▶"
+    mutationAccordion.TextColor3 = C.text
+    mutationAccordion.Font = Enum.Font.GothamBold
+    mutationAccordion.TextSize = 9
+    mutationAccordion.BorderSizePixel = 0
+    mutationAccordion.AutoButtonColor = false
+    mutationAccordion.Parent = farmScroll
+    Instance.new("UICorner", mutationAccordion).CornerRadius = UDim.new(0, 3)
+    
+    -- Mutation List
+    local mutationListFrame = Instance.new("ScrollingFrame")
+    mutationListFrame.Size = UDim2.new(1, -12, 0, 80)
+    mutationListFrame.LayoutOrder = 8
+    mutationListFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+    mutationListFrame.BorderSizePixel = 0
+    mutationListFrame.ScrollBarThickness = 3
+    mutationListFrame.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 80)
+    mutationListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    mutationListFrame.Visible = mutationAccordionOpen
+    mutationListFrame.Parent = farmScroll
+    Instance.new("UICorner", mutationListFrame).CornerRadius = UDim.new(0, 3)
+    
+    local mutationListLayout = Instance.new("UIListLayout")
+    mutationListLayout.Padding = UDim.new(0, 1)
+    mutationListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    mutationListLayout.Parent = mutationListFrame
+    
+    -- Fruit Accordion
+    local fruitAccordion = Instance.new("TextButton")
+    fruitAccordion.Size = UDim2.new(1, -12, 0, 22)
+    fruitAccordion.LayoutOrder = 9
+    fruitAccordion.BackgroundColor3 = C.accordionSeed
+    fruitAccordion.Text = fruitAccordionOpen and "🍎 Buah ▼" or "🍎 Buah ▶"
+    fruitAccordion.TextColor3 = C.text
+    fruitAccordion.Font = Enum.Font.GothamBold
+    fruitAccordion.TextSize = 9
+    fruitAccordion.BorderSizePixel = 0
+    fruitAccordion.AutoButtonColor = false
+    fruitAccordion.Parent = farmScroll
+    Instance.new("UICorner", fruitAccordion).CornerRadius = UDim.new(0, 3)
+    
+    -- Search Box
+    local searchBox = Instance.new("TextBox")
+    searchBox.Size = UDim2.new(1, -12, 0, 20)
+    searchBox.LayoutOrder = 10
+    searchBox.BackgroundColor3 = C.input
+    searchBox.TextColor3 = C.text
+    searchBox.PlaceholderText = "🔍 Cari..."
+    searchBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+    searchBox.Font = Enum.Font.Gotham
+    searchBox.TextSize = 9
+    searchBox.Text = ""
+    searchBox.ClearTextOnFocus = false
+    searchBox.Visible = fruitAccordionOpen
+    searchBox.Parent = farmScroll
+    Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0, 3)
+    
+    -- Fruit List
+    local fruitListFrame = Instance.new("ScrollingFrame")
+    fruitListFrame.Size = UDim2.new(1, -12, 0, 90)
+    fruitListFrame.LayoutOrder = 11
+    fruitListFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+    fruitListFrame.BorderSizePixel = 0
+    fruitListFrame.ScrollBarThickness = 3
+    fruitListFrame.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 80)
+    fruitListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    fruitListFrame.Visible = fruitAccordionOpen
+    fruitListFrame.Parent = farmScroll
+    Instance.new("UICorner", fruitListFrame).CornerRadius = UDim.new(0, 3)
+    
+    local fruitListLayout = Instance.new("UIListLayout")
+    fruitListLayout.Padding = UDim.new(0, 1)
+    fruitListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    fruitListLayout.Parent = fruitListFrame
+    
+    -- Buttons
+    local harvestBtn = Instance.new("TextButton")
+    harvestBtn.Size = UDim2.new(1, -12, 0, 24)
+    harvestBtn.LayoutOrder = 12
+    harvestBtn.BackgroundColor3 = Color3.fromRGB(0, 160, 100)
+    harvestBtn.Text = "🍎 HARVEST SEKALI"
+    harvestBtn.TextColor3 = C.text
+    harvestBtn.Font = Enum.Font.GothamBold
+    harvestBtn.TextSize = 9
+    harvestBtn.BorderSizePixel = 0
+    harvestBtn.AutoButtonColor = false
+    harvestBtn.Parent = farmScroll
+    Instance.new("UICorner", harvestBtn).CornerRadius = UDim.new(0, 4)
+    
+    local autoHarvestBtn = Instance.new("TextButton")
+    autoHarvestBtn.Size = UDim2.new(1, -12, 0, 24)
+    autoHarvestBtn.LayoutOrder = 13
+    autoHarvestBtn.BackgroundColor3 = Color3.fromRGB(120, 60, 160)
+    autoHarvestBtn.Text = "🔄 MULAI AUTO HARVEST"
+    autoHarvestBtn.TextColor3 = C.text
+    autoHarvestBtn.Font = Enum.Font.GothamBold
+    autoHarvestBtn.TextSize = 9
+    autoHarvestBtn.BorderSizePixel = 0
+    autoHarvestBtn.AutoButtonColor = false
+    autoHarvestBtn.Parent = farmScroll
+    Instance.new("UICorner", autoHarvestBtn).CornerRadius = UDim.new(0, 4)
+    
+    local stopHarvestBtn = Instance.new("TextButton")
+    stopHarvestBtn.Size = UDim2.new(1, -12, 0, 24)
+    stopHarvestBtn.LayoutOrder = 14
+    stopHarvestBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+    stopHarvestBtn.Text = "⏸ BERHENTI"
+    stopHarvestBtn.TextColor3 = C.text
+    stopHarvestBtn.Font = Enum.Font.GothamBold
+    stopHarvestBtn.TextSize = 9
+    stopHarvestBtn.BorderSizePixel = 0
+    stopHarvestBtn.AutoButtonColor = false
+    stopHarvestBtn.Visible = false
+    stopHarvestBtn.Parent = farmScroll
+    Instance.new("UICorner", stopHarvestBtn).CornerRadius = UDim.new(0, 4)
+    
+    local autoSellBtn = Instance.new("TextButton")
+    autoSellBtn.Size = UDim2.new(1, -12, 0, 24)
+    autoSellBtn.LayoutOrder = 15
+    autoSellBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 180)
+    autoSellBtn.Text = "💰 MULAI AUTO SELL ALL (5s)"
+    autoSellBtn.TextColor3 = C.text
+    autoSellBtn.Font = Enum.Font.GothamBold
+    autoSellBtn.TextSize = 9
+    autoSellBtn.BorderSizePixel = 0
+    autoSellBtn.AutoButtonColor = false
+    autoSellBtn.Parent = farmScroll
+    Instance.new("UICorner", autoSellBtn).CornerRadius = UDim.new(0, 4)
+    
+    local favoriteBtn = Instance.new("TextButton")
+    favoriteBtn.Size = UDim2.new(1, -12, 0, 24)
+    favoriteBtn.LayoutOrder = 16
+    favoriteBtn.BackgroundColor3 = Color3.fromRGB(200, 150, 0)
+    favoriteBtn.Text = "⭐ FAVORIT (KOSONG=ALL)"
+    favoriteBtn.TextColor3 = C.text
+    favoriteBtn.Font = Enum.Font.GothamBold
+    favoriteBtn.TextSize = 9
+    favoriteBtn.BorderSizePixel = 0
+    favoriteBtn.AutoButtonColor = false
+    favoriteBtn.Parent = farmScroll
+    Instance.new("UICorner", favoriteBtn).CornerRadius = UDim.new(0, 4)
+    
+    local unfavBtn = Instance.new("TextButton")
+    unfavBtn.Size = UDim2.new(1, -12, 0, 24)
+    unfavBtn.LayoutOrder = 17
+    unfavBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 110)
+    unfavBtn.Text = "🗑 UNFAVORIT SEMUA"
+    unfavBtn.TextColor3 = C.text
+    unfavBtn.Font = Enum.Font.GothamBold
+    unfavBtn.TextSize = 9
+    unfavBtn.BorderSizePixel = 0
+    unfavBtn.AutoButtonColor = false
+    unfavBtn.Parent = farmScroll
+    Instance.new("UICorner", unfavBtn).CornerRadius = UDim.new(0, 4)
+    
+    -- ============================================
+    -- REFRESH FUNCTIONS
+    -- ============================================
+    local function refreshMutationList()
+        for _, child in ipairs(mutationListFrame:GetChildren()) do
+            if child:IsA("Frame") then child:Destroy() end
+        end
+        
+        mutationListFrame.CanvasSize = UDim2.new(0, 0, 0, (#allMutations + 1) * 19 + 4)
+        
+        -- "None" option
+        local noneSelected = includeNone
+        local noneRow = Instance.new("Frame", mutationListFrame)
+        noneRow.Size = UDim2.new(1, -8, 0, 17)
+        noneRow.BackgroundColor3 = noneSelected and Color3.fromRGB(40, 60, 45) or Color3.fromRGB(38, 38, 44)
+        noneRow.BorderSizePixel = 0
+        Instance.new("UICorner", noneRow).CornerRadius = UDim.new(0, 2)
+        
+        local noneCb = Instance.new("TextButton", noneRow)
+        noneCb.Size = UDim2.new(0, 12, 0, 12); noneCb.Position = UDim2.new(0, 3, 0.5, -6)
+        noneCb.BackgroundColor3 = noneSelected and Color3.fromRGB(0, 160, 80) or Color3.fromRGB(55, 55, 60)
+        noneCb.Text = noneSelected and "✓" or ""; noneCb.TextColor3 = C.text
+        noneCb.Font = Enum.Font.GothamBold; noneCb.TextSize = 8; noneCb.BorderSizePixel = 0
+        Instance.new("UICorner", noneCb).CornerRadius = UDim.new(0, 2)
+        
+        local noneLb = Instance.new("TextLabel", noneRow)
+        noneLb.Size = UDim2.new(1, -16, 1, 0); noneLb.Position = UDim2.new(0, 17, 0, 0)
+        noneLb.BackgroundTransparency = 1; noneLb.Text = "None"
+        noneLb.TextColor3 = noneSelected and Color3.fromRGB(200, 255, 200) or Color3.fromRGB(200, 200, 200)
+        noneLb.Font = Enum.Font.Gotham; noneLb.TextSize = 8; noneLb.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local function toggleNone()
+            includeNone = not includeNone
+            config.farmIncludeNone = includeNone
+            saveConfig()
+            refreshMutationList()
+        end
+        noneCb.MouseButton1Click:Connect(toggleNone)
+        noneRow.InputBegan:Connect(function(input) 
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then toggleNone() end 
+        end)
+        
+        -- Mutation list
+        for _, mutation in ipairs(allMutations) do
+            local isSelected = selectedMutations[mutation] == true
+            local row = Instance.new("Frame", mutationListFrame)
+            row.Size = UDim2.new(1, -8, 0, 17)
+            row.BackgroundColor3 = isSelected and Color3.fromRGB(40, 60, 45) or Color3.fromRGB(38, 38, 44)
+            row.BorderSizePixel = 0
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 2)
+            
+            local cb = Instance.new("TextButton", row)
+            cb.Size = UDim2.new(0, 12, 0, 12); cb.Position = UDim2.new(0, 3, 0.5, -6)
+            cb.BackgroundColor3 = isSelected and Color3.fromRGB(0, 160, 80) or Color3.fromRGB(55, 55, 60)
+            cb.Text = isSelected and "✓" or ""; cb.TextColor3 = C.text
+            cb.Font = Enum.Font.GothamBold; cb.TextSize = 8; cb.BorderSizePixel = 0
+            Instance.new("UICorner", cb).CornerRadius = UDim.new(0, 2)
+            
+            local lb = Instance.new("TextLabel", row)
+            lb.Size = UDim2.new(1, -16, 1, 0); lb.Position = UDim2.new(0, 17, 0, 0)
+            lb.BackgroundTransparency = 1; lb.Text = mutation
+            lb.TextColor3 = isSelected and Color3.fromRGB(200, 255, 200) or Color3.fromRGB(200, 200, 200)
+            lb.Font = Enum.Font.Gotham; lb.TextSize = 8; lb.TextXAlignment = Enum.TextXAlignment.Left
+            
+            local function toggle()
+                selectedMutations[mutation] = not selectedMutations[mutation]
+                config.farmSelectedMutations[mutation] = selectedMutations[mutation]
+                saveConfig()
+                refreshMutationList()
+            end
+            cb.MouseButton1Click:Connect(toggle)
+            row.InputBegan:Connect(function(input) 
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then toggle() end 
+            end)
+        end
+    end
+    
+    local function refreshFruitList()
+        for _, child in ipairs(fruitListFrame:GetChildren()) do
+            if child:IsA("Frame") then child:Destroy() end
+        end
+        
+        local sorted = {}
+        for _, name in ipairs(allSeedNames) do table.insert(sorted, name) end
+        table.sort(sorted, function(a, b)
+            local aSel = selectedFruits[a] and 1 or 0
+            local bSel = selectedFruits[b] and 1 or 0
+            if aSel ~= bSel then return aSel > bSel end
+            return a < b
+        end)
+        
+        local filtered = {}
+        for _, name in ipairs(sorted) do
+            if searchText == "" or name:lower():find(searchText) then table.insert(filtered, name) end
+        end
+        
+        fruitListFrame.CanvasSize = UDim2.new(0, 0, 0, #filtered * 19 + 4)
+        
+        for _, name in ipairs(filtered) do
+            local isSelected = selectedFruits[name] == true
+            local row = Instance.new("Frame", fruitListFrame)
+            row.Size = UDim2.new(1, -8, 0, 17)
+            row.BackgroundColor3 = isSelected and Color3.fromRGB(40, 60, 45) or Color3.fromRGB(38, 38, 44)
+            row.BorderSizePixel = 0
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 2)
+            
+            local cb = Instance.new("TextButton", row)
+            cb.Size = UDim2.new(0, 12, 0, 12); cb.Position = UDim2.new(0, 3, 0.5, -6)
+            cb.BackgroundColor3 = isSelected and Color3.fromRGB(0, 160, 80) or Color3.fromRGB(55, 55, 60)
+            cb.Text = isSelected and "✓" or ""; cb.TextColor3 = C.text
+            cb.Font = Enum.Font.GothamBold; cb.TextSize = 8; cb.BorderSizePixel = 0
+            Instance.new("UICorner", cb).CornerRadius = UDim.new(0, 2)
+            
+            local lb = Instance.new("TextLabel", row)
+            lb.Size = UDim2.new(1, -16, 1, 0); lb.Position = UDim2.new(0, 17, 0, 0)
+            lb.BackgroundTransparency = 1; lb.Text = name
+            lb.TextColor3 = isSelected and Color3.fromRGB(200, 255, 200) or Color3.fromRGB(200, 200, 200)
+            lb.Font = Enum.Font.Gotham; lb.TextSize = 8; lb.TextXAlignment = Enum.TextXAlignment.Left
+            
+            local function toggle()
+                selectedFruits[name] = not selectedFruits[name]
+                config.farmSelectedFruits[name] = selectedFruits[name]
+                saveConfig()
+                refreshFruitList()
+            end
+            cb.MouseButton1Click:Connect(toggle)
+            row.InputBegan:Connect(function(input) 
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then toggle() end 
+            end)
+        end
+    end
+    
+    -- ============================================
+    -- HARVEST FUNCTIONS
+    -- ============================================
+    local function doHarvestOnce()
+        jitterMin = tonumber(jitterMinInput.Text) or 0.5
+        jitterMax = tonumber(jitterMaxInput.Text) or 1.5
+        maxKg = tonumber(maxKgInput.Text) or 0
+        
+        config.farmJitterMin = jitterMin
+        config.farmJitterMax = jitterMax
+        config.farmMaxKg = maxKg
+        saveConfig()
+        
+        local fruits = scanFruits()
+        
+        if #fruits == 0 then
+            farmStatus.Text = "✅ Tidak ada buah"
+            farmStatus.TextColor3 = C.green
+            return
+        end
+        
+        for i, fruit in ipairs(fruits) do
+            if not isRunning then break end
+            farmStatus.Text = "🍎 #" .. i .. "/" .. #fruits
+            harvestFruit(fruit.plantId, fruit.fruitId)
+            
+            if i < #fruits and isRunning then
+                task.wait(math.random(jitterMin * 10, jitterMax * 10) / 10)
+            end
+        end
+        
+        farmStatus.Text = "✅ Selesai! " .. #fruits .. " buah"
+        farmStatus.TextColor3 = C.green
+    end
+    
+    -- ============================================
+    -- BUTTON HANDLERS
+    -- ============================================
+    mutationAccordion.MouseButton1Click:Connect(function()
+        mutationAccordionOpen = not mutationAccordionOpen
+        config.farmMutationAccordionOpen = mutationAccordionOpen
+        saveConfig()
+        mutationAccordion.Text = mutationAccordionOpen and "🧬 Mutasi ▼" or "🧬 Mutasi ▶"
+        mutationListFrame.Visible = mutationAccordionOpen
+    end)
+    
+    fruitAccordion.MouseButton1Click:Connect(function()
+        fruitAccordionOpen = not fruitAccordionOpen
+        config.farmFruitAccordionOpen = fruitAccordionOpen
+        saveConfig()
+        fruitAccordion.Text = fruitAccordionOpen and "🍎 Buah ▼" or "🍎 Buah ▶"
+        searchBox.Visible = fruitAccordionOpen
+        fruitListFrame.Visible = fruitAccordionOpen
+    end)
+    
+    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        searchText = searchBox.Text:lower()
+        config.farmSearchText = searchText
+        saveConfig()
+        refreshFruitList()
+    end)
+    
+    harvestBtn.MouseButton1Click:Connect(function()
+        if isRunning then return end
+        isRunning = true
+        farmStatus.Text = "🔍 Scanning..."
+        farmStatus.TextColor3 = C.yellow
+        
+        task.spawn(function()
+            doHarvestOnce()
+            isRunning = false
+        end)
+    end)
+    
+    autoHarvestBtn.MouseButton1Click:Connect(function()
+        if isRunning then return end
+        isRunning = true
+        harvestBtn.Visible = false
+        autoHarvestBtn.Visible = false
+        stopHarvestBtn.Visible = true
+        farmStatus.Text = "🔄 Auto..."
+        farmStatus.TextColor3 = C.green
+        
+        task.spawn(function()
+            while isRunning do
+                maxKg = tonumber(maxKgInput.Text) or 0
+                local fruits = scanFruits()
+                
+                if #fruits == 0 then
+                    farmStatus.Text = "✅ Tidak ada, jeda 10s"
+                    farmStatus.TextColor3 = C.green
+                    
+                    for t = 10, 1, -1 do
+                        if not isRunning then break end
+                        task.wait(1)
+                    end
+                else
+                    doHarvestOnce()
+                    farmStatus.Text = "✅ Scan ulang..."
+                    farmStatus.TextColor3 = C.yellow
+                    task.wait(2)
+                end
+            end
+            
+            harvestBtn.Visible = true
+            autoHarvestBtn.Visible = true
+            stopHarvestBtn.Visible = false
+            farmStatus.Text = "⏸ Berhenti"
+            farmStatus.TextColor3 = C.yellow
+        end)
+    end)
+    
+    stopHarvestBtn.MouseButton1Click:Connect(function()
+        isRunning = false
+    end)
+    
+    autoSellBtn.MouseButton1Click:Connect(function()
+        isAutoSellRunning = not isAutoSellRunning
+        
+        if isAutoSellRunning then
+            autoSellBtn.Text = "⏸ BERHENTI AUTO SELL"
+            autoSellBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+            farmStatus.Text = "💰 Sell all aktif"
+            farmStatus.TextColor3 = C.green
+            
+            task.spawn(function()
+                while isAutoSellRunning do
+                    pcall(function() networkingFarm.NPCS.SellAll:Fire() end)
+                    task.wait(5)
+                end
+            end)
+        else
+            autoSellBtn.Text = "💰 MULAI AUTO SELL ALL (5s)"
+            autoSellBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 180)
+            farmStatus.Text = "💰 Sell all berhenti"
+            farmStatus.TextColor3 = C.yellow
+        end
+    end)
+    
+    favoriteBtn.MouseButton1Click:Connect(function()
+        local fruits = getFruitsInBackpackFiltered()
+        
+        if #fruits == 0 then
+            farmStatus.Text = "❌ Tidak ada fruit"
+            farmStatus.TextColor3 = C.red
+            return
+        end
+        
+        farmStatus.Text = "⭐ Favoriting..."
+        farmStatus.TextColor3 = C.yellow
+        
+        task.spawn(function()
+            for _, fruitId in ipairs(fruits) do
+                favoriteFruit(fruitId)
+                task.wait(0.1)
+            end
+            
+            farmStatus.Text = "✅ " .. #fruits .. " difavoritkan"
+            farmStatus.TextColor3 = C.green
+        end)
+    end)
+    
+    unfavBtn.MouseButton1Click:Connect(function()
+        farmStatus.Text = "🗑 Unfavoriting..."
+        farmStatus.TextColor3 = C.yellow
+        
+        task.spawn(function()
+            local fruits = getAllFruitsInBackpack()
+            
+            for _, fruitId in ipairs(fruits) do
+                unfavoriteFruit(fruitId)
+                task.wait(0.1)
+            end
+            
+            farmStatus.Text = "✅ Semua unfavorit"
+            farmStatus.TextColor3 = C.green
+        end)
+    end)
+    
+    maxKgInput.FocusLost:Connect(function()
+        local val = tonumber(maxKgInput.Text)
+        if val and val >= 0 then
+            maxKg = val
+            config.farmMaxKg = val
+            saveConfig()
+        else
+            maxKgInput.Text = tostring(maxKg)
+        end
+    end)
+    
+    jitterMinInput.FocusLost:Connect(function()
+        local val = tonumber(jitterMinInput.Text)
+        if val and val > 0 then
+            jitterMin = val
+            config.farmJitterMin = val
+            saveConfig()
+        else
+            jitterMinInput.Text = tostring(jitterMin)
+        end
+    end)
+    
+    jitterMaxInput.FocusLost:Connect(function()
+        local val = tonumber(jitterMaxInput.Text)
+        if val and val > 0 then
+            jitterMax = val
+            config.farmJitterMax = val
+            saveConfig()
+        else
+            jitterMaxInput.Text = tostring(jitterMax)
+        end
+    end)
+    
+    -- Initialize
+    refreshMutationList()
+    refreshFruitList()
+    
+    print("[AoneHub] ✅ Farm tab ready!")
+    end
+    
 -- ==================================================================
 -- TAB WEIGHT: AUTO SHOVEL
 -- ==================================================================
