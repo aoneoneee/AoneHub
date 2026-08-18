@@ -814,27 +814,45 @@ do
     waterClickArea.Parent = waterDropdown
     waterClickArea.MouseButton1Click:Connect(function() waterList.Visible = not waterList.Visible end)
     
-    for _, wcName in ipairs(wateringCanNames) do
-        local opt = Instance.new("TextButton")
-        opt.Size = UDim2.new(1, -4, 0, 20)
-        opt.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-        opt.Text = wcName
-        opt.TextColor3 = Color3.fromRGB(200, 200, 200)
-        opt.Font = Enum.Font.Gotham
-        opt.TextSize = 9
-        opt.BorderSizePixel = 0
-        opt.ZIndex = 10
-        opt.Parent = waterList
-        opt.MouseButton1Click:Connect(function()
-            selectedWateringCan = wcName
-            config.toolsWateringCan = wcName
-            saveConfig()
-            waterLabelBtn.Text = wcName
-            waterLabelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            waterList.Visible = false
-        end)
+    -- Refresh watering can dropdown dengan stock
+    local function refreshWateringCanList()
+        for _, child in ipairs(waterList:GetChildren()) do
+            if child:IsA("TextButton") then child:Destroy() end
+        end
+    
+        for _, wcName in ipairs(wateringCanNames) do
+            local stock = getWateringCanStock(wcName)
+        
+            local opt = Instance.new("TextButton", waterList)
+            opt.Size = UDim2.new(1, -4, 0, 20)
+            opt.BackgroundColor3 = stock > 0 and Color3.fromRGB(40, 40, 45) or Color3.fromRGB(30, 25, 25)
+            opt.Text = wcName .. " (x" .. stock .. ")"
+            opt.TextColor3 = stock > 0 and Color3.fromRGB(200, 200, 200) or Color3.fromRGB(120, 100, 100)
+            opt.Font = Enum.Font.Gotham
+            opt.TextSize = 9
+            opt.BorderSizePixel = 0
+            opt.ZIndex = 10
+        
+            opt.MouseButton1Click:Connect(function()
+                if stock <= 0 then
+                    toolsStatus.Text = "❌ " .. wcName .. " habis!"
+                    toolsStatus.TextColor3 = C.red
+                    return
+                end
+                selectedWateringCan = wcName
+                config.toolsWateringCan = wcName
+                saveConfig()
+                waterLabelBtn.Text = wcName
+                waterLabelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                waterList.Visible = false
+            end)
+        end
+    
+        waterList.CanvasSize = UDim2.new(0, 0, 0, #wateringCanNames * 21 + 4)
     end
-    waterList.CanvasSize = UDim2.new(0, 0, 0, #wateringCanNames * 21 + 4)
+
+    -- Panggil refreshWateringCanList sebagai ganti loop lama
+    refreshWateringCanList()
     
     -- Interval Input
     local intervalInput = Instance.new("TextBox")
@@ -1197,17 +1215,73 @@ do
         autoRunning = false 
     end)
     
+    -- Fungsi untuk cek stock watering can
+    local function getWateringCanStock(waterCanName)
+        local total = 0
+        local bp = player:FindFirstChild("Backpack")
+        if bp then
+            local tool = bp:FindFirstChild(waterCanName)
+            if tool then
+                local count = tool:GetAttribute("Count")
+                if count and type(count) == "number" then 
+                    total = total + count 
+                else 
+                    total = total + 1 
+                end
+            end
+        end
+        local char = player.Character
+        if char then
+            local tool = char:FindFirstChild(waterCanName)
+            if tool then
+                local count = tool:GetAttribute("Count")
+                if count and type(count) == "number" then 
+                    total = total + count 
+                else 
+                   total = total + 1 
+                end
+            end
+        end
+        return total
+    end
+
+    -- Fungsi untuk stop auto watering
+    local function stopAutoWatering()
+        isAutoWateringRunning = false
+        config.toolsIsAutoWatering = false
+        saveConfig()
+        autoWaterBtn.Text = "🚿 AUTO WATER"
+        autoWaterBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 220)
+        toolsStatus.Text = "🚿 Watering berhenti"
+        toolsStatus.TextColor3 = C.yellow
+    end
+
     autoWaterBtn.MouseButton1Click:Connect(function()
         isAutoWateringRunning = not isAutoWateringRunning
         config.toolsIsAutoWatering = isAutoWateringRunning
         saveConfig()
-        
+    
         if isAutoWateringRunning then
             if selectedWateringCan == "" then 
                 toolsStatus.Text = "❌ Pilih watering can!"; 
-                isAutoWateringRunning = false; 
+                toolsStatus.TextColor3 = C.red
+                isAutoWateringRunning = false
+                config.toolsIsAutoWatering = false
+                saveConfig()
                 return 
             end
+        
+            -- CEK STOCK SEBELUM MULAI
+            local stock = getWateringCanStock(selectedWateringCan)
+            if stock <= 0 then
+                toolsStatus.Text = "❌ " .. selectedWateringCan .. " habis!"
+                toolsStatus.TextColor3 = C.red
+                isAutoWateringRunning = false
+                config.toolsIsAutoWatering = false
+                saveConfig()
+                return
+            end
+        
             wateringInterval = tonumber(intervalInput.Text) or 30
             config.toolsWateringInterval = wateringInterval
             saveConfig()
@@ -1215,20 +1289,46 @@ do
             autoWaterBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
             toolsStatus.Text = "🚿 Watering aktif"
             toolsStatus.TextColor3 = C.green
-            
+        
             task.spawn(function()
+                local failedCount = 0  // Counter gagal
+            
                 while isAutoWateringRunning do
                     if selectedWateringCan ~= "" then
-                        useWateringCan(selectedWateringCan)
+                        -- CEK STOCK SETIAP KALI SEBELUM USE
+                        local currentStock = getWateringCanStock(selectedWateringCan)
+                    
+                        if currentStock <= 0 then
+                            toolsStatus.Text = "❌ " .. selectedWateringCan .. " habis!"
+                            toolsStatus.TextColor3 = C.red
+                            stopAutoWatering()
+                            break
+                        end
+                    
+                        local success = useWateringCan(selectedWateringCan)
+                    
+                        if not success then
+                            failedCount = failedCount + 1
+                            toolsStatus.Text = "⚠️ Gagal equip (" .. failedCount .. "/3)"
+                            toolsStatus.TextColor3 = C.yellow
+                        
+                            -- Jika gagal 3 kali berturut-turut, stop
+                            if failedCount >= 3 then
+                                toolsStatus.Text = "❌ Watering can tidak bisa di-equip!"
+                                toolsStatus.TextColor3 = C.red
+                                stopAutoWatering()
+                                break
+                            end
+                        else
+                            failedCount = 0  // Reset counter jika berhasil
+                        end
                     end
+                
                     task.wait(wateringInterval)
                 end
             end)
         else
-            autoWaterBtn.Text = "🚿 AUTO WATER"
-            autoWaterBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 220)
-            toolsStatus.Text = "🚿 Watering berhenti"
-            toolsStatus.TextColor3 = C.yellow
+            stopAutoWatering()
         end
     end)
     
