@@ -175,23 +175,36 @@ local function main()
     minimizeBtn.Text = "–"; minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200); minimizeBtn.Font = Enum.Font.GothamBold; minimizeBtn.TextSize = 14
     minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); minimizeBtn.BorderSizePixel = 0; minimizeBtn.AutoButtonColor = false; minimizeBtn.Parent = titleBar
     Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 4)
+    
     local closeBtn = Instance.new("TextButton"); closeBtn.Size = UDim2.new(0, 22, 0, 22); closeBtn.Position = UDim2.new(1, -25, 0, 3)
-    closeBtn.Text = "✕"; closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 11
-    closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); closeBtn.BorderSizePixel = 0; closeBtn.AutoButtonColor = false; closeBtn.Parent = titleBar
-    Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4) 
-    minimizedBtn.MouseButton1Click:Connect(function()
-        minimizedBtn.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
-        mainFrame.Visible = false
-        minimizedBtn.Visible = true
-    end)
+closeBtn.Text = "✕"; closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 11
+closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); closeBtn.BorderSizePixel = 0; closeBtn.AutoButtonColor = false; closeBtn.Parent = titleBar
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
 
-    minimizedBtn.MouseButton1Click:Connect(function()
-        mainFrame.Position = UDim2.new(0, minimizedBtn.AbsolutePosition.X, 0, minimizedBtn.AbsolutePosition.Y)
-        minimizedBtn.Visible = false
-        mainFrame.Visible = true
-    end)
-    closeBtn.MouseButton1Click:Connect(function() config.isRunningBuy=isRunningBuy; config.isRunningSell=isRunningSell; saveConfig(); screenGui:Destroy() end)
+-- ============================================
+-- MINIMIZE HANDLERS (SETELAH minimizeBtn & closeBtn)
+-- ============================================
+minimizeBtn.MouseButton1Click:Connect(function()
+    minimizedBtn.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
+    mainFrame.Visible = false
+    minimizedBtn.Visible = true
+end)
 
+minimizedBtn.MouseButton1Click:Connect(function()
+    mainFrame.Position = UDim2.new(0, minimizedBtn.AbsolutePosition.X, 0, minimizedBtn.AbsolutePosition.Y)
+    minimizedBtn.Visible = false
+    mainFrame.Visible = true
+end)
+
+closeBtn.MouseButton1Click:Connect(function() 
+    config.isRunningBuy=isRunningBuy; 
+    config.isRunningSell=isRunningSell; 
+    config.toolsIsAutoSprinkler = false
+    config.toolsIsTrowelRunning = false
+    config.weightIsRunning = false
+    saveConfig(); 
+    screenGui:Destroy() 
+end)
     local sidebar = Instance.new("Frame"); sidebar.Size = UDim2.new(0.2, 0, 1, -28); sidebar.Position = UDim2.new(0, 0, 0, 28)
     sidebar.BackgroundColor3 = C.sidebar; sidebar.BorderSizePixel = 0; sidebar.Parent = mainFrame; Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 10)
     local sidebarFill = Instance.new("Frame"); sidebarFill.Size = UDim2.new(1, 0, 0.3, 0); sidebarFill.Position = UDim2.new(0, 0, 0.85, 0)
