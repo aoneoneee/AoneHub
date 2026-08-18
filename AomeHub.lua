@@ -147,17 +147,6 @@ minimizedLogo.BackgroundTransparency = 1
 minimizedLogo.Image = "rbxassetid://78929291660435"  -- Logo Anda
 minimizedLogo.ScaleType = Enum.ScaleType.Fit
 minimizedLogo.Parent = minimizedBtn
-
--- Hover effect
-minimizedBtn.MouseEnter:Connect(function()
-    minimizedBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-    minimizedStroke.Transparency = 0
-end)
-
-minimizedBtn.MouseLeave:Connect(function()
-    minimizedBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
-    minimizedStroke.Transparency = 0.3
-end)
     
     local mainFrame = Instance.new("Frame"); mainFrame.Size = UDim2.new(0, 580, 0, 300); mainFrame.Position = UDim2.new(0.5, -290, 0.5, -150)
     mainFrame.BackgroundColor3 = C.bg; mainFrame.BorderSizePixel = 0; mainFrame.ClipsDescendants = true
@@ -171,38 +160,38 @@ end)
     local titleLabel = Instance.new("TextLabel"); titleLabel.Size = UDim2.new(0.6, 0, 1, 0); titleLabel.Position = UDim2.new(0, 12, 0, 0)
     titleLabel.Text = "AoneHub"; titleLabel.TextColor3 = C.text; titleLabel.Font = Enum.Font.GothamBold; titleLabel.TextSize = 11
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left; titleLabel.BackgroundTransparency = 1; titleLabel.Parent = titleBar
-    
+    local minimizeBtn = Instance.new("TextButton"); minimizeBtn.Size = UDim2.new(0, 22, 0, 22); minimizeBtn.Position = UDim2.new(1, -50, 0, 3)
+    minimizeBtn.Text = "–"; minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200); minimizeBtn.Font = Enum.Font.GothamBold; minimizeBtn.TextSize = 14
+    minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); minimizeBtn.BorderSizePixel = 0; minimizeBtn.AutoButtonColor = false; minimizeBtn.Parent = titleBar
+    Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 4)
     local closeBtn = Instance.new("TextButton"); closeBtn.Size = UDim2.new(0, 22, 0, 22); closeBtn.Position = UDim2.new(1, -25, 0, 3)
-closlocal closeBtn = Instance.new("TextButton"); closeBtn.Size = UDim2.new(0, 22, 0, 22); closeBtn.Position = UDim2.new(1, -25, 0, 3)
-closeBtn.Text = "✕"; closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 11
-closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); closeBtn.BorderSizePixel = 0; closeBtn.AutoButtonColor = false; closeBtn.Parent = titleBar
-Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
+    closeBtn.Text = "✕"; closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 11
+    closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); closeBtn.BorderSizePixel = 0; closeBtn.AutoButtonColor = false; closeBtn.Parent = titleBar
+    Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4) 
+    minimizeBtn.MouseButton1Click:Connect(function()
+        minimizedBtn.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
+        mainFrame.Visible = false
+        minimizedBtn.Visible = true
+    end)
 
--- ============================================
--- MINIMIZE HANDLERS (SETELAH minimizeBtn & closeBtn)
--- ============================================
-minimizeBtn.MouseButton1Click:Connect(function()
-    minimizedBtn.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
-    mainFrame.Visible = false
-    minimizedBtn.Visible = true
+    minimizedBtn.MouseButton1Click:Connect(function()
+        mainFrame.Position = UDim2.new(0, minimizedBtn.AbsolutePosition.X, 0, minimizedBtn.AbsolutePosition.Y)
+        minimizedBtn.Visible = false
+        mainFrame.Visible = true
+    end)
+    -- Hover effect
+minimizedBtn.MouseEnter:Connect(function()
+    minimizedBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    minimizedStroke.Transparency = 0
 end)
 
-minimizedBtn.MouseButton1Click:Connect(function()
-    mainFrame.Position = UDim2.new(0, minimizedBtn.AbsolutePosition.X, 0, minimizedBtn.AbsolutePosition.Y)
-    minimizedBtn.Visible = false
-    mainFrame.Visible = true
-end)
-
-closeBtn.MouseButton1Click:Connect(function() 
-    config.isRunningBuy=isRunningBuy; 
-    config.isRunningSell=isRunningSell; 
-    config.toolsIsAutoSprinkler = false
-    config.toolsIsTrowelRunning = false
-    config.weightIsRunning = false
-    saveConfig(); 
-    screenGui:Destroy() 
+minimizedBtn.MouseLeave:Connect(function()
+    minimizedBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
+    minimizedStroke.Transparency = 0.3
 end)
     
+    closeBtn.MouseButton1Click:Connect(function() config.isRunningBuy=isRunningBuy; config.isRunningSell=isRunningSell; saveConfig(); screenGui:Destroy() end)
+
     local sidebar = Instance.new("Frame"); sidebar.Size = UDim2.new(0.2, 0, 1, -28); sidebar.Position = UDim2.new(0, 0, 0, 28)
     sidebar.BackgroundColor3 = C.sidebar; sidebar.BorderSizePixel = 0; sidebar.Parent = mainFrame; Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 10)
     local sidebarFill = Instance.new("Frame"); sidebarFill.Size = UDim2.new(1, 0, 0.3, 0); sidebarFill.Position = UDim2.new(0, 0, 0.85, 0)
