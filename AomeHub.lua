@@ -2480,7 +2480,6 @@ do
         end)
     end
     
-    inventory.Visible then
     -- Initialize
     task.wait(2)
     
