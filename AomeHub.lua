@@ -1326,7 +1326,15 @@ do
     refreshSprinklerList()
     refreshTrowelList()
     refreshPlantDropdown()
-    
+    task.spawn(function()
+        while parentTools.Parent do
+            task.wait(30)  -- Refresh setiap 3 detik
+            pcall(function()
+                refreshSprinklerList()
+            end)
+        end
+    end)
+        
     print("[AoneHub] ✅ Tools tab ready!")
 end
   
