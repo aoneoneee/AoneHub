@@ -27,13 +27,13 @@ local function main()
         searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
         isRunningBuy = false, isRunningSell = false,
         selectedSellFruits = {}, sellTargets = {},
-        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = false, extraToggle3 = false, valueDisplayEnabled = false, toolsSprinklerSelected = {}, toolsSprinklerAmounts = {}, toolsWateringCan = "", toolsWateringInterval = 30, toolsTrowelSelected = {}, toolsTrowelInterval = 1.0, toolsIsAutoSprinkler = false, toolsIsTrowelRunning = false,
+        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = false, extraToggle3 = false, valueDisplayEnabled = false, toolsSprinklerSelected = {}, toolsSprinklerAmounts = {}, toolsWateringCan = "", toolsWateringInterval = 30, toolsTrowelSelected = {}, toolsTrowelInterval = 1.0, toolsIsAutoSprinkler = false, toolsIsTrowelRunning = false, weightSelectedPlants = {}, weightAllSelected = true, weightMaxWeight = 50, weightDelayMin = 1.0, weightDelayMax = 2.0, weightIsRunning = false, weightSearchText = "",
     }
 
     local function loadConfig()
         local s, d = pcall(readfile, SAVE_FILE)
         if s and d then local s2, loaded = pcall(HttpService.JSONDecode, HttpService, d)
-            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; if config.extraToggle1 == nil then config.extraToggle1 = false end; if config.extraToggle2 == nil then config.extraToggle2 = false end; if config.extraToggle3 == nil then config.extraToggle3 = false end; if config.toolsSprinklerSelected == nil then config.toolsSprinklerSelected = {} end; if config.toolsSprinklerAmounts == nil then config.toolsSprinklerAmounts = {} end; if config.toolsWateringCan == nil then config.toolsWateringCan = "" end; if config.toolsWateringInterval == nil then config.toolsWateringInterval = 30 end; if config.toolsTrowelSelected == nil then config.toolsTrowelSelected = {} end; if config.toolsTrowelInterval == nil then config.toolsTrowelInterval = 1.0 end; if config.toolsIsAutoSprinkler == nil then config.toolsIsAutoSprinkler = false end; if config.toolsIsTrowelRunning == nil then config.toolsIsTrowelRunning = false end; return true end
+            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; if config.extraToggle1 == nil then config.extraToggle1 = false end; if config.extraToggle2 == nil then config.extraToggle2 = false end; if config.extraToggle3 == nil then config.extraToggle3 = false end; if config.toolsSprinklerSelected == nil then config.toolsSprinklerSelected = {} end; if config.toolsSprinklerAmounts == nil then config.toolsSprinklerAmounts = {} end; if config.toolsWateringCan == nil then config.toolsWateringCan = "" end; if config.toolsWateringInterval == nil then config.toolsWateringInterval = 30 end; if config.toolsTrowelSelected == nil then config.toolsTrowelSelected = {} end; if config.toolsTrowelInterval == nil then config.toolsTrowelInterval = 1.0 end; if config.toolsIsAutoSprinkler == nil then config.toolsIsAutoSprinkler = false end; if config.toolsIsTrowelRunning == nil then config.toolsIsTrowelRunning = false end; if config.weightSelectedPlants == nil then config.weightSelectedPlants = {} end; if config.weightAllSelected == nil then config.weightAllSelected = true end; if config.weightMaxWeight == nil then config.weightMaxWeight = 50 end; if config.weightDelayMin == nil then config.weightDelayMin = 1.0 end; if config.weightDelayMax == nil then config.weightDelayMax = 2.0 end; if config.weightIsRunning == nil then config.weightIsRunning = false end; if config.weightSearchText == nil then config.weightSearchText = "" end; return true end
         end; return false
     end
     local function saveConfig()
@@ -113,7 +113,7 @@ local function main()
     -- GUI SKELETON
     -- ==================================================================
     local screenGui = Instance.new("ScreenGui"); screenGui.Name = "AoneHub"; screenGui.Parent = playerGui; screenGui.ResetOnSpawn = false
-    screenGui.Destroying:Connect(function() config.isRunningBuy = isRunningBuy; config.isRunningSell = isRunningSell; saveConfig() end)
+    screenGui.Destroying:Connect(function() config.isRunningBuy = isRunningBuy; config.isRunningSell = isRunningSell; config.toolsIsAutoSprinkler = false; config.toolsIsTrowelRunning = false; config.weightIsRunning = false; saveConfig() end)
 
     local minimizedCircle = Instance.new("TextButton"); minimizedCircle.Size = UDim2.new(0, 50, 0, 50); minimizedCircle.Position = UDim2.new(0.5, -25, 0.5, -25)
     minimizedCircle.Text = "AH"; minimizedCircle.TextColor3 = C.text; minimizedCircle.Font = Enum.Font.GothamBlack; minimizedCircle.TextSize = 20
@@ -161,7 +161,7 @@ local function main()
     local sep = Instance.new("Frame"); sep.Size = UDim2.new(0.7, 0, 0, 1); sep.Position = UDim2.new(0.15, 0, 0, 26)
     sep.BackgroundColor3 = Color3.fromRGB(60, 60, 70); sep.BorderSizePixel = 0; sep.Parent = sidebar
 
-    local tabs = {{name="Tools", label="🔧 Tools"}, {name="AutoBuy", label="🛒 Buy"}, {name="AutoSell", label="💰 Sell"}, {name="AutoMail", label="📧 Mail"}, {name="MailFruit", label="🎯 Fruit"}, {name="Ekstra", label="⚙️ Extra"}}
+    local tabs = {{name="Weight", label="⚖️ Weight"}, {name="Tools", label="🔧 Tools"}, {name="AutoBuy", label="🛒 Buy"}, {name="AutoSell", label="💰 Sell"}, {name="AutoMail", label="📧 Mail"}, {name="MailFruit", label="🎯 Fruit"}, {name="Ekstra", label="⚙️ Extra"}}
     local tabBtns = {}; local activeTab = nil
     for i, tab in ipairs(tabs) do
         local btn = Instance.new("TextButton"); btn.Size = UDim2.new(0.82, 0, 0, 22); btn.Position = UDim2.new(0.09, 0, 0, 30 + (i-1)*27)
@@ -189,6 +189,818 @@ local function main()
     end
     for _, tab in ipairs(tabs) do tabBtns[tab.name].MouseButton1Click:Connect(function() switchTab(tab.name) end) end
 
+-- ==================================================================
+-- TAB WEIGHT: AUTO SHOVEL
+-- ==================================================================
+do
+    local parentWeight = tabFrames["Weight"]
+    
+    -- Load networking
+    local networkingWeight = safeRequire(ReplicatedStorage.SharedModules.Networking)
+    if not networkingWeight then
+        print("[AoneHub] ❌ Networking not found for Weight!")
+        return
+    end
+    
+    -- Load seed data
+    local seedNames = {}
+    pcall(function()
+        local mod = safeRequire(ReplicatedStorage.SharedModules.SeedData)
+        if mod then
+            for _, d in ipairs(mod) do
+                if d.SeedName and not d.MutationSeed then table.insert(seedNames, d.SeedName) end
+            end
+        end
+        table.sort(seedNames)
+    end)
+    
+    -- Load base weights
+    local BASE_WEIGHTS = {}
+    pcall(function()
+        local fruitsFolder = ReplicatedStorage:FindFirstChild("PlantGenerationModules")
+        if fruitsFolder then fruitsFolder = fruitsFolder:FindFirstChild("Fruits") end
+        if fruitsFolder then
+            for _, fruitModule in ipairs(fruitsFolder:GetChildren()) do
+                if fruitModule:IsA("ModuleScript") then
+                    pcall(function()
+                        local data = require(fruitModule)
+                        if data and data.GrowData and data.GrowData.BaseWeight then
+                            BASE_WEIGHTS[fruitModule.Name] = data.GrowData.BaseWeight
+                        end
+                    end)
+                end
+            end
+        end
+    end)
+    
+    local function getBaseWeight(seedName)
+        if BASE_WEIGHTS[seedName] then return BASE_WEIGHTS[seedName] end
+        local baseName = seedName:gsub("Maple ", "")
+        if BASE_WEIGHTS[baseName] then return BASE_WEIGHTS[baseName] end
+        return 10
+    end
+    
+    -- State
+    local selectedPlants = config.weightSelectedPlants or {}
+    local allSelected = config.weightAllSelected or true
+    local maxWeight = config.weightMaxWeight or 50
+    local isRunning = false
+    local shovelDelayMin = config.weightDelayMin or 1.0
+    local shovelDelayMax = config.weightDelayMax or 2.0
+    local scannedFruits = {}
+    local bigFruits = {}
+    local totalShoveled = 0
+    local weightSearchText = config.weightSearchText or ""
+    local weightAccordionOpen = true
+    
+    -- Functions
+    local function getShovelInstance()
+        local char = player.Character
+        if char then
+            local shovel = char:FindFirstChild("Shovel")
+            if shovel then return shovel end
+        end
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then
+            for _, item in ipairs(backpack:GetChildren()) do
+                if item:IsA("Tool") and item.Name:lower():find("shovel") then
+                    local h = char and char:FindFirstChildOfClass("Humanoid")
+                    if h then h:EquipTool(item); task.wait(0.5) end
+                    return char and char:FindFirstChild("Shovel")
+                end
+            end
+        end
+        return nil
+    end
+    
+    local function findMyPlot()
+        local gardens = workspace:FindFirstChild("Gardens")
+        if not gardens then return nil end
+        for _, plot in ipairs(gardens:GetChildren()) do
+            if plot:IsA("Model") and plot:GetAttribute("OwnerUserId") == player.UserId then
+                return plot
+            end
+        end
+        return nil
+    end
+    
+    local function scanFruits(selectedPlants, maxKg)
+        local plot = findMyPlot()
+        if not plot then return {}, {} end
+        local plantsFolder = plot:FindFirstChild("Plants")
+        if not plantsFolder then return {}, {} end
+        
+        local smallFruits = {}
+        local largeFruits = {}
+        local hasSelection = false
+        for _ in pairs(selectedPlants) do hasSelection = true; break end
+        
+        for _, plantModel in ipairs(plantsFolder:GetChildren()) do
+            if plantModel:IsA("Model") then
+                local seedName = plantModel:GetAttribute("SeedName")
+                if not hasSelection or selectedPlants[seedName] then
+                    local fruitsFolder = plantModel:FindFirstChild("Fruits")
+                    if fruitsFolder then
+                        for _, fruitModel in ipairs(fruitsFolder:GetChildren()) do
+                            if fruitModel:IsA("Model") then
+                                local fruitId = fruitModel:GetAttribute("FruitId")
+                                local plantId = fruitModel:GetAttribute("PlantId")
+                                local sizeMulti = fruitModel:GetAttribute("SizeMulti") or 1
+                                
+                                if fruitId and plantId then
+                                    local baseWeight = getBaseWeight(seedName)
+                                    local totalWeight = baseWeight * sizeMulti
+                                    
+                                    local fruitData = {
+                                        fruitId = fruitId,
+                                        plantId = plantId,
+                                        seedName = seedName,
+                                        sizeMulti = sizeMulti,
+                                        totalWeight = totalWeight,
+                                    }
+                                    
+                                    if totalWeight <= maxKg then
+                                        table.insert(smallFruits, fruitData)
+                                    else
+                                        table.insert(largeFruits, fruitData)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        table.sort(smallFruits, function(a, b) return a.totalWeight < b.totalWeight end)
+        table.sort(largeFruits, function(a, b) return a.totalWeight > b.totalWeight end)
+        return smallFruits, largeFruits
+    end
+    
+    local function shovelFruit(plantId, fruitId)
+        local shovel = getShovelInstance()
+        if not shovel then return false end
+        pcall(function()
+            networkingWeight.Shovel.UseShovel:Fire(plantId, fruitId, "", shovel)
+        end)
+        return true
+    end
+    
+    -- ============================================
+    -- BUILD WEIGHT UI
+    -- ============================================
+    local weightScroll = Instance.new("ScrollingFrame")
+    weightScroll.Size = UDim2.new(1, 0, 1, 0)
+    weightScroll.CanvasSize = UDim2.new(0, 0, 0, 600)
+    weightScroll.ScrollBarThickness = 3
+    weightScroll.BackgroundTransparency = 1
+    weightScroll.BorderSizePixel = 0
+    weightScroll.Parent = parentWeight
+    
+    local weightLayout = Instance.new("UIListLayout")
+    weightLayout.Padding = UDim.new(0, 4)
+    weightLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    weightLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    weightLayout.Parent = weightScroll
+    
+    -- Header
+    local weightHeader = Instance.new("TextLabel")
+    weightHeader.Size = UDim2.new(1, -12, 0, 20)
+    weightHeader.LayoutOrder = 1
+    weightHeader.Text = "⚖️  Auto Shovel (Weight Filter)"
+    weightHeader.TextColor3 = C.text
+    weightHeader.Font = Enum.Font.GothamBold
+    weightHeader.TextSize = 10
+    weightHeader.TextXAlignment = Enum.TextXAlignment.Left
+    weightHeader.BackgroundTransparency = 1
+    weightHeader.Parent = weightScroll
+    
+    -- Status
+    local weightStatus = Instance.new("TextLabel")
+    weightStatus.Size = UDim2.new(1, -12, 0, 14)
+    weightStatus.LayoutOrder = 2
+    weightStatus.Text = "✅ SIAP"
+    weightStatus.TextColor3 = C.green
+    weightStatus.Font = Enum.Font.GothamBold
+    weightStatus.TextSize = 9
+    weightStatus.TextXAlignment = Enum.TextXAlignment.Left
+    weightStatus.BackgroundTransparency = 1
+    weightStatus.Parent = weightScroll
+    
+    -- Progress
+    local weightProgress = Instance.new("TextLabel")
+    weightProgress.Size = UDim2.new(1, -12, 0, 12)
+    weightProgress.LayoutOrder = 3
+    weightProgress.Text = ""
+    weightProgress.TextColor3 = C.yellow
+    weightProgress.Font = Enum.Font.Gotham
+    weightProgress.TextSize = 8
+    weightProgress.TextXAlignment = Enum.TextXAlignment.Left
+    weightProgress.BackgroundTransparency = 1
+    weightProgress.Parent = weightScroll
+    
+    -- Info
+    local weightInfo = Instance.new("TextLabel")
+    weightInfo.Size = UDim2.new(1, -12, 0, 12)
+    weightInfo.LayoutOrder = 4
+    weightInfo.Text = "📊 Total di-shovel: 0"
+    weightInfo.TextColor3 = C.textDim
+    weightInfo.Font = Enum.Font.Gotham
+    weightInfo.TextSize = 8
+    weightInfo.TextXAlignment = Enum.TextXAlignment.Left
+    weightInfo.BackgroundTransparency = 1
+    weightInfo.Parent = weightScroll
+    
+    -- Max Weight Input
+    local maxWeightLabel = Instance.new("TextLabel")
+    maxWeightLabel.Size = UDim2.new(1, -12, 0, 12)
+    maxWeightLabel.LayoutOrder = 5
+    maxWeightLabel.Text = "🔽 Shovel buah DI BAWAH (kg):"
+    maxWeightLabel.TextColor3 = C.textDim
+    maxWeightLabel.Font = Enum.Font.Gotham
+    maxWeightLabel.TextSize = 8
+    maxWeightLabel.TextXAlignment = Enum.TextXAlignment.Left
+    maxWeightLabel.BackgroundTransparency = 1
+    maxWeightLabel.Parent = weightScroll
+    
+    local maxWeightInput = Instance.new("TextBox")
+    maxWeightInput.Size = UDim2.new(1, -12, 0, 22)
+    maxWeightInput.LayoutOrder = 6
+    maxWeightInput.BackgroundColor3 = C.input
+    maxWeightInput.TextColor3 = C.text
+    maxWeightInput.PlaceholderText = "50"
+    maxWeightInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+    maxWeightInput.Font = Enum.Font.Gotham
+    maxWeightInput.TextSize = 10
+    maxWeightInput.Text = tostring(maxWeight)
+    maxWeightInput.Parent = weightScroll
+    Instance.new("UICorner", maxWeightInput).CornerRadius = UDim.new(0, 4)
+    
+    -- Delay Inputs
+    local delayLabel = Instance.new("TextLabel")
+    delayLabel.Size = UDim2.new(1, -12, 0, 12)
+    delayLabel.LayoutOrder = 7
+    delayLabel.Text = "⏱ Jeda shovel (min - max detik):"
+    delayLabel.TextColor3 = C.textDim
+    delayLabel.Font = Enum.Font.Gotham
+    delayLabel.TextSize = 8
+    delayLabel.TextXAlignment = Enum.TextXAlignment.Left
+    delayLabel.BackgroundTransparency = 1
+    delayLabel.Parent = weightScroll
+    
+    local delayMinInput = Instance.new("TextBox")
+    delayMinInput.Size = UDim2.new(0.48, 0, 0, 22)
+    delayMinInput.LayoutOrder = 8
+    delayMinInput.BackgroundColor3 = C.input
+    delayMinInput.TextColor3 = C.text
+    delayMinInput.PlaceholderText = "1.0"
+    delayMinInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+    delayMinInput.Font = Enum.Font.Gotham
+    delayMinInput.TextSize = 10
+    delayMinInput.Text = tostring(shovelDelayMin)
+    delayMinInput.Parent = weightScroll
+    Instance.new("UICorner", delayMinInput).CornerRadius = UDim.new(0, 4)
+    
+    local delayMaxInput = Instance.new("TextBox")
+    delayMaxInput.Size = UDim2.new(0.48, 0, 0, 22)
+    delayMaxInput.LayoutOrder = 9
+    delayMaxInput.BackgroundColor3 = C.input
+    delayMaxInput.TextColor3 = C.text
+    delayMaxInput.PlaceholderText = "2.0"
+    delayMaxInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+    delayMaxInput.Font = Enum.Font.Gotham
+    delayMaxInput.TextSize = 10
+    delayMaxInput.Text = tostring(shovelDelayMax)
+    delayMaxInput.Parent = weightScroll
+    Instance.new("UICorner", delayMaxInput).CornerRadius = UDim.new(0, 4)
+    
+    -- Plant Accordion
+    local plantAccordion = Instance.new("TextButton")
+    plantAccordion.Size = UDim2.new(1, -12, 0, 22)
+    plantAccordion.LayoutOrder = 10
+    plantAccordion.BackgroundColor3 = C.accordionProp
+    plantAccordion.Text = "🌱 Pilih Plant ▼"
+    plantAccordion.TextColor3 = C.text
+    plantAccordion.Font = Enum.Font.GothamBold
+    plantAccordion.TextSize = 9
+    plantAccordion.BorderSizePixel = 0
+    plantAccordion.AutoButtonColor = false
+    plantAccordion.Parent = weightScroll
+    Instance.new("UICorner", plantAccordion).CornerRadius = UDim.new(0, 3)
+    
+    -- Plant Search
+    local plantSearch = Instance.new("TextBox")
+    plantSearch.Size = UDim2.new(1, -12, 0, 20)
+    plantSearch.LayoutOrder = 11
+    plantSearch.BackgroundColor3 = C.input
+    plantSearch.TextColor3 = C.text
+    plantSearch.PlaceholderText = "🔍 Cari plant..."
+    plantSearch.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+    plantSearch.Font = Enum.Font.Gotham
+    plantSearch.TextSize = 9
+    plantSearch.Text = ""
+    plantSearch.ClearTextOnFocus = false
+    plantSearch.Parent = weightScroll
+    Instance.new("UICorner", plantSearch).CornerRadius = UDim.new(0, 3)
+    
+    -- Plant List
+    local plantListFrame = Instance.new("ScrollingFrame")
+    plantListFrame.Size = UDim2.new(1, -12, 0, 100)
+    plantListFrame.LayoutOrder = 12
+    plantListFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+    plantListFrame.BorderSizePixel = 0
+    plantListFrame.ScrollBarThickness = 3
+    plantListFrame.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 80)
+    plantListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    plantListFrame.Parent = weightScroll
+    Instance.new("UICorner", plantListFrame).CornerRadius = UDim.new(0, 3)
+    
+    local plantListLayout = Instance.new("UIListLayout")
+    plantListLayout.Padding = UDim.new(0, 1)
+    plantListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    plantListLayout.Parent = plantListFrame
+    
+    -- "Semua Plant" checkbox
+    local allPlantFrame = Instance.new("Frame", plantListFrame)
+    allPlantFrame.Size = UDim2.new(1, -8, 0, 22)
+    allPlantFrame.BackgroundColor3 = allSelected and Color3.fromRGB(0, 140, 80) or Color3.fromRGB(38, 38, 44)
+    allPlantFrame.BorderSizePixel = 0
+    Instance.new("UICorner", allPlantFrame).CornerRadius = UDim.new(0, 3)
+    
+    local allCheck = Instance.new("TextButton", allPlantFrame)
+    allCheck.Size = UDim2.new(0, 16, 0, 16)
+    allCheck.Position = UDim2.new(0, 3, 0.5, -8)
+    allCheck.BackgroundColor3 = allSelected and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(55, 55, 60)
+    allCheck.Text = allSelected and "✓" or ""
+    allCheck.TextColor3 = C.text
+    allCheck.Font = Enum.Font.GothamBold
+    allCheck.TextSize = 12
+    allCheck.BorderSizePixel = 0
+    Instance.new("UICorner", allCheck).CornerRadius = UDim.new(0, 2)
+    
+    local allLabel = Instance.new("TextLabel", allPlantFrame)
+    allLabel.Size = UDim2.new(1, -24, 1, 0)
+    allLabel.Position = UDim2.new(0, 22, 0, 0)
+    allLabel.BackgroundTransparency = 1
+    allLabel.Text = "Semua Plant"
+    allLabel.TextColor3 = C.text
+    allLabel.Font = Enum.Font.GothamBold
+    allLabel.TextSize = 10
+    allLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    -- Refresh plant list
+    local function refreshPlantList()
+        -- Hapus semua kecuali allPlantFrame
+        for _, child in ipairs(plantListFrame:GetChildren()) do
+            if child ~= allPlantFrame and child:IsA("Frame") then child:Destroy() end
+        end
+        
+        local count = 1  -- allPlantFrame
+        
+        if not allSelected then
+            local filtered = {}
+            for _, seedName in ipairs(seedNames) do
+                if weightSearchText == "" or seedName:lower():find(weightSearchText) then
+                    table.insert(filtered, seedName)
+                end
+            end
+            
+            for _, seedName in ipairs(filtered) do
+                local isSelected = selectedPlants[seedName] == true
+                local row = Instance.new("Frame", plantListFrame)
+                row.Size = UDim2.new(1, -8, 0, 22)
+                row.BackgroundColor3 = isSelected and Color3.fromRGB(40, 60, 45) or Color3.fromRGB(38, 38, 44)
+                row.BorderSizePixel = 0
+                Instance.new("UICorner", row).CornerRadius = UDim.new(0, 3)
+                
+                local cb = Instance.new("TextButton", row)
+                cb.Size = UDim2.new(0, 16, 0, 16)
+                cb.Position = UDim2.new(0, 3, 0.5, -8)
+                cb.BackgroundColor3 = isSelected and Color3.fromRGB(0, 160, 80) or Color3.fromRGB(55, 55, 60)
+                cb.Text = isSelected and "✓" or ""
+                cb.TextColor3 = C.text
+                cb.Font = Enum.Font.GothamBold
+                cb.TextSize = 12
+                cb.BorderSizePixel = 0
+                Instance.new("UICorner", cb).CornerRadius = UDim.new(0, 2)
+                
+                local lb = Instance.new("TextLabel", row)
+                lb.Size = UDim2.new(1, -24, 1, 0)
+                lb.Position = UDim2.new(0, 22, 0, 0)
+                lb.BackgroundTransparency = 1
+                lb.Text = seedName
+                lb.TextColor3 = Color3.fromRGB(200, 200, 200)
+                lb.Font = Enum.Font.Gotham
+                lb.TextSize = 9
+                lb.TextXAlignment = Enum.TextXAlignment.Left
+                
+                local function toggle()
+                    selectedPlants[seedName] = not selectedPlants[seedName]
+                    config.weightSelectedPlants[seedName] = selectedPlants[seedName]
+                    saveConfig()
+                    if selectedPlants[seedName] then
+                        cb.Text = "✓"
+                        cb.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+                        row.BackgroundColor3 = Color3.fromRGB(40, 60, 45)
+                    else
+                        cb.Text = ""
+                        cb.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
+                        row.BackgroundColor3 = Color3.fromRGB(38, 38, 44)
+                    end
+                end
+                
+                cb.MouseButton1Click:Connect(toggle)
+                row.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then toggle() end
+                end)
+                
+                count = count + 1
+            end
+        end
+        
+        plantListFrame.CanvasSize = UDim2.new(0, 0, 0, count * 23 + 4)
+    end
+    
+    -- All selected handler
+    allCheck.MouseButton1Click:Connect(function()
+        allSelected = not allSelected
+        config.weightAllSelected = allSelected
+        saveConfig()
+        
+        if allSelected then
+            allCheck.Text = "✓"
+            allCheck.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+            allPlantFrame.BackgroundColor3 = Color3.fromRGB(0, 140, 80)
+            selectedPlants = {}
+            config.weightSelectedPlants = {}
+            saveConfig()
+        else
+            allCheck.Text = ""
+            allCheck.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
+            allPlantFrame.BackgroundColor3 = Color3.fromRGB(38, 38, 44)
+        end
+        refreshPlantList()
+    end)
+    
+    -- Plant accordion
+    plantAccordion.MouseButton1Click:Connect(function()
+        weightAccordionOpen = not weightAccordionOpen
+        plantListFrame.Visible = weightAccordionOpen
+        plantSearch.Visible = weightAccordionOpen
+        plantAccordion.Text = weightAccordionOpen and "🌱 Pilih Plant ▼" or "🌱 Pilih Plant ▶"
+    end)
+    
+    -- Search
+    plantSearch:GetPropertyChangedSignal("Text"):Connect(function()
+        weightSearchText = plantSearch.Text:lower()
+        config.weightSearchText = weightSearchText
+        saveConfig()
+        refreshPlantList()
+    end)
+    
+    -- Tab: Small/Big Fruits
+    local showingBig = false
+    
+    local tabFrame = Instance.new("Frame")
+    tabFrame.Size = UDim2.new(1, -12, 0, 22)
+    tabFrame.LayoutOrder = 13
+    tabFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    tabFrame.BorderSizePixel = 0
+    tabFrame.Parent = weightScroll
+    Instance.new("UICorner", tabFrame).CornerRadius = UDim.new(0, 4)
+    
+    local tabSmallBtn = Instance.new("TextButton")
+    tabSmallBtn.Size = UDim2.new(0.5, -1, 1, -2)
+    tabSmallBtn.Position = UDim2.new(0, 1, 0, 1)
+    tabSmallBtn.BackgroundColor3 = Color3.fromRGB(200, 120, 0)
+    tabSmallBtn.Text = "🔽 Kecil (shovel)"
+    tabSmallBtn.TextColor3 = C.text
+    tabSmallBtn.Font = Enum.Font.GothamBold
+    tabSmallBtn.TextSize = 8
+    tabSmallBtn.BorderSizePixel = 0
+    tabSmallBtn.AutoButtonColor = false
+    tabSmallBtn.Parent = tabFrame
+    Instance.new("UICorner", tabSmallBtn).CornerRadius = UDim.new(0, 3)
+    
+    local tabBigBtn = Instance.new("TextButton")
+    tabBigBtn.Size = UDim2.new(0.5, -1, 1, -2)
+    tabBigBtn.Position = UDim2.new(0.5, 0, 0, 1)
+    tabBigBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+    tabBigBtn.Text = "🔼 Besar (info)"
+    tabBigBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+    tabBigBtn.Font = Enum.Font.GothamBold
+    tabBigBtn.TextSize = 8
+    tabBigBtn.BorderSizePixel = 0
+    tabBigBtn.AutoButtonColor = false
+    tabBigBtn.Parent = tabFrame
+    Instance.new("UICorner", tabBigBtn).CornerRadius = UDim.new(0, 3)
+    
+    tabSmallBtn.MouseButton1Click:Connect(function()
+        showingBig = false
+        tabSmallBtn.BackgroundColor3 = Color3.fromRGB(200, 120, 0)
+        tabSmallBtn.TextColor3 = C.text
+        tabBigBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        tabBigBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+        updateResultDisplay()
+    end)
+    
+    tabBigBtn.MouseButton1Click:Connect(function()
+        showingBig = true
+        tabBigBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+        tabBigBtn.TextColor3 = C.text
+        tabSmallBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        tabSmallBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+        updateResultDisplay()
+    end)
+    
+    -- Result List
+    local resultFrame = Instance.new("ScrollingFrame")
+    resultFrame.Size = UDim2.new(1, -12, 0, 100)
+    resultFrame.LayoutOrder = 14
+    resultFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+    resultFrame.BorderSizePixel = 0
+    resultFrame.ScrollBarThickness = 3
+    resultFrame.ScrollBarImageColor3 = Color3.fromRGB(70, 70, 80)
+    resultFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    resultFrame.Parent = weightScroll
+    Instance.new("UICorner", resultFrame).CornerRadius = UDim.new(0, 3)
+    
+    local resultLayout = Instance.new("UIListLayout")
+    resultLayout.Padding = UDim.new(0, 2)
+    resultLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    resultLayout.Parent = resultFrame
+    
+    -- Update Result Display
+    function updateResultDisplay()
+        for _, child in ipairs(resultFrame:GetChildren()) do
+            if child:IsA("Frame") then child:Destroy() end
+        end
+        
+        local fruits = showingBig and bigFruits or scannedFruits
+        local count = #fruits
+        resultFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22 + 8, 10))
+        
+        if count == 0 then
+            local empty = Instance.new("TextLabel", resultFrame)
+            empty.Size = UDim2.new(1, -8, 0, 25)
+            empty.BackgroundTransparency = 1
+            empty.Text = showingBig and "Tidak ada buah besar" or "Tidak ada buah di bawah " .. maxWeight .. " kg"
+            empty.TextColor3 = Color3.fromRGB(150, 150, 150)
+            empty.Font = Enum.Font.Gotham
+            empty.TextSize = 9
+            return
+        end
+        
+        local totalWeight = 0
+        for _, fruit in ipairs(fruits) do
+            totalWeight = totalWeight + fruit.totalWeight
+        end
+        
+        if showingBig then
+            weightInfo.Text = string.format("📊 %d buah BESAR | %.1f kg", count, totalWeight)
+        else
+            weightInfo.Text = string.format("📊 %d buah kecil | %.1f kg | Total di-shovel: %d", count, totalWeight, totalShoveled)
+        end
+        
+        for _, fruit in ipairs(fruits) do
+            local row = Instance.new("Frame", resultFrame)
+            row.Size = UDim2.new(1, -8, 0, 20)
+            row.BackgroundColor3 = showingBig and Color3.fromRGB(40, 35, 30) or Color3.fromRGB(35, 35, 40)
+            row.BorderSizePixel = 0
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 3)
+            
+            local lb = Instance.new("TextLabel", row)
+            lb.Size = UDim2.new(1, -8, 1, 0)
+            lb.Position = UDim2.new(0, 4, 0, 0)
+            lb.BackgroundTransparency = 1
+            lb.Text = string.format("%s | %.1fx = %.1f kg", fruit.seedName, fruit.sizeMulti, fruit.totalWeight)
+            lb.TextColor3 = showingBig and Color3.fromRGB(255, 200, 150) or Color3.fromRGB(200, 220, 200)
+            lb.Font = Enum.Font.Gotham
+            lb.TextSize = 8
+            lb.TextXAlignment = Enum.TextXAlignment.Left
+        end
+    end
+    
+    -- Do Scan
+    local function doScan()
+        maxWeight = tonumber(maxWeightInput.Text) or 50
+        config.weightMaxWeight = maxWeight
+        saveConfig()
+        scannedFruits, bigFruits = scanFruits(selectedPlants, maxWeight)
+        updateResultDisplay()
+        return #scannedFruits
+    end
+    
+    -- Do Shovel All
+    local function doShovelAll(callback)
+        if #scannedFruits == 0 then
+            if callback then callback() end
+            return
+        end
+        
+        local minD = tonumber(delayMinInput.Text) or 1.0
+        local maxD = tonumber(delayMaxInput.Text) or 2.0
+        config.weightDelayMin = minD
+        config.weightDelayMax = maxD
+        saveConfig()
+        
+        local total = #scannedFruits
+        for i, fruit in ipairs(scannedFruits) do
+            if not isRunning then break end
+            weightProgress.Text = "🔧 #" .. i .. "/" .. total .. ": " .. fruit.seedName
+            weightStatus.Text = "🔧 Shoveling..."
+            weightStatus.TextColor3 = C.orange
+            
+            shovelFruit(fruit.plantId, fruit.fruitId)
+            totalShoveled = totalShoveled + 1
+            weightInfo.Text = string.format("📊 Progress: %d/%d | Total: %d", i, total, totalShoveled)
+            
+            if i < total and isRunning then
+                local jitter = math.random(minD * 10, maxD * 10) / 10
+                task.wait(jitter)
+            end
+        end
+        
+        scannedFruits = {}
+        bigFruits = {}
+        updateResultDisplay()
+        if callback then callback() end
+    end
+    
+    -- Buttons
+    local startLoopBtn = Instance.new("TextButton")
+    startLoopBtn.Size = UDim2.new(1, -12, 0, 24)
+    startLoopBtn.LayoutOrder = 15
+    startLoopBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
+    startLoopBtn.Text = "🔄 MULAI AUTO LOOP"
+    startLoopBtn.TextColor3 = C.text
+    startLoopBtn.Font = Enum.Font.GothamBold
+    startLoopBtn.TextSize = 9
+    startLoopBtn.BorderSizePixel = 0
+    startLoopBtn.AutoButtonColor = false
+    startLoopBtn.Parent = weightScroll
+    Instance.new("UICorner", startLoopBtn).CornerRadius = UDim.new(0, 4)
+    
+    local scanOnceBtn = Instance.new("TextButton")
+    scanOnceBtn.Size = UDim2.new(1, -12, 0, 24)
+    scanOnceBtn.LayoutOrder = 16
+    scanOnceBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 180)
+    scanOnceBtn.Text = "🔍 SCAN & SHOVEL SEKALI"
+    scanOnceBtn.TextColor3 = C.text
+    scanOnceBtn.Font = Enum.Font.GothamBold
+    scanOnceBtn.TextSize = 9
+    scanOnceBtn.BorderSizePixel = 0
+    scanOnceBtn.AutoButtonColor = false
+    scanOnceBtn.Parent = weightScroll
+    Instance.new("UICorner", scanOnceBtn).CornerRadius = UDim.new(0, 4)
+    
+    local stopBtn = Instance.new("TextButton")
+    stopBtn.Size = UDim2.new(1, -12, 0, 24)
+    stopBtn.LayoutOrder = 17
+    stopBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+    stopBtn.Text = "⏸ BERHENTI"
+    stopBtn.TextColor3 = C.text
+    stopBtn.Font = Enum.Font.GothamBold
+    stopBtn.TextSize = 9
+    stopBtn.BorderSizePixel = 0
+    stopBtn.AutoButtonColor = false
+    stopBtn.Visible = false
+    stopBtn.Parent = weightScroll
+    Instance.new("UICorner", stopBtn).CornerRadius = UDim.new(0, 4)
+    
+    -- Auto Loop
+    local function startAutoLoop()
+        isRunning = true
+        startLoopBtn.Visible = false
+        scanOnceBtn.Visible = false
+        stopBtn.Visible = true
+        weightStatus.Text = "🔄 Auto Loop..."
+        weightStatus.TextColor3 = C.green
+        
+        task.spawn(function()
+            while isRunning do
+                weightProgress.Text = "🔍 Scanning garden..."
+                weightStatus.Text = "🔍 Scanning..."
+                weightStatus.TextColor3 = C.yellow
+                
+                local count = doScan()
+                
+                if count == 0 then
+                    weightProgress.Text = "✅ Tidak ada buah kecil, jeda 30 detik..."
+                    weightStatus.Text = "✅ Menunggu..."
+                    weightStatus.TextColor3 = C.green
+                    
+                    for t = 30, 1, -1 do
+                        if not isRunning then break end
+                        weightProgress.Text = "✅ Scan lagi dalam " .. t .. "s"
+                        task.wait(1)
+                    end
+                else
+                    weightProgress.Text = "🔧 Shoveling " .. count .. " buah..."
+                    doShovelAll()
+                    
+                    if isRunning then
+                        weightProgress.Text = "✅ Selesai! Jeda 30 detik..."
+                        weightStatus.Text = "✅ Menunggu..."
+                        weightStatus.TextColor3 = C.green
+                        
+                        for t = 30, 1, -1 do
+                            if not isRunning then break end
+                            weightProgress.Text = "✅ Scan lagi dalam " .. t .. "s"
+                            task.wait(1)
+                        end
+                    end
+                end
+            end
+            
+            startLoopBtn.Visible = true
+            scanOnceBtn.Visible = true
+            stopBtn.Visible = false
+            weightStatus.Text = "⏸ Berhenti"
+            weightStatus.TextColor3 = C.yellow
+            weightProgress.Text = ""
+        end)
+    end
+    
+    -- Scan Once
+    local function startOnceShovel()
+        isRunning = true
+        startLoopBtn.Visible = false
+        scanOnceBtn.Visible = false
+        stopBtn.Visible = true
+        weightStatus.Text = "🔍 Scanning..."
+        weightStatus.TextColor3 = C.yellow
+        
+        task.spawn(function()
+            local count = doScan()
+            
+            if count == 0 then
+                weightStatus.Text = "✅ Tidak ada buah kecil"
+                weightStatus.TextColor3 = C.green
+            else
+                doShovelAll(function()
+                    weightStatus.Text = "✅ Selesai!"
+                    weightStatus.TextColor3 = C.green
+                    weightProgress.Text = ""
+                end)
+            end
+            
+            isRunning = false
+            startLoopBtn.Visible = true
+            scanOnceBtn.Visible = true
+            stopBtn.Visible = false
+        end)
+    end
+    
+    -- Button Handlers
+    startLoopBtn.MouseButton1Click:Connect(startAutoLoop)
+    scanOnceBtn.MouseButton1Click:Connect(startOnceShovel)
+    stopBtn.MouseButton1Click:Connect(function()
+        isRunning = false
+        weightProgress.Text = "⏸ Menghentikan..."
+    end)
+    
+    -- Input Handlers
+    maxWeightInput.FocusLost:Connect(function()
+        local val = tonumber(maxWeightInput.Text)
+        if val and val > 0 then
+            maxWeight = val
+            config.weightMaxWeight = val
+            saveConfig()
+        else
+            maxWeightInput.Text = tostring(maxWeight)
+        end
+    end)
+    
+    delayMinInput.FocusLost:Connect(function()
+        local val = tonumber(delayMinInput.Text)
+        if val and val > 0 then
+            shovelDelayMin = val
+            config.weightDelayMin = val
+            saveConfig()
+        else
+            delayMinInput.Text = tostring(shovelDelayMin)
+        end
+    end)
+    
+    delayMaxInput.FocusLost:Connect(function()
+        local val = tonumber(delayMaxInput.Text)
+        if val and val > 0 then
+            shovelDelayMax = val
+            config.weightDelayMax = val
+            saveConfig()
+        else
+            delayMaxInput.Text = tostring(shovelDelayMax)
+        end
+    end)
+    
+    -- Initialize
+    refreshPlantList()
+    updateResultDisplay()
+    
+    print("[AoneHub] ✅ Weight tab ready!")
+    end
+    
 -- ==================================================================
 -- TAB TOOLS: AUTO SPRINKLER + WATERING + TROWEL
 -- ==================================================================
