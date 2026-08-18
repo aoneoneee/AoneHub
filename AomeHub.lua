@@ -3096,41 +3096,103 @@ do local f = tabFrames["Ekstra"]
     -- Special handling untuk Value Display (Toggle 1)
     if configKey == "extraToggle1" then
         if config[configKey] then
-            -- AKTIFKAN Value Display
             print("[AoneHub] ✅ Value Display: ON")
-            task.wait(0.3)
+            task.wait(0.5)
             pcall(function()
-                -- Hitung cache
-                valueCache.backpackTotal = CalculateBackpackTotalValue()
-                valueCache.gardenTotal = CalculateGardenTotalValue()
-                
-                -- Buat frame jika Inventory visible
                 local backpackGui = playerGui:FindFirstChild("BackpackGui")
                 if backpackGui then
                     local backpackFrame = backpackGui:FindFirstChild("Backpack")
                     if backpackFrame then
-                        local inventory = backpackFrame:FindFirstChild("Inventory")
-                        if inventory and inventory.Visible then
-                            CreateBackpackTotalFrame()
-                            CreateGardenTotalFrame()
-                            InitializeAllSlots()
+                        local gameToggle = backpackFrame:FindFirstChild("ValueToggleButton")
+                        if gameToggle then
+                            gameToggle.Text = "ON"
+                            gameToggle.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
                         end
                     end
                 end
             end)
         else
-            -- NONAKTIFKAN Value Display
             print("[AoneHub] ❌ Value Display: OFF")
-            pcall(CleanupAll)
+            pcall(function()
+                local backpackGui = playerGui:FindFirstChild("BackpackGui")
+                if backpackGui then
+                    local backpackFrame = backpackGui:FindFirstChild("Backpack")
+                    if backpackFrame then
+                        local gameToggle = backpackFrame:FindFirstChild("ValueToggleButton")
+                        if gameToggle then
+                            gameToggle.Text = "OFF"
+                            gameToggle.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+                        end
+                        
+                        local function removeLabels(container)
+                            if not container then return end
+                            for _, slot in container:GetChildren() do
+                                if slot:IsA("TextButton") or slot:IsA("Frame") then
+                                    local label = slot:FindFirstChild("SellValue")
+                                    if label then label:Destroy() end
+                                end
+                            end
+                        end
+                        
+                        local inventory = backpackFrame:FindFirstChild("Inventory")
+                        if inventory then
+                            local scrollingFrame = inventory:FindFirstChild("ScrollingFrame")
+                            if scrollingFrame then
+                                local gridFrame = scrollingFrame:FindFirstChild("UIGridFrame")
+                                removeLabels(gridFrame)
+                            end
+                        end
+                        
+                        local hotbar = backpackFrame:FindFirstChild("Hotbar")
+                        removeLabels(hotbar)
+                        
+                        local backpackTotal = backpackFrame:FindFirstChild("BackpackTotalFrame")
+                        if backpackTotal then backpackTotal:Destroy() end
+                        
+                        local gardenTotal = backpackFrame:FindFirstChild("GardenTotalFrame")
+                        if gardenTotal then gardenTotal:Destroy() end
+                    end
+                end
+            end)
         end
     end
     
     -- Special handling untuk Anti-AFK (Toggle 2)
     if configKey == "extraToggle2" then
         if config[configKey] then
-            print("[AoneHub] ✅ Anti-AFK: ON")
+            print("[AoneHub] ⏳ Anti-AFK: Delay 15 menit sebelum aktif...")
         else
             print("[AoneHub] ❌ Anti-AFK: OFF")
+        end
+    end
+    
+    -- Special handling untuk Auto Teleport (Toggle 3)
+    if configKey == "extraToggle3" then
+        if config[configKey] then
+            print("[AoneHub] 🌍 Auto Teleport: ON - Mencoba teleport...")
+            -- Jalankan teleport
+            task.spawn(function()
+                pcall(function()
+                    local activeWorldId = workspace:GetAttribute("ActiveWorldId") or "Main"
+                    
+                    if activeWorldId == "Main" then
+                        local remote = ReplicatedStorage:WaitForChild("SharedModules", 5):WaitForChild("Packet", 5):WaitForChild("RemoteEvent", 5)
+                        
+                        local args = {
+                            buffer.fromstring("\002\000\vFallHarvest")
+                        }
+                        
+                        remote:FireServer(unpack(args))
+                        print("[AoneHub] ✅ Teleport ke FallHarvest terkirim!")
+                    elseif activeWorldId == "FallHarvest" then
+                        print("[AoneHub] ✗ Sudah di FallHarvest")
+                    else
+                        print("[AoneHub] ✗ World tidak dikenal: " .. activeWorldId)
+                    end
+                end)
+            end)
+        else
+            print("[AoneHub] ❌ Auto Teleport: OFF")
         end
     end
 end)
@@ -3144,8 +3206,7 @@ end)
     
     createToggle("🛡️ Anti-AFK", "Tapi bikin bug gk bisa ganti item di hotbar", "extraToggle2", 3)
         
-    -- Toggle 3: Notifikasi
-    createToggle("Notifikasi", "Tampilkan notifikasi saat ada event penting", "extraToggle3", 4)
+    createToggle("🌍 Auto Teleport", "Teleport ke FallHarvest saat di Main World", "extraToggle3", 4)
     
     -- Info tambahan
     local infoLabel = Instance.new("TextLabel")
@@ -4308,6 +4369,87 @@ do
                 StartAntiAFK()
                 print("[AoneHub] ✅ Anti-AFK auto-started dengan delay 10 menit!")
             end
+        end)
+    end
+end
+
+-- ==================================================================
+-- AUTO TELEPORT SYSTEM (HANYA JALAN SAAT TOGGLE DI AKTIFKAN)
+-- ==================================================================
+do
+    local teleportExecuted = false  -- Flag untuk mencegah eksekusi berulang
+    
+    -- Fungsi untuk melakukan teleport
+    local function DoTeleport()
+        if teleportExecuted then
+            print("[AoneHub] 🌍 Teleport sudah dieksekusi sebelumnya")
+            return false, "Sudah dieksekusi"
+        end
+        
+        local activeWorldId = workspace:GetAttribute("ActiveWorldId") or "Main"
+        
+        if activeWorldId == "Main" then
+            print("[AoneHub] ✅ Main world terdeteksi - Teleport ke FallHarvest...")
+            
+            local success, remote = pcall(function()
+                return ReplicatedStorage:WaitForChild("SharedModules", 5):WaitForChild("Packet", 5):WaitForChild("RemoteEvent", 5)
+            end)
+            
+            if not success or not remote then
+                print("[AoneHub] ❌ Remote tidak ditemukan!")
+                return false, "Remote tidak ditemukan"
+            end
+            
+            local args = {
+                buffer.fromstring("\002\000\vFallHarvest")
+            }
+            
+            pcall(function()
+                remote:FireServer(unpack(args))
+            end)
+            
+            teleportExecuted = true
+            print("[AoneHub] ✅ Teleport ke FallHarvest terkirim!")
+            return true, "Teleport terkirim"
+            
+        elseif activeWorldId == "FallHarvest" then
+            print("[AoneHub] ✗ Sudah di FallHarvest - Tidak perlu teleport")
+            return false, "Sudah di FallHarvest"
+            
+        else
+            print("[AoneHub] ✗ World tidak dikenal: " .. activeWorldId)
+            return false, "World tidak dikenal"
+        end
+    end
+    
+    -- Monitor config.extraToggle3
+    task.spawn(function()
+        local lastToggleState = config.extraToggle3
+        
+        while true do
+            task.wait(0.5)
+            
+            -- Deteksi perubahan toggle (dari false ke true)
+            if config.extraToggle3 and not lastToggleState then
+                -- Toggle baru saja diaktifkan
+                print("[AoneHub] 🌍 Auto Teleport: Toggle diaktifkan!")
+                teleportExecuted = false  -- Reset flag
+                task.spawn(DoTeleport)
+            elseif not config.extraToggle3 and lastToggleState then
+                -- Toggle dimatikan
+                print("[AoneHub] ❌ Auto Teleport: Toggle dimatikan")
+                teleportExecuted = false  -- Reset flag agar bisa teleport lagi
+            end
+            
+            lastToggleState = config.extraToggle3
+        end
+    end)
+    
+    -- Auto-start jika config true
+    if config.extraToggle3 then
+        task.delay(2, function()
+            print("[AoneHub] 🌍 Auto Teleport auto-start!")
+            task.spawn(DoTeleport)
         end)
     end
 end
