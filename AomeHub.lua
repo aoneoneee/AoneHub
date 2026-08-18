@@ -179,7 +179,7 @@ local function main()
     closeBtn.Text = "✕"; closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 11
     closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); closeBtn.BorderSizePixel = 0; closeBtn.AutoButtonColor = false; closeBtn.Parent = titleBar
     Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4) 
-    minimizeBtn.MouseButton1Click:Connect(function()
+    minimizedBtn.MouseButton1Click:Connect(function()
         minimizedBtn.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
         mainFrame.Visible = false
         minimizedBtn.Visible = true
