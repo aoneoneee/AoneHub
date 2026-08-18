@@ -329,7 +329,36 @@ do
         end
         return nil
     end
-    
+
+    local function getWateringCanStock(waterCanName)
+        local total = 0
+        local bp = player:FindFirstChild("Backpack")
+        if bp then
+            local tool = bp:FindFirstChild(waterCanName)
+            if tool then
+                local count = tool:GetAttribute("Count")
+                if count and type(count) == "number" then 
+                    total = total + count 
+                else 
+                    total = total + 1 
+                end
+            end
+        end
+        local char = player.Character
+        if char then
+            local tool = char:FindFirstChild(waterCanName)
+            if tool then
+                local count = tool:GetAttribute("Count")
+                if count and type(count) == "number" then 
+                    total = total + count 
+                else 
+                   total = total + 1 
+                end
+            end
+        end
+        return total
+    end
+        
     local function getTrowelTool()
         local char = player.Character
         if char then
@@ -1214,36 +1243,6 @@ do
     stopSprinklerBtn.MouseButton1Click:Connect(function() 
         autoRunning = false 
     end)
-    
-    -- Fungsi untuk cek stock watering can
-    local function getWateringCanStock(waterCanName)
-        local total = 0
-        local bp = player:FindFirstChild("Backpack")
-        if bp then
-            local tool = bp:FindFirstChild(waterCanName)
-            if tool then
-                local count = tool:GetAttribute("Count")
-                if count and type(count) == "number" then 
-                    total = total + count 
-                else 
-                    total = total + 1 
-                end
-            end
-        end
-        local char = player.Character
-        if char then
-            local tool = char:FindFirstChild(waterCanName)
-            if tool then
-                local count = tool:GetAttribute("Count")
-                if count and type(count) == "number" then 
-                    total = total + count 
-                else 
-                   total = total + 1 
-                end
-            end
-        end
-        return total
-    end
 
     -- Fungsi untuk stop auto watering
     local function stopAutoWatering()
