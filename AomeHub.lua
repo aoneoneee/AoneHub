@@ -27,13 +27,13 @@ local function main()
         searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
         isRunningBuy = false, isRunningSell = false,
         selectedSellFruits = {}, sellTargets = {},
-        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = false, extraToggle3 = false, valueDisplayEnabled = false, toolsSprinklerSelected = {}, toolsSprinklerAmounts = {}, toolsWateringCan = "", toolsWateringInterval = 30, toolsTrowelSelected = {}, toolsTrowelInterval = 1.0, toolsIsAutoSprinkler = false, toolsIsTrowelRunning = false, weightSelectedPlants = {}, weightAllSelected = true, weightMaxWeight = 50, weightDelayMin = 1.0, weightDelayMax = 2.0, weightIsRunning = false, weightSearchText = "", farmSelectedFruits = {}, farmSelectedMutations = {}, farmIncludeNone = true, farmSearchText = "", farmMaxKg = 0, farmJitterMin = 0.5, farmJitterMax = 1.5, farmFruitAccordionOpen = true, farmMutationAccordionOpen = true,
+        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = false, extraToggle3 = false, valueDisplayEnabled = false, toolsSprinklerSelected = {}, toolsSprinklerAmounts = {}, toolsWateringCan = "", toolsWateringInterval = 30, toolsTrowelSelected = {}, toolsTrowelInterval = 1.0, toolsIsAutoSprinkler = false, toolsIsTrowelRunning = false, weightSelectedPlants = {}, weightAllSelected = true, weightMaxWeight = 50, weightDelayMin = 1.0, weightDelayMax = 2.0, weightIsRunning = false, weightSearchText = "", farmSelectedFruits = {}, farmSelectedMutations = {}, farmIncludeNone = true, farmSearchText = "", farmMaxKg = 0, farmJitterMin = 0.5, farmJitterMax = 1.5, farmFruitAccordionOpen = true, farmMutationAccordionOpen = true, toolsWateringCan = "", weightAutoWaterAfterShovel = false,
     }
 
     local function loadConfig()
         local s, d = pcall(readfile, SAVE_FILE)
         if s and d then local s2, loaded = pcall(HttpService.JSONDecode, HttpService, d)
-            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; if config.extraToggle1 == nil then config.extraToggle1 = false end; if config.extraToggle2 == nil then config.extraToggle2 = false end; if config.extraToggle3 == nil then config.extraToggle3 = false end; if config.toolsSprinklerSelected == nil then config.toolsSprinklerSelected = {} end; if config.toolsSprinklerAmounts == nil then config.toolsSprinklerAmounts = {} end; if config.toolsWateringCan == nil then config.toolsWateringCan = "" end; if config.toolsWateringInterval == nil then config.toolsWateringInterval = 30 end; if config.toolsTrowelSelected == nil then config.toolsTrowelSelected = {} end; if config.toolsTrowelInterval == nil then config.toolsTrowelInterval = 1.0 end; if config.toolsIsAutoSprinkler == nil then config.toolsIsAutoSprinkler = false end; if config.toolsIsTrowelRunning == nil then config.toolsIsTrowelRunning = false end; if config.weightSelectedPlants == nil then config.weightSelectedPlants = {} end; if config.weightAllSelected == nil then config.weightAllSelected = true end; if config.weightMaxWeight == nil then config.weightMaxWeight = 50 end; if config.weightDelayMin == nil then config.weightDelayMin = 1.0 end; if config.weightDelayMax == nil then config.weightDelayMax = 2.0 end; if config.weightIsRunning == nil then config.weightIsRunning = false end; if config.weightSearchText == nil then config.weightSearchText = "" end; if config.farmSelectedFruits == nil then config.farmSelectedFruits = {} end; if config.farmSelectedMutations == nil then config.farmSelectedMutations = {} end; if config.farmIncludeNone == nil then config.farmIncludeNone = true end; if config.farmSearchText == nil then config.farmSearchText = "" end; if config.farmMaxKg == nil then config.farmMaxKg = 0 end; if config.farmJitterMin == nil then config.farmJitterMin = 0.5 end; if config.farmJitterMax == nil then config.farmJitterMax = 1.5 end; if config.farmFruitAccordionOpen == nil then config.farmFruitAccordionOpen = true end; if config.farmMutationAccordionOpen == nil then config.farmMutationAccordionOpen = true end; return true end
+            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; if config.extraToggle1 == nil then config.extraToggle1 = false end; if config.extraToggle2 == nil then config.extraToggle2 = false end; if config.extraToggle3 == nil then config.extraToggle3 = false end; if config.toolsSprinklerSelected == nil then config.toolsSprinklerSelected = {} end; if config.toolsSprinklerAmounts == nil then config.toolsSprinklerAmounts = {} end; if config.toolsWateringCan == nil then config.toolsWateringCan = "" end; if config.toolsWateringInterval == nil then config.toolsWateringInterval = 30 end; if config.toolsTrowelSelected == nil then config.toolsTrowelSelected = {} end; if config.toolsTrowelInterval == nil then config.toolsTrowelInterval = 1.0 end; if config.toolsIsAutoSprinkler == nil then config.toolsIsAutoSprinkler = false end; if config.toolsIsTrowelRunning == nil then config.toolsIsTrowelRunning = false end; if config.weightSelectedPlants == nil then config.weightSelectedPlants = {} end; if config.weightAllSelected == nil then config.weightAllSelected = true end; if config.weightMaxWeight == nil then config.weightMaxWeight = 50 end; if config.weightDelayMin == nil then config.weightDelayMin = 1.0 end; if config.weightDelayMax == nil then config.weightDelayMax = 2.0 end; if config.weightIsRunning == nil then config.weightIsRunning = false end; if config.weightSearchText == nil then config.weightSearchText = "" end; if config.farmSelectedFruits == nil then config.farmSelectedFruits = {} end; if config.farmSelectedMutations == nil then config.farmSelectedMutations = {} end; if config.farmIncludeNone == nil then config.farmIncludeNone = true end; if config.farmSearchText == nil then config.farmSearchText = "" end; if config.farmMaxKg == nil then config.farmMaxKg = 0 end; if config.farmJitterMin == nil then config.farmJitterMin = 0.5 end; if config.farmJitterMax == nil then config.farmJitterMax = 1.5 end; if config.farmFruitAccordionOpen == nil then config.farmFruitAccordionOpen = true end; if config.farmMutationAccordionOpen == nil then config.farmMutationAccordionOpen = true end; if config.weightAutoWaterAfterShovel == nil then config.weightAutoWaterAfterShovel = false end; return true end
         end; return false
     end
     local function saveConfig()
@@ -1306,11 +1306,38 @@ do
     delayMaxInput.Text = tostring(shovelDelayMax)
     delayMaxInput.Parent = weightScroll
     Instance.new("UICorner", delayMaxInput).CornerRadius = UDim.new(0, 4)
+
+    -- Auto Water Toggle (setelah shovel)
+    local autoWaterToggle = Instance.new("TextButton")
+    autoWaterToggle.Size = UDim2.new(1, -12, 0, 22)
+    autoWaterToggle.LayoutOrder = 10  -- Sesuaikan dengan layout order yang ada
+    autoWaterToggle.BackgroundColor3 = config.weightAutoWaterAfterShovel and Color3.fromRGB(0, 160, 200) or Color3.fromRGB(40, 40, 45)
+    autoWaterToggle.Text = config.weightAutoWaterAfterShovel and "💧 Auto Water Setelah Shovel: ON" or "💧 Auto Water Setelah Shovel: OFF"
+    autoWaterToggle.TextColor3 = C.text
+    autoWaterToggle.Font = Enum.Font.GothamBold
+    autoWaterToggle.TextSize = 8
+    autoWaterToggle.BorderSizePixel = 0
+    autoWaterToggle.AutoButtonColor = false
+    autoWaterToggle.Parent = weightScroll
+    Instance.new("UICorner", autoWaterToggle).CornerRadius = UDim.new(0, 4)
+
+    autoWaterToggle.MouseButton1Click:Connect(function()
+        config.weightAutoWaterAfterShovel = not config.weightAutoWaterAfterShovel
+        saveConfig()
     
+        if config.weightAutoWaterAfterShovel then
+            autoWaterToggle.BackgroundColor3 = Color3.fromRGB(0, 160, 200)
+            autoWaterToggle.Text = "💧 Auto Water Setelah Shovel: ON"
+        else
+            autoWaterToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+            autoWaterToggle.Text = "💧 Auto Water Setelah Shovel: OFF"
+        end
+    end)
+        
     -- Plant Accordion
     local plantAccordion = Instance.new("TextButton")
     plantAccordion.Size = UDim2.new(1, -12, 0, 22)
-    plantAccordion.LayoutOrder = 10
+    plantAccordion.LayoutOrder = 11
     plantAccordion.BackgroundColor3 = C.accordionProp
     plantAccordion.Text = "🌱 Pilih Plant ▼"
     plantAccordion.TextColor3 = C.text
@@ -1324,7 +1351,7 @@ do
     -- Plant Search
     local plantSearch = Instance.new("TextBox")
     plantSearch.Size = UDim2.new(1, -12, 0, 20)
-    plantSearch.LayoutOrder = 11
+    plantSearch.LayoutOrder = 12
     plantSearch.BackgroundColor3 = C.input
     plantSearch.TextColor3 = C.text
     plantSearch.PlaceholderText = "🔍 Cari plant..."
@@ -1339,7 +1366,7 @@ do
     -- Plant List
     local plantListFrame = Instance.new("ScrollingFrame")
     plantListFrame.Size = UDim2.new(1, -12, 0, 100)
-    plantListFrame.LayoutOrder = 12
+    plantListFrame.LayoutOrder = 13
     plantListFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
     plantListFrame.BorderSizePixel = 0
     plantListFrame.ScrollBarThickness = 3
@@ -1496,7 +1523,7 @@ do
     
     local tabFrame = Instance.new("Frame")
     tabFrame.Size = UDim2.new(1, -12, 0, 22)
-    tabFrame.LayoutOrder = 13
+    tabFrame.LayoutOrder = 14
     tabFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
     tabFrame.BorderSizePixel = 0
     tabFrame.Parent = weightScroll
@@ -1549,7 +1576,7 @@ do
     -- Result List
     local resultFrame = Instance.new("ScrollingFrame")
     resultFrame.Size = UDim2.new(1, -12, 0, 100)
-    resultFrame.LayoutOrder = 14
+    resultFrame.LayoutOrder = 15
     resultFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
     resultFrame.BorderSizePixel = 0
     resultFrame.ScrollBarThickness = 3
@@ -1663,7 +1690,7 @@ do
     -- Buttons
     local startLoopBtn = Instance.new("TextButton")
     startLoopBtn.Size = UDim2.new(1, -12, 0, 24)
-    startLoopBtn.LayoutOrder = 15
+    startLoopBtn.LayoutOrder = 16
     startLoopBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 100)
     startLoopBtn.Text = "🔄 MULAI AUTO LOOP"
     startLoopBtn.TextColor3 = C.text
@@ -1676,7 +1703,7 @@ do
     
     local scanOnceBtn = Instance.new("TextButton")
     scanOnceBtn.Size = UDim2.new(1, -12, 0, 24)
-    scanOnceBtn.LayoutOrder = 16
+    scanOnceBtn.LayoutOrder = 17
     scanOnceBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 180)
     scanOnceBtn.Text = "🔍 SCAN & SHOVEL SEKALI"
     scanOnceBtn.TextColor3 = C.text
@@ -1689,7 +1716,7 @@ do
     
     local stopBtn = Instance.new("TextButton")
     stopBtn.Size = UDim2.new(1, -12, 0, 24)
-    stopBtn.LayoutOrder = 17
+    stopBtn.LayoutOrder = 18
     stopBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
     stopBtn.Text = "⏸ BERHENTI"
     stopBtn.TextColor3 = C.text
@@ -1702,58 +1729,166 @@ do
     Instance.new("UICorner", stopBtn).CornerRadius = UDim.new(0, 4)
     
     -- Auto Loop
-    local function startAutoLoop()
-        isRunning = true
-        startLoopBtn.Visible = false
-        scanOnceBtn.Visible = false
-        stopBtn.Visible = true
-        weightStatus.Text = "🔄 Auto Loop..."
-        weightStatus.TextColor3 = C.green
-        
-        task.spawn(function()
-            while isRunning do
-                weightProgress.Text = "🔍 Scanning garden..."
-                weightStatus.Text = "🔍 Scanning..."
-                weightStatus.TextColor3 = C.yellow
+    -- Fungsi untuk auto watering 1x
+local function doAutoWaterOnce()
+    if not config.weightAutoWaterAfterShovel then return end
+    
+    -- Cek apakah ada watering can yang dipilih di Tab Tools
+    local wateringCanName = config.toolsWateringCan or ""
+    
+    if wateringCanName == "" then
+        weightStatus.Text = "💧 Watering skipped (tidak ada watering can dipilih di Tools)"
+        weightStatus.TextColor3 = C.yellow
+        return false
+    end
+    
+    -- Cek stock watering can
+    local function getWateringCanStock(waterCanName)
+        local total = 0
+        local bp = player:FindFirstChild("Backpack")
+        if bp then
+            local tool = bp:FindFirstChild(waterCanName)
+            if tool then
+                local count = tool:GetAttribute("Count")
+                if count and type(count) == "number" then total = total + count else total = total + 1 end
+            end
+        end
+        local char = player.Character
+        if char then
+            local tool = char:FindFirstChild(waterCanName)
+            if tool then
+                local count = tool:GetAttribute("Count")
+                if count and type(count) == "number" then total = total + count else total = total + 1 end
+            end
+        end
+        return total
+    end
+    
+    local stock = getWateringCanStock(wateringCanName)
+    if stock <= 0 then
+        weightStatus.Text = "💧 Watering skipped (stock habis)"
+        weightStatus.TextColor3 = C.yellow
+        return false
+    end
+    
+    -- Equip watering can
+    local function getWateringCanTool(waterCanName)
+        local char = player.Character
+        if char then
+            local tool = char:FindFirstChild(waterCanName)
+            if tool then return tool end
+        end
+        local bp = player:FindFirstChild("Backpack")
+        if bp then
+            for _, item in ipairs(bp:GetChildren()) do
+                if item:IsA("Tool") and item.Name == waterCanName then
+                    local h = char and char:FindFirstChildOfClass("Humanoid")
+                    if h then h:EquipTool(item); task.wait(0.5) end
+                    return char and char:FindFirstChild(waterCanName)
+                end
+            end
+        end
+        return nil
+    end
+    
+    weightStatus.Text = "💧 Watering..."
+    weightStatus.TextColor3 = Color3.fromRGB(0, 200, 255)
+    
+    local tool = getWateringCanTool(wateringCanName)
+    if not tool then
+        weightStatus.Text = "💧 Watering gagal (tidak bisa equip)"
+        weightStatus.TextColor3 = C.red
+        return false
+    end
+    
+    -- Cari posisi untuk watering (gunakan posisi player)
+    local function getPlayerPosition()
+        local char = player.Character
+        if not char then return nil end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if not root then return nil end
+        return root.Position
+    end
+    
+    local targetPos = getPlayerPosition()
+    if targetPos then
+        -- Cari networking
+        local networkingWeight = safeRequire(ReplicatedStorage.SharedModules.Networking)
+        if networkingWeight then
+            pcall(function()
+                networkingWeight.WateringCan.UseWateringCan:Fire(targetPos, wateringCanName, tool)
+            end)
+            weightStatus.Text = "💧 Watering selesai!"
+            weightStatus.TextColor3 = C.green
+            task.wait(1)  -- Tunggu 1 detik setelah watering
+            return true
+        end
+    end
+    
+    weightStatus.Text = "💧 Watering gagal"
+    weightStatus.TextColor3 = C.red
+    return false
+end
+
+local function startAutoLoop()
+    isRunning = true
+    startLoopBtn.Visible = false
+    scanOnceBtn.Visible = false
+    stopBtn.Visible = true
+    weightStatus.Text = "🔄 Auto Loop..."
+    weightStatus.TextColor3 = C.green
+    
+    task.spawn(function()
+        while isRunning do
+            weightProgress.Text = "🔍 Scanning garden..."
+            weightStatus.Text = "🔍 Scanning..."
+            weightStatus.TextColor3 = C.yellow
+            
+            local count = doScan()
+            
+            if count == 0 then
+                weightProgress.Text = "✅ Tidak ada buah kecil, jeda 5 detik..."
+                weightStatus.Text = "✅ Menunggu..."
+                weightStatus.TextColor3 = C.green
                 
-                local count = doScan()
+                for t = 5, 1, -1 do
+                    if not isRunning then break end
+                    weightProgress.Text = "✅ Scan lagi dalam " .. t .. "s"
+                    task.wait(1)
+                end
+            else
+                weightProgress.Text = "🔧 Shoveling " .. count .. " buah..."
+                doShovelAll()
                 
-                if count == 0 then
-                    weightProgress.Text = "✅ Tidak ada buah kecil, jeda 30 detik..."
+                if isRunning then
+                    -- Auto watering setelah shovel
+                    if config.weightAutoWaterAfterShovel then
+                        weightProgress.Text = "💧 Auto watering..."
+                        doAutoWaterOnce()
+                    end
+                    
+                    -- Jeda 5 detik DIMULAI SETELAH watering selesai
+                    weightProgress.Text = "✅ Selesai! Jeda 5 detik..."
                     weightStatus.Text = "✅ Menunggu..."
                     weightStatus.TextColor3 = C.green
                     
-                    for t = 30, 1, -1 do
+                    for t = 5, 1, -1 do
                         if not isRunning then break end
                         weightProgress.Text = "✅ Scan lagi dalam " .. t .. "s"
                         task.wait(1)
                     end
-                else
-                    weightProgress.Text = "🔧 Shoveling " .. count .. " buah..."
-                    doShovelAll()
-                    
-                    if isRunning then
-                        weightProgress.Text = "✅ Selesai! Jeda 30 detik..."
-                        weightStatus.Text = "✅ Menunggu..."
-                        weightStatus.TextColor3 = C.green
-                        
-                        for t = 30, 1, -1 do
-                            if not isRunning then break end
-                            weightProgress.Text = "✅ Scan lagi dalam " .. t .. "s"
-                            task.wait(1)
-                        end
-                    end
                 end
             end
-            
-            startLoopBtn.Visible = true
-            scanOnceBtn.Visible = true
-            stopBtn.Visible = false
-            weightStatus.Text = "⏸ Berhenti"
-            weightStatus.TextColor3 = C.yellow
-            weightProgress.Text = ""
-        end)
-    end
+        end
+        
+        startLoopBtn.Visible = true
+        scanOnceBtn.Visible = true
+        stopBtn.Visible = false
+        weightStatus.Text = "⏸ Berhenti"
+        weightStatus.TextColor3 = C.yellow
+        weightProgress.Text = ""
+    end)
+        end
     
     -- Scan Once
     local function startOnceShovel()
