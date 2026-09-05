@@ -48,6 +48,102 @@ local function main()
     end
 
     -- ==================================================================
+-- SHARED STATE (untuk komunikasi antar tab)
+-- ==================================================================
+local SharedState = {
+    toolsSavedPosition = nil,      -- Posisi untuk watering/sprinkler
+    toolsSelectedPlant = nil,      -- Plant yang dipilih di Tools
+    toolsPlantPositions = {},      -- Hasil scan plant di Tools
+}
+
+    -- ==================================================================
+-- SHARED FUNCTIONS (untuk watering)
+-- ==================================================================
+local SharedFunctions = {}
+
+function SharedFunctions.GetWateringCanTool(waterCanName)
+    local char = player.Character
+    if char then
+        local tool = char:FindFirstChild(waterCanName)
+        if tool then return tool end
+    end
+    local bp = player:FindFirstChild("Backpack")
+    if bp then
+        for _, item in ipairs(bp:GetChildren()) do
+            if item:IsA("Tool") and item.Name == waterCanName then
+                local h = char and char:FindFirstChildOfClass("Humanoid")
+                if h then h:EquipTool(item); task.wait(0.5) end
+                return char and char:FindFirstChild(waterCanName)
+            end
+        end
+    end
+    return nil
+end
+
+function SharedFunctions.GetWateringCanStock(waterCanName)
+    local total = 0
+    local bp = player:FindFirstChild("Backpack")
+    if bp then
+        local tool = bp:FindFirstChild(waterCanName)
+        if tool then
+            local count = tool:GetAttribute("Count")
+            if count and type(count) == "number" then total = total + count else total = total + 1 end
+        end
+    end
+    local char = player.Character
+    if char then
+        local tool = char:FindFirstChild(waterCanName)
+        if tool then
+            local count = tool:GetAttribute("Count")
+            if count and type(count) == "number" then total = total + count else total = total + 1 end
+        end
+    end
+    return total
+end
+
+function SharedFunctions.GetPlayerPosition()
+    local char = player.Character
+    if not char then return nil end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    return root.Position
+end
+
+function SharedFunctions.UnequipTools()
+    local char = player.Character
+    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+    if humanoid then humanoid:UnequipTools() end
+end
+
+function SharedFunctions.FindMyPlot()
+    local gardens = workspace:FindFirstChild("Gardens")
+    if not gardens then return nil end
+    for _, plot in ipairs(gardens:GetChildren()) do
+        if plot:IsA("Model") and plot:GetAttribute("OwnerUserId") == player.UserId then
+            return plot
+        end
+    end
+    return nil
+end
+
+function SharedFunctions.GetPlantGroundPosition(plantModel)
+    local plantPos = plantModel:GetPivot().Position
+    
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Include
+    rayParams.FilterDescendantsInstances = workspace.Gardens:QueryDescendants("BasePart.PlantArea")
+    
+    local rayResult = workspace:Raycast(
+        Vector3.new(plantPos.X, plantPos.Y + 50, plantPos.Z),
+        Vector3.new(0, -100, 0),
+        rayParams
+    )
+    
+    if rayResult then return rayResult.Position end
+    return plantPos
+end
+    
+    -- ==================================================================
     -- OPCODES
     -- ==================================================================
     local function getOpcodes()
@@ -1729,98 +1825,80 @@ do
     Instance.new("UICorner", stopBtn).CornerRadius = UDim.new(0, 4)
     
     -- Auto Loop
-    -- Fungsi untuk auto watering 1x
+    -- Fungsi untuk auto watering 1x (menggunakan target dari Tools)
 local function doAutoWaterOnce()
     if not config.weightAutoWaterAfterShovel then return end
     
-    -- Cek apakah ada watering can yang dipilih di Tab Tools
+    -- Ambil watering can dari config Tools
     local wateringCanName = config.toolsWateringCan or ""
     
     if wateringCanName == "" then
-        weightStatus.Text = "💧 Watering skipped (tidak ada watering can dipilih di Tools)"
+        weightStatus.Text = "💧 Watering skipped (pilih watering can di Tools)"
         weightStatus.TextColor3 = C.yellow
         return false
     end
     
-    -- Cek stock watering can
-    local function getWateringCanStock(waterCanName)
-        local total = 0
-        local bp = player:FindFirstChild("Backpack")
-        if bp then
-            local tool = bp:FindFirstChild(waterCanName)
-            if tool then
-                local count = tool:GetAttribute("Count")
-                if count and type(count) == "number" then total = total + count else total = total + 1 end
-            end
-        end
-        local char = player.Character
-        if char then
-            local tool = char:FindFirstChild(waterCanName)
-            if tool then
-                local count = tool:GetAttribute("Count")
-                if count and type(count) == "number" then total = total + count else total = total + 1 end
-            end
-        end
-        return total
-    end
-    
-    local stock = getWateringCanStock(wateringCanName)
+    -- Cek stock
+    local stock = SharedFunctions.GetWateringCanStock(wateringCanName)
     if stock <= 0 then
         weightStatus.Text = "💧 Watering skipped (stock habis)"
         weightStatus.TextColor3 = C.yellow
         return false
     end
     
-    -- Equip watering can
-    local function getWateringCanTool(waterCanName)
-        local char = player.Character
-        if char then
-            local tool = char:FindFirstChild(waterCanName)
-            if tool then return tool end
-        end
-        local bp = player:FindFirstChild("Backpack")
-        if bp then
-            for _, item in ipairs(bp:GetChildren()) do
-                if item:IsA("Tool") and item.Name == waterCanName then
-                    local h = char and char:FindFirstChildOfClass("Humanoid")
-                    if h then h:EquipTool(item); task.wait(0.5) end
-                    return char and char:FindFirstChild(waterCanName)
-                end
-            end
-        end
-        return nil
+    -- TENTUKAN TARGET WATERING
+    local targetPos = nil
+    
+    -- Prioritas 1: Saved position dari Tools
+    if SharedState.toolsSavedPosition then
+        targetPos = SharedState.toolsSavedPosition
+        print("[AoneHub] 💧 Target: Saved Position")
+    
+    -- Prioritas 2: Selected plant dari Tools
+    elseif SharedState.toolsSelectedPlant and SharedState.toolsSelectedPlant.model then
+        targetPos = SharedFunctions.GetPlantGroundPosition(SharedState.toolsSelectedPlant.model)
+        print("[AoneHub] 💧 Target: Selected Plant - " .. SharedState.toolsSelectedPlant.name)
+    
+    -- Prioritas 3: Posisi player saat ini
+    else
+        targetPos = SharedFunctions.GetPlayerPosition()
+        print("[AoneHub] 💧 Target: Player Position (fallback)")
     end
     
+    if not targetPos then
+        weightStatus.Text = "💧 Watering gagal (tidak ada target)"
+        weightStatus.TextColor3 = C.red
+        return false
+    end
+    
+    -- Equip watering can
     weightStatus.Text = "💧 Watering..."
     weightStatus.TextColor3 = Color3.fromRGB(0, 200, 255)
     
-    local tool = getWateringCanTool(wateringCanName)
+    local tool = SharedFunctions.GetWateringCanTool(wateringCanName)
     if not tool then
         weightStatus.Text = "💧 Watering gagal (tidak bisa equip)"
         weightStatus.TextColor3 = C.red
         return false
     end
     
-    -- Cari posisi untuk watering (gunakan posisi player)
-    local function getPlayerPosition()
-        local char = player.Character
-        if not char then return nil end
-        local root = char:FindFirstChild("HumanoidRootPart")
-        if not root then return nil end
-        return root.Position
-    end
-    
-    local targetPos = getPlayerPosition()
-    if targetPos then
-        -- Cari networking
-        local networkingWeight = safeRequire(ReplicatedStorage.SharedModules.Networking)
-        if networkingWeight then
-            pcall(function()
-                networkingWeight.WateringCan.UseWateringCan:Fire(targetPos, wateringCanName, tool)
-            end)
+    -- Gunakan watering can
+    local networkingWeight = safeRequire(ReplicatedStorage.SharedModules.Networking)
+    if networkingWeight then
+        local success = false
+        pcall(function()
+            networkingWeight.WateringCan.UseWateringCan:Fire(targetPos, wateringCanName, tool)
+            success = true
+        end)
+        
+        if success then
             weightStatus.Text = "💧 Watering selesai!"
             weightStatus.TextColor3 = C.green
             task.wait(1)  -- Tunggu 1 detik setelah watering
+            
+            -- Unequip tools
+            SharedFunctions.UnequipTools()
+            
             return true
         end
     end
@@ -1828,8 +1906,8 @@ local function doAutoWaterOnce()
     weightStatus.Text = "💧 Watering gagal"
     weightStatus.TextColor3 = C.red
     return false
-end
-
+        end
+        
 local function startAutoLoop()
     isRunning = true
     startLoopBtn.Visible = false
@@ -2449,13 +2527,17 @@ do
             opt.BorderSizePixel = 0
             opt.ZIndex = 10
             opt.MouseButton1Click:Connect(function()
-                selectedPlant = plant
-                plantLabel.Text = plant.name
-                plantLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                plantList.Visible = false
-                toolsStatus.Text = "✅ Plant: " .. plant.name
-                toolsStatus.TextColor3 = C.green
-            end)
+    selectedPlant = plant
+    plantLabel.Text = plant.name
+    plantLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    plantList.Visible = false
+    toolsStatus.Text = "✅ Plant: " .. plant.name
+    toolsStatus.TextColor3 = C.green
+    
+    -- Simpan ke SharedState
+    SharedState.toolsSelectedPlant = plant
+    SharedState.toolsSavedPosition = nil  -- Reset saved position jika pilih plant
+end)
         end
     end
     
@@ -2606,13 +2688,20 @@ do
     opt.ZIndex = 10
     opt.Parent = waterList
     opt.MouseButton1Click:Connect(function()
-        selectedWateringCan = wcName
-        config.toolsWateringCan = wcName
-        saveConfig()
-        waterLabelBtn.Text = wcName
-        waterLabelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        waterList.Visible = false
-    end)
+    if stock <= 0 then
+        toolsStatus.Text = "❌ " .. wcName .. " habis!"
+        toolsStatus.TextColor3 = C.red
+        return
+    end
+    selectedWateringCan = wcName
+    config.toolsWateringCan = wcName
+    saveConfig()
+    waterLabelBtn.Text = wcName
+    waterLabelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    waterList.Visible = false
+    
+    -- Simpan ke SharedState (watering can sudah di config)
+end)
         end
         waterList.CanvasSize = UDim2.new(0, 0, 0, #wateringCanNames * 21 + 4)
     
@@ -2890,29 +2979,44 @@ do
     -- ============================================
     -- BUTTON HANDLERS
     -- ============================================
-    savePosBtn.MouseButton1Click:Connect(function()
-        local pos = getPlayerPosition()
-        if not pos then toolsStatus.Text = "❌ Gagal!"; return end
-        local rayParams = RaycastParams.new()
-        rayParams.FilterType = Enum.RaycastFilterType.Include
-        rayParams.FilterDescendantsInstances = workspace.Gardens:QueryDescendants("BasePart.PlantArea")
-        local rayResult = workspace:Raycast(pos + Vector3.new(0, 50, 0), Vector3.new(0, -100, 0), rayParams)
-        if rayResult then savedPosition = rayResult.Position else savedPosition = pos end
-        toolsStatus.Text = "✅ Posisi disimpan!"
-        toolsStatus.TextColor3 = C.green
-    end)
+    -- Save Position Button handler
+savePosBtn.MouseButton1Click:Connect(function()
+    local pos = getPlayerPosition()
+    if not pos then toolsStatus.Text = "❌ Gagal!"; return end
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Include
+    rayParams.FilterDescendantsInstances = workspace.Gardens:QueryDescendants("BasePart.PlantArea")
+    local rayResult = workspace:Raycast(pos + Vector3.new(0, 50, 0), Vector3.new(0, -100, 0), rayParams)
+    if rayResult then 
+        savedPosition = rayResult.Position 
+    else 
+        savedPosition = pos 
+    end
+    
+    -- Simpan ke SharedState
+    SharedState.toolsSavedPosition = savedPosition
+    SharedState.toolsSelectedPlant = nil  -- Reset selected plant jika save posisi
+    
+    toolsStatus.Text = "✅ Posisi disimpan!"
+    toolsStatus.TextColor3 = C.green
+end)
     
     scanBtn.MouseButton1Click:Connect(function()
-        toolsStatus.Text = "🔍 Scan..."; toolsStatus.TextColor3 = C.yellow
-        plantPositions = scanPlants()
-        selectedPlant = nil
-        plantLabel.Text = "Pilih plant..."
-        plantLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-        refreshPlantDropdown()  -- ← TAMBAHKAN INI
-        refreshSprinklerList()
-        toolsStatus.Text = "✅ " .. #plantPositions .. " jenis"
-        toolsStatus.TextColor3 = C.green
-    end)
+    toolsStatus.Text = "🔍 Scan..."; toolsStatus.TextColor3 = C.yellow
+    plantPositions = scanPlants()
+    selectedPlant = nil
+    plantLabel.Text = "Pilih plant..."
+    plantLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+    refreshPlantDropdown()
+    refreshSprinklerList()
+    
+    -- Simpan ke SharedState
+    SharedState.toolsPlantPositions = plantPositions
+    SharedState.toolsSelectedPlant = nil
+    
+    toolsStatus.Text = "✅ " .. #plantPositions .. " jenis"
+    toolsStatus.TextColor3 = C.green
+end)
     
     placeBtn.MouseButton1Click:Connect(function()
         if isPlacing then return end
