@@ -7,6 +7,7 @@ local function main()
     local Players = game:GetService("Players")
     local HttpService = game:GetService("HttpService")
     local Workspace = game:GetService("Workspace")
+    local workspace = Workspace
 
     local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
@@ -27,7 +28,7 @@ local function main()
         searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
         isRunningBuy = false, isRunningSell = false,
         selectedSellFruits = {}, sellTargets = {},
-        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = false, extraToggle3 = false, valueDisplayEnabled = false, toolsSprinklerSelected = {}, toolsSprinklerAmounts = {}, toolsWateringCan = "", toolsWateringInterval = 30, toolsTrowelSelected = {}, toolsTrowelInterval = 1.0, toolsIsAutoSprinkler = false, toolsIsTrowelRunning = false, weightSelectedPlants = {}, weightAllSelected = true, weightMaxWeight = 50, weightDelayMin = 1.0, weightDelayMax = 2.0, weightIsRunning = false, weightSearchText = "", farmSelectedFruits = {}, farmSelectedMutations = {}, farmIncludeNone = true, farmSearchText = "", farmMaxKg = 0, farmJitterMin = 0.5, farmJitterMax = 1.5, farmFruitAccordionOpen = true, farmMutationAccordionOpen = true, toolsWateringCan = "", weightAutoWaterAfterShovel = false,
+        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = false, extraToggle3 = false, valueDisplayEnabled = false, toolsSprinklerSelected = {}, toolsSprinklerAmounts = {}, toolsWateringCan = "", toolsWateringInterval = 30, toolsTrowelSelected = {}, toolsTrowelInterval = 1.0, toolsIsAutoSprinkler = false, toolsIsTrowelRunning = false, weightSelectedPlants = {}, weightAllSelected = true, weightMaxWeight = 50, weightDelayMin = 1.0, weightDelayMax = 2.0, weightIsRunning = false, weightSearchText = "", farmSelectedFruits = {}, farmSelectedMutations = {}, farmIncludeNone = true, farmSearchText = "", farmMaxKg = 0, farmJitterMin = 0.5, farmJitterMax = 1.5, farmFruitAccordionOpen = true, farmMutationAccordionOpen = true, weightAutoWaterAfterShovel = false,
     }
 
     local function loadConfig()
