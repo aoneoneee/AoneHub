@@ -2005,17 +2005,12 @@ local function doAutoWaterOnce()
     end
         end
 
-    -- Fungsi untuk auto sprinkler 1x (selaras dengan Tab Tools)
+    -- Fungsi untuk auto sprinkler 1x (selaras dengan Tab Tools - SAMA SEPERTI doAutoWaterOnce)
 local function doAutoSprinklerOnce()
-    print("[DEBUG] doAutoSprinklerOnce called")
-    print("[DEBUG] config.weightAutoSprinklerBeforeScan:", config.weightAutoSprinklerBeforeScan)
-    print("[DEBUG] sprinklerCooldownInput:", sprinklerCooldownInput ~= nil)
-    print("[DEBUG] lastSprinklerPlaceTime:", lastSprinklerPlaceTime)
-    print("[DEBUG] networkingWeight:", networkingWeight ~= nil)
     if not config.weightAutoSprinklerBeforeScan then return false end
     
     -- Cek cooldown
-    local cooldown = tonumber(sprinklerCooldownInput.Text) or config.weightSprinklerCooldown or 120
+    local cooldown = config.weightSprinklerCooldown or 120
     local currentTime = os.time()
     
     if lastSprinklerPlaceTime > 0 then
@@ -2029,17 +2024,17 @@ local function doAutoSprinklerOnce()
     end
     
     -- Load sprinkler dari config Tools
-    local selectedSprinklers = config.toolsSprinklerSelected or {}
-    local sprinklerAmounts = config.toolsSprinklerAmounts or {}
-    
     local sprinklerName = nil
     local sprinklerAmount = 1
     
-    -- Cari sprinkler yang dipilih
-    for name, selected in pairs(selectedSprinklers) do
+    -- Cari sprinkler yang dipilih di Tab Tools
+    local toolsSprinklerSelected = config.toolsSprinklerSelected or {}
+    local toolsSprinklerAmounts = config.toolsSprinklerAmounts or {}
+    
+    for name, selected in pairs(toolsSprinklerSelected) do
         if selected then
             sprinklerName = name
-            sprinklerAmount = sprinklerAmounts[name] or 1
+            sprinklerAmount = toolsSprinklerAmounts[name] or 1
             break
         end
     end
@@ -2084,6 +2079,7 @@ local function doAutoSprinklerOnce()
     local targetPlantName = config.toolsSelectedPlant or ""
     
     if targetPlantName ~= "" then
+        -- Cari plant di garden
         local function findMyPlot()
             local gardens = workspace:FindFirstChild("Gardens")
             if not gardens then return nil end
@@ -2129,11 +2125,22 @@ local function doAutoSprinklerOnce()
         end
     end
     
-    -- Fallback ke posisi tersimpan
+    -- Jika plant tidak ditemukan, gunakan posisi tersimpan
     if not targetPos and config.toolsSavedPosition then
         local p = config.toolsSavedPosition
         if p and p.x and p.y and p.z then
             targetPos = Vector3.new(p.x, p.y, p.z)
+        end
+    end
+    
+    -- Jika masih tidak ada, gunakan posisi player
+    if not targetPos then
+        local char = player.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                targetPos = root.Position
+            end
         end
     end
     
@@ -2165,7 +2172,12 @@ local function doAutoSprinklerOnce()
     
     weightStatus.Text = "💦 Placing sprinkler..."
     weightStatus.TextColor3 = Color3.fromRGB(0, 200, 100)
-    weightProgress.Text = "💦 Target: " .. (targetPlantName ~= "" and targetPlantName or "posisi tersimpan")
+    
+    if targetPlantName ~= "" then
+        weightProgress.Text = "💦 Target plant: " .. targetPlantName
+    else
+        weightProgress.Text = "💦 Target: posisi tersimpan"
+    end
     
     local tool = getSprinklerTool(sprinklerName)
     if not tool then
@@ -2182,7 +2194,8 @@ local function doAutoSprinklerOnce()
         return false
     end
     
-    if networkingWeight and networkingWeight.Place then
+    -- Gunakan networkingWeight yang sudah di-load di awal Tab Weight
+    if networkingWeight and networkingWeight.Place and networkingWeight.Place.PlaceSprinkler then
         local success = pcall(function()
             networkingWeight.Place.PlaceSprinkler:Fire(targetPos, sprinklerName, tool, plotId)
         end)
@@ -2192,7 +2205,7 @@ local function doAutoSprinklerOnce()
             lastSprinklerPlaceTime = os.time()
             weightStatus.Text = "💦 Sprinkler placed!"
             weightStatus.TextColor3 = C.green
-            task.wait(2)  // Tunggu 2 detik setelah place
+            task.wait(2)
             return true
         else
             weightStatus.Text = "💦 Sprinkler gagal (error fire)"
@@ -2200,11 +2213,11 @@ local function doAutoSprinklerOnce()
             return false
         end
     else
-        weightStatus.Text = "💦 Sprinkler gagal (networking tidak tersedia)"
+        weightStatus.Text = "💦 Sprinkler gagal (networking Place tidak tersedia)"
         weightStatus.TextColor3 = C.red
         return false
     end
-end
+        end
         
     local function startAutoLoop()
     isRunning = true
