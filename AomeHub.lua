@@ -1729,7 +1729,7 @@ do
     Instance.new("UICorner", stopBtn).CornerRadius = UDim.new(0, 4)
     
     -- Auto Loop
-    -- Fungsi untuk auto watering 1x (selaras dengan Tab Tools)
+    -- Fungsi untuk auto watering 1x (target plant dari Tab Tools)
 local function doAutoWaterOnce()
     if not config.weightAutoWaterAfterShovel then return end
     
@@ -1771,32 +1771,79 @@ local function doAutoWaterOnce()
         return false
     end
     
-    -- Tentukan target posisi
+    -- Tentukan target posisi dari plant yang dipilih di Tab Tools
     local targetPos = nil
+    local targetPlantName = config.toolsSelectedPlant or ""
     
-    -- 1. Coba load posisi dari config (yang disimpan di Tab Tools)
-    if config.toolsSavedPosition then
+    if targetPlantName ~= "" then
+        -- Cari plant di garden
+        local function findMyPlot()
+            local gardens = workspace:FindFirstChild("Gardens")
+            if not gardens then return nil end
+            for _, plot in ipairs(gardens:GetChildren()) do
+                if plot:IsA("Model") and plot:GetAttribute("OwnerUserId") == player.UserId then
+                    return plot
+                end
+            end
+            return nil
+        end
+        
+        local function getPlantGroundPosition(plantModel)
+            local plantPos = plantModel:GetPivot().Position
+            
+            local rayParams = RaycastParams.new()
+            rayParams.FilterType = Enum.RaycastFilterType.Include
+            rayParams.FilterDescendantsInstances = workspace.Gardens:QueryDescendants("BasePart.PlantArea")
+            
+            local rayResult = workspace:Raycast(
+                Vector3.new(plantPos.X, plantPos.Y + 50, plantPos.Z),
+                Vector3.new(0, -100, 0),
+                rayParams
+            )
+            
+            if rayResult then return rayResult.Position end
+            return plantPos
+        end
+        
+        local plot = findMyPlot()
+        if plot then
+            local plantsFolder = plot:FindFirstChild("Plants")
+            if plantsFolder then
+                for _, plantModel in ipairs(plantsFolder:GetChildren()) do
+                    if plantModel:IsA("Model") then
+                        local seedName = plantModel:GetAttribute("SeedName")
+                        if seedName == targetPlantName then
+                            -- Dapatkan posisi ground dari plant
+                            targetPos = getPlantGroundPosition(plantModel)
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Jika plant tidak ditemukan, coba gunakan posisi tersimpan
+    if not targetPos and config.toolsSavedPosition then
         local p = config.toolsSavedPosition
         if p and p.x and p.y and p.z then
             targetPos = Vector3.new(p.x, p.y, p.z)
         end
     end
     
+    -- Jika masih tidak ada, gunakan posisi player
     if not targetPos then
-        -- 2. Jika tidak ada posisi tersimpan, gunakan posisi player
-        local function getPlayerPosition()
-            local char = player.Character
-            if not char then return nil end
+        local char = player.Character
+        if char then
             local root = char:FindFirstChild("HumanoidRootPart")
-            if not root then return nil end
-            return root.Position
+            if root then
+                targetPos = root.Position
+            end
         end
-        
-        targetPos = getPlayerPosition()
     end
     
     if not targetPos then
-        weightStatus.Text = "💧 Watering gagal (tidak ada posisi)"
+        weightStatus.Text = "💧 Watering gagal (tidak ada target)"
         weightStatus.TextColor3 = C.red
         return false
     end
@@ -1824,9 +1871,8 @@ local function doAutoWaterOnce()
     weightStatus.Text = "💧 Watering..."
     weightStatus.TextColor3 = Color3.fromRGB(0, 200, 255)
     
-    local selectedPlantName = config.toolsSelectedPlant or ""
-    if selectedPlantName ~= "" then
-        weightProgress.Text = "💧 Target: " .. selectedPlantName
+    if targetPlantName ~= "" then
+        weightProgress.Text = "💧 Target plant: " .. targetPlantName
     else
         weightProgress.Text = "💧 Target: posisi tersimpan"
     end
@@ -2505,6 +2551,17 @@ end
     
     -- SIMPAN KE CONFIG
     config.toolsSelectedPlant = plant.name
+    
+    -- Simpan posisi plant ke config (untuk watering target)
+    pcall(function()
+        local plantPos = selectedPlant.model:GetPivot().Position
+        config.toolsSavedPosition = {
+            x = plantPos.X,
+            y = plantPos.Y,
+            z = plantPos.Z
+        }
+    end)
+    
     saveConfig()
     
     toolsStatus.Text = "✅ Plant: " .. plant.name
