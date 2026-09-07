@@ -2232,10 +2232,27 @@ local function doAutoSprinklerOnce()
             -- AUTO SPRINKLER SEBELUM SCAN (jika enabled dan cooldown selesai)
             if config.weightAutoSprinklerBeforeScan then
                 weightProgress.Text = "💦 Cek sprinkler cooldown..."
+                local sprinklerPlaced = false
+                
                 pcall(function()
-                    doAutoSprinklerOnce()
+                    sprinklerPlaced = doAutoSprinklerOnce()
                 end)
+                
+                -- JEDA 2 DETIK SETELAH PLACE SPRINKLER SEBELUM SCAN
+                if sprinklerPlaced and isRunning then
+                    weightProgress.Text = "⏳ Jeda 2 detik setelah sprinkler..."
+                    weightStatus.Text = "💦 Menunggu..."
+                    weightStatus.TextColor3 = C.yellow
+                    
+                    for t = 2, 1, -1 do
+                        if not isRunning then break end
+                        weightProgress.Text = "⏳ Scan dalam " .. t .. "s..."
+                        task.wait(1)
+                    end
+                end
             end
+            
+            if not isRunning then break end
             
             weightProgress.Text = "🔍 Scanning garden..."
             weightStatus.Text = "🔍 Scanning..."
