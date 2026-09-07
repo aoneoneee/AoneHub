@@ -1125,12 +1125,16 @@ do
 do
     local parentWeight = tabFrames["Weight"]
     
-    -- Load networking
-    local networkingWeight = safeRequire(ReplicatedStorage.SharedModules.Networking)
+    -- Load networking dengan pcall
+    local networkingWeight = nil
+    pcall(function()
+        networkingWeight = require(ReplicatedStorage.SharedModules.Networking)
+    end)
+    
     if not networkingWeight then
         print("[AoneHub] ❌ Networking not found for Weight!")
         return
-    end
+        end
     
     -- Load seed data
     local seedNames = {}
@@ -1839,6 +1843,10 @@ local function doAutoWaterOnce()
         return false
     end
     
+    -- ============================================
+    -- SEMUA FUNGSI LOKAL DI DALAM doAutoWaterOnce
+    -- ============================================
+    
     -- Cek stock watering can
     local function getWateringCanStock(waterCanName)
         local total = 0
@@ -1861,76 +1869,16 @@ local function doAutoWaterOnce()
         return total
     end
     
-    local stock = getWateringCanStock(wateringCanName)
-    if stock <= 0 then
-        weightStatus.Text = "💧 Watering skipped (stock habis)"
-        weightStatus.TextColor3 = C.yellow
-        return false
-    end
-    
-    -- Tentukan target posisi dengan prioritas:
--- 1. Plant yang dipilih di Tab Tools
--- 2. Posisi yang disimpan di Tab Tools
--- 3. Posisi player (fallback)
-local targetPos = nil
-local targetName = ""
-
--- 1. Coba gunakan plant yang dipilih di Tab Tools
-if config.toolsSelectedPlant and config.toolsSelectedPlant ~= "" then
-    if config.toolsSelectedPlantPosition then
-        local p = config.toolsSelectedPlantPosition
-        if p and p.x and p.y and p.z then
-            targetPos = Vector3.new(p.x, p.y, p.z)
-            targetName = config.toolsSelectedPlant
-        end
-    end
-    
-    -- Jika posisi plant tidak tersimpan, coba cari plant di garden
-    if not targetPos then
-        local plot = findMyPlot()
-        if plot then
-            local plantsFolder = plot:FindFirstChild("Plants")
-            if plantsFolder then
-                for _, plantModel in ipairs(plantsFolder:GetChildren()) do
-                    if plantModel:IsA("Model") then
-                        local seedName = plantModel:GetAttribute("SeedName")
-                        if seedName == config.toolsSelectedPlant then
-                            targetPos = plantModel:GetPivot().Position
-                            targetName = seedName
-                            break
-                        end
-                    end
-                end
+    -- Cari plot player
+    local function findMyPlotLocal()
+        local gardens = workspace:FindFirstChild("Gardens")
+        if not gardens then return nil end
+        for _, plot in ipairs(gardens:GetChildren()) do
+            if plot:IsA("Model") and plot:GetAttribute("OwnerUserId") == player.UserId then
+                return plot
             end
         end
-    end
-end
-
--- 2. Jika tidak ada plant, coba posisi tersimpan
-if not targetPos and config.toolsSavedPosition then
-    local p = config.toolsSavedPosition
-    if p and p.x and p.y and p.z then
-        targetPos = Vector3.new(p.x, p.y, p.z)
-        targetName = "posisi tersimpan"
-    end
-end
-
--- 3. Fallback ke posisi player
-if not targetPos then
-    local char = player.Character
-    if char then
-        local root = char:FindFirstChild("HumanoidRootPart")
-        if root then
-            targetPos = root.Position
-            targetName = "posisi player"
-        end
-    end
-            end
-    
-    if not targetPos then
-        weightStatus.Text = "💧 Watering gagal (tidak ada posisi)"
-        weightStatus.TextColor3 = C.red
-        return false
+        return nil
     end
     
     -- Equip watering can
@@ -1953,14 +1901,92 @@ if not targetPos then
         return nil
     end
     
+    -- ============================================
+    -- CEK STOCK
+    -- ============================================
+    local stock = getWateringCanStock(wateringCanName)
+    if stock <= 0 then
+        weightStatus.Text = "💧 Watering skipped (stock habis)"
+        weightStatus.TextColor3 = C.yellow
+        return false
+    end
+    
+    -- ============================================
+    -- TENTUKAN TARGET POSISI
+    -- ============================================
+    local targetPos = nil
+    local targetName = ""
+    
+    -- 1. Coba gunakan plant yang dipilih di Tab Tools
+    if config.toolsSelectedPlant and config.toolsSelectedPlant ~= "" then
+        -- Cek posisi plant dari config
+        if config.toolsSelectedPlantPosition then
+            local p = config.toolsSelectedPlantPosition
+            if p and p.x and p.y and p.z then
+                targetPos = Vector3.new(p.x, p.y, p.z)
+                targetName = config.toolsSelectedPlant
+            end
+        end
+        
+        -- Jika posisi plant tidak tersimpan, coba cari plant di garden
+        if not targetPos then
+            local plot = findMyPlotLocal()
+            if plot then
+                local plantsFolder = plot:FindFirstChild("Plants")
+                if plantsFolder then
+                    for _, plantModel in ipairs(plantsFolder:GetChildren()) do
+                        if plantModel:IsA("Model") then
+                            local seedName = plantModel:GetAttribute("SeedName")
+                            if seedName == config.toolsSelectedPlant then
+                                targetPos = plantModel:GetPivot().Position
+                                targetName = seedName
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    -- 2. Jika tidak ada plant, coba posisi tersimpan
+    if not targetPos and config.toolsSavedPosition then
+        local p = config.toolsSavedPosition
+        if p and p.x and p.y and p.z then
+            targetPos = Vector3.new(p.x, p.y, p.z)
+            targetName = "posisi tersimpan"
+        end
+    end
+    
+    -- 3. Fallback ke posisi player
+    if not targetPos then
+        local char = player.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                targetPos = root.Position
+                targetName = "posisi player"
+            end
+        end
+    end
+    
+    if not targetPos then
+        weightStatus.Text = "💧 Watering gagal (tidak ada posisi)"
+        weightStatus.TextColor3 = C.red
+        return false
+    end
+    
+    -- ============================================
+    -- EQUIP WATERING CAN
+    -- ============================================
     weightStatus.Text = "💧 Watering..."
     weightStatus.TextColor3 = Color3.fromRGB(0, 200, 255)
     
     if targetName ~= "" then
-    weightProgress.Text = "💧 Target: " .. targetName
-else
-    weightProgress.Text = "💧 Target: tidak diketahui"
-            end
+        weightProgress.Text = "💧 Target: " .. targetName
+    else
+        weightProgress.Text = "💧 Target: tidak diketahui"
+    end
     
     local tool = getWateringCanTool(wateringCanName)
     if not tool then
@@ -1969,8 +1995,11 @@ else
         return false
     end
     
+    -- ============================================
+    -- FIRE WATERING
+    -- ============================================
     -- Gunakan networkingWeight yang sudah di-load di awal Tab Weight
-    if networkingWeight and networkingWeight.WateringCan then
+    if networkingWeight and networkingWeight.WateringCan and networkingWeight.WateringCan.UseWateringCan then
         local success = pcall(function()
             networkingWeight.WateringCan.UseWateringCan:Fire(targetPos, wateringCanName, tool)
         end)
@@ -2026,22 +2055,16 @@ else
     -- Auto watering setelah shovel
     if config.weightAutoWaterAfterShovel then
         weightProgress.Text = "💧 Auto watering..."
-        pcall(function()
+        local waterSuccess, waterErr = pcall(function()
             doAutoWaterOnce()
         end)
-    end
-    
-    -- Jeda 5 detik DIMULAI SETELAH watering selesai
-    weightProgress.Text = "✅ Selesai! Jeda 5 detik..."
-    weightStatus.Text = "✅ Menunggu..."
-    weightStatus.TextColor3 = C.green
-    
-    for t = 5, 1, -1 do
-        if not isRunning then break end
-        weightProgress.Text = "✅ Scan lagi dalam " .. t .. "s"
-        task.wait(1)
-    end
-                            end
+        
+        if not waterSuccess then
+            print("[AoneHub] ❌ Error auto watering: " .. tostring(waterErr))
+            weightStatus.Text = "💧 Watering error"
+            weightStatus.TextColor3 = C.red
+        end
+                                end
             end
         end
         
