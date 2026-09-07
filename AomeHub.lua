@@ -1343,10 +1343,45 @@ loopDelayInput.FocusLost:Connect(function()
     end
 end)
 
+-- Sprinkler Cooldown Input
+local sprinklerCooldownLabel = Instance.new("TextLabel")
+sprinklerCooldownLabel.Size = UDim2.new(1, -12, 0, 12)
+sprinklerCooldownLabel.LayoutOrder = 12
+sprinklerCooldownLabel.Text = "⏱ Cooldown sprinkler (detik):"
+sprinklerCooldownLabel.TextColor3 = C.textDim
+sprinklerCooldownLabel.Font = Enum.Font.Gotham
+sprinklerCooldownLabel.TextSize = 8
+sprinklerCooldownLabel.TextXAlignment = Enum.TextXAlignment.Left
+sprinklerCooldownLabel.BackgroundTransparency = 1
+sprinklerCooldownLabel.Parent = weightScroll
+
+local sprinklerCooldownInput = Instance.new("TextBox")
+sprinklerCooldownInput.Size = UDim2.new(1, -12, 0, 22)
+sprinklerCooldownInput.LayoutOrder = 13
+sprinklerCooldownInput.BackgroundColor3 = C.input
+sprinklerCooldownInput.TextColor3 = C.text
+sprinklerCooldownInput.PlaceholderText = "120"
+sprinklerCooldownInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
+sprinklerCooldownInput.Font = Enum.Font.Gotham
+sprinklerCooldownInput.TextSize = 10
+sprinklerCooldownInput.Text = tostring(config.weightSprinklerCooldown or 120)
+sprinklerCooldownInput.Parent = weightScroll
+Instance.new("UICorner", sprinklerCooldownInput).CornerRadius = UDim.new(0, 4)
+
+sprinklerCooldownInput.FocusLost:Connect(function()
+    local val = tonumber(sprinklerCooldownInput.Text)
+    if val and val >= 0 then
+        config.weightSprinklerCooldown = val
+        saveConfig()
+    else
+        sprinklerCooldownInput.Text = tostring(config.weightSprinklerCooldown or 120)
+    end
+end)
+
     -- Auto Sprinkler Toggle (sebelum scan)
 local autoSprinklerToggle = Instance.new("TextButton")
 autoSprinklerToggle.Size = UDim2.new(1, -12, 0, 22)
-autoSprinklerToggle.LayoutOrder = 12
+autoSprinklerToggle.LayoutOrder = 14
 autoSprinklerToggle.BackgroundColor3 = config.weightAutoSprinklerBeforeScan and Color3.fromRGB(0, 160, 100) or Color3.fromRGB(40, 40, 45)
 autoSprinklerToggle.Text = config.weightAutoSprinklerBeforeScan and "💦 Auto Sprinkler Sebelum Scan: ON" or "💦 Auto Sprinkler Sebelum Scan: OFF"
 autoSprinklerToggle.TextColor3 = C.text
@@ -1367,41 +1402,6 @@ autoSprinklerToggle.MouseButton1Click:Connect(function()
     else
         autoSprinklerToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
         autoSprinklerToggle.Text = "💦 Auto Sprinkler Sebelum Scan: OFF"
-    end
-end)
-
--- Sprinkler Cooldown Input
-local sprinklerCooldownLabel = Instance.new("TextLabel")
-sprinklerCooldownLabel.Size = UDim2.new(1, -12, 0, 12)
-sprinklerCooldownLabel.LayoutOrder = 13
-sprinklerCooldownLabel.Text = "⏱ Cooldown sprinkler (detik):"
-sprinklerCooldownLabel.TextColor3 = C.textDim
-sprinklerCooldownLabel.Font = Enum.Font.Gotham
-sprinklerCooldownLabel.TextSize = 8
-sprinklerCooldownLabel.TextXAlignment = Enum.TextXAlignment.Left
-sprinklerCooldownLabel.BackgroundTransparency = 1
-sprinklerCooldownLabel.Parent = weightScroll
-
-local sprinklerCooldownInput = Instance.new("TextBox")
-sprinklerCooldownInput.Size = UDim2.new(1, -12, 0, 22)
-sprinklerCooldownInput.LayoutOrder = 14
-sprinklerCooldownInput.BackgroundColor3 = C.input
-sprinklerCooldownInput.TextColor3 = C.text
-sprinklerCooldownInput.PlaceholderText = "120"
-sprinklerCooldownInput.PlaceholderColor3 = Color3.fromRGB(100, 100, 110)
-sprinklerCooldownInput.Font = Enum.Font.Gotham
-sprinklerCooldownInput.TextSize = 10
-sprinklerCooldownInput.Text = tostring(config.weightSprinklerCooldown or 120)
-sprinklerCooldownInput.Parent = weightScroll
-Instance.new("UICorner", sprinklerCooldownInput).CornerRadius = UDim.new(0, 4)
-
-sprinklerCooldownInput.FocusLost:Connect(function()
-    local val = tonumber(sprinklerCooldownInput.Text)
-    if val and val >= 0 then
-        config.weightSprinklerCooldown = val
-        saveConfig()
-    else
-        sprinklerCooldownInput.Text = tostring(config.weightSprinklerCooldown or 120)
     end
 end)
         
