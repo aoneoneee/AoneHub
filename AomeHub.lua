@@ -12,35 +12,132 @@ local function main()
     local playerGui = player:WaitForChild("PlayerGui")
 
     -- ==================================================================
-    -- CONFIG
-    -- ==================================================================
-    local function getConfigPath()
-        local basePath = "AoneHub"
-        pcall(function() makefolder(basePath) end)
-        return basePath .. "/AoneHub_Config.json"
-    end
-    local SAVE_FILE = getConfigPath()
+-- CONFIG
+-- ==================================================================
+local function getConfigPath()
+    local basePath = "AoneHub"
+    pcall(function() makefolder(basePath) end)
+    return basePath .. "/AoneHub_Config.json"
+end
+local SAVE_FILE = getConfigPath()
 
-    local config = {
-        selectedSeeds = {}, selectedGears = {}, selectedProps = {},
-        accordionSeedOpen = false, accordionGearOpen = false, accordionPropOpen = false,
-        searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
-        isRunningBuy = false, isRunningSell = false,
-        selectedSellFruits = {}, sellTargets = {},
-        mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false, extraToggle1 = false, extraToggle2 = false, extraToggle3 = false, valueDisplayEnabled = false, toolsSprinklerSelected = {}, toolsSprinklerAmounts = {}, toolsWateringCan = "", toolsWateringInterval = 30, toolsTrowelSelected = {}, toolsTrowelInterval = 1.0, toolsIsAutoSprinkler = false, toolsIsTrowelRunning = false, weightSelectedPlants = {}, weightAllSelected = true, weightMaxWeight = 50, weightDelayMin = 1.0, weightDelayMax = 2.0, weightIsRunning = false, weightSearchText = "", farmSelectedFruits = {}, farmSelectedMutations = {}, farmIncludeNone = true, farmSearchText = "", farmMaxKg = 0, farmJitterMin = 0.5, farmJitterMax = 1.5, farmFruitAccordionOpen = true, farmMutationAccordionOpen = true, toolsSavedPosition = nil, toolsSelectedPlants = "", weightAutoWaterAfterShovel = false, toolsSelectedPlantPosition = nil,
-    }
+local config = {
+    selectedSeeds = {}, selectedGears = {}, selectedProps = {},
+    accordionSeedOpen = false, accordionGearOpen = false, accordionPropOpen = false,
+    searchSeed = "", searchGear = "", searchProp = "", searchSell = "",
+    isRunningBuy = false, isRunningSell = false,
+    selectedSellFruits = {}, sellTargets = {},
+    mailFruitUsers = {}, mailTargetUsername = "", mailSelectedItems = {}, isAutoMailRunning = false, isAutoClaimRunning = false,
+    extraToggle1 = false,
+    extraToggle2 = false,
+    extraToggle3 = false,
+    valueDisplayEnabled = false,
+    
+    -- Tools config
+    toolsSprinklerSelected = {},
+    toolsSprinklerAmounts = {},
+    toolsWateringCan = "",
+    toolsWateringInterval = 30,
+    toolsTrowelSelected = {},
+    toolsTrowelInterval = 1.0,
+    toolsIsAutoSprinkler = false,
+    toolsIsTrowelRunning = false,
+    toolsSavedPosition = nil,
+    toolsSelectedPlant = "",           -- ← BENAR (singular)
+    toolsSelectedPlantPosition = nil,
+    
+    -- Weight config
+    weightSelectedPlants = {},
+    weightAllSelected = true,
+    weightMaxWeight = 50,
+    weightDelayMin = 1.0,
+    weightDelayMax = 2.0,
+    weightIsRunning = false,
+    weightSearchText = "",
+    weightAutoWaterAfterShovel = false,
+    
+    -- Farm config
+    farmSelectedFruits = {},
+    farmSelectedMutations = {},
+    farmIncludeNone = true,
+    farmSearchText = "",
+    farmMaxKg = 0,
+    farmJitterMin = 0.5,
+    farmJitterMax = 1.5,
+    farmFruitAccordionOpen = true,
+    farmMutationAccordionOpen = true,
+}
 
-    local function loadConfig()
-        local s, d = pcall(readfile, SAVE_FILE)
-        if s and d then local s2, loaded = pcall(HttpService.JSONDecode, HttpService, d)
-            if s2 and loaded then for k, v in pairs(loaded) do config[k] = v end; if config.mailTargetUsername == nil then config.mailTargetUsername = "" end; if config.mailSelectedItems == nil then config.mailSelectedItems = {} end; if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end; if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end; if config.extraToggle1 == nil then config.extraToggle1 = false end; if config.extraToggle2 == nil then config.extraToggle2 = false end; if config.extraToggle3 == nil then config.extraToggle3 = false end; if config.toolsSprinklerSelected == nil then config.toolsSprinklerSelected = {} end; if config.toolsSprinklerAmounts == nil then config.toolsSprinklerAmounts = {} end; if config.toolsWateringCan == nil then config.toolsWateringCan = "" end; if config.toolsWateringInterval == nil then config.toolsWateringInterval = 30 end; if config.toolsTrowelSelected == nil then config.toolsTrowelSelected = {} end; if config.toolsTrowelInterval == nil then config.toolsTrowelInterval = 1.0 end; if config.toolsIsAutoSprinkler == nil then config.toolsIsAutoSprinkler = false end; if config.toolsIsTrowelRunning == nil then config.toolsIsTrowelRunning = false end; if config.weightSelectedPlants == nil then config.weightSelectedPlants = {} end; if config.weightAllSelected == nil then config.weightAllSelected = true end; if config.weightMaxWeight == nil then config.weightMaxWeight = 50 end; if config.weightDelayMin == nil then config.weightDelayMin = 1.0 end; if config.weightDelayMax == nil then config.weightDelayMax = 2.0 end; if config.weightIsRunning == nil then config.weightIsRunning = false end; if config.weightSearchText == nil then config.weightSearchText = "" end; if config.farmSelectedFruits == nil then config.farmSelectedFruits = {} end; if config.farmSelectedMutations == nil then config.farmSelectedMutations = {} end; if config.farmIncludeNone == nil then config.farmIncludeNone = true end; if config.farmSearchText == nil then config.farmSearchText = "" end; if config.farmMaxKg == nil then config.farmMaxKg = 0 end; if config.farmJitterMin == nil then config.farmJitterMin = 0.5 end; if config.farmJitterMax == nil then config.farmJitterMax = 1.5 end; if config.farmFruitAccordionOpen == nil then config.farmFruitAccordionOpen = true end; if config.farmMutationAccordionOpen == nil then config.farmMutationAccordionOpen = true end; if config.weightAutoWaterAfterShovel == nil then config.weightAutoWaterAfterShovel = false end; if config.toolsSavedPosition == nil then config.toolsSavedPosition = nil end; if config.toolsSelectedPlant == nil then config.toolsSelectedPlant = "" end; if config.toolsSelectedPlantPosition == nil then config.toolsSelectedPlantPosition = nil end; return true end
-        end; return false
+local function loadConfig()
+    local s, d = pcall(readfile, SAVE_FILE)
+    if s and d then 
+        local s2, loaded = pcall(HttpService.JSONDecode, HttpService, d)
+        if s2 and loaded then 
+            for k, v in pairs(loaded) do 
+                config[k] = v 
+            end
+            
+            -- Basic checks
+            if config.mailTargetUsername == nil then config.mailTargetUsername = "" end
+            if config.mailSelectedItems == nil then config.mailSelectedItems = {} end
+            if config.isAutoMailRunning == nil then config.isAutoMailRunning = false end
+            if config.isAutoClaimRunning == nil then config.isAutoClaimRunning = false end
+            
+            -- Extra toggle checks
+            if config.extraToggle1 == nil then config.extraToggle1 = false end
+            if config.extraToggle2 == nil then config.extraToggle2 = false end
+            if config.extraToggle3 == nil then config.extraToggle3 = false end
+            if config.valueDisplayEnabled == nil then config.valueDisplayEnabled = false end
+            
+            -- Tools checks
+            if config.toolsSprinklerSelected == nil then config.toolsSprinklerSelected = {} end
+            if config.toolsSprinklerAmounts == nil then config.toolsSprinklerAmounts = {} end
+            if config.toolsWateringCan == nil then config.toolsWateringCan = "" end
+            if config.toolsWateringInterval == nil then config.toolsWateringInterval = 30 end
+            if config.toolsTrowelSelected == nil then config.toolsTrowelSelected = {} end
+            if config.toolsTrowelInterval == nil then config.toolsTrowelInterval = 1.0 end
+            if config.toolsIsAutoSprinkler == nil then config.toolsIsAutoSprinkler = false end
+            if config.toolsIsTrowelRunning == nil then config.toolsIsTrowelRunning = false end
+            if config.toolsSavedPosition == nil then config.toolsSavedPosition = nil end
+            if config.toolsSelectedPlant == nil then config.toolsSelectedPlant = "" end
+            if config.toolsSelectedPlantPosition == nil then config.toolsSelectedPlantPosition = nil end
+            
+            -- Weight checks
+            if config.weightSelectedPlants == nil then config.weightSelectedPlants = {} end
+            if config.weightAllSelected == nil then config.weightAllSelected = true end
+            if config.weightMaxWeight == nil then config.weightMaxWeight = 50 end
+            if config.weightDelayMin == nil then config.weightDelayMin = 1.0 end
+            if config.weightDelayMax == nil then config.weightDelayMax = 2.0 end
+            if config.weightIsRunning == nil then config.weightIsRunning = false end
+            if config.weightSearchText == nil then config.weightSearchText = "" end
+            if config.weightAutoWaterAfterShovel == nil then config.weightAutoWaterAfterShovel = false end
+            
+            -- Farm checks
+            if config.farmSelectedFruits == nil then config.farmSelectedFruits = {} end
+            if config.farmSelectedMutations == nil then config.farmSelectedMutations = {} end
+            if config.farmIncludeNone == nil then config.farmIncludeNone = true end
+            if config.farmSearchText == nil then config.farmSearchText = "" end
+            if config.farmMaxKg == nil then config.farmMaxKg = 0 end
+            if config.farmJitterMin == nil then config.farmJitterMin = 0.5 end
+            if config.farmJitterMax == nil then config.farmJitterMax = 1.5 end
+            if config.farmFruitAccordionOpen == nil then config.farmFruitAccordionOpen = true end
+            if config.farmMutationAccordionOpen == nil then config.farmMutationAccordionOpen = true end
+            
+            -- Save fixed config
+            saveConfig()
+            
+            return true 
+        end
     end
-    local function saveConfig()
-        local s, json = pcall(HttpService.JSONEncode, HttpService, config)
-        if s then pcall(writefile, SAVE_FILE, json) end
-    end
-    loadConfig()
+    return false
+end
+
+local function saveConfig()
+    local s, json = pcall(HttpService.JSONEncode, HttpService, config)
+    if s then pcall(writefile, SAVE_FILE, json) end
+end
+
+loadConfig()
 
     local function safeRequire(path)
         local s, r = pcall(function() return require(path) end)
