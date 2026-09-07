@@ -1775,7 +1775,12 @@ local function doAutoWaterOnce()
     local targetPos = nil
     
     -- 1. Coba load posisi dari config (yang disimpan di Tab Tools)
-    targetPos = loadSavedPositionFromConfig()
+    if config.toolsSavedPosition then
+        local p = config.toolsSavedPosition
+        if p and p.x and p.y and p.z then
+            targetPos = Vector3.new(p.x, p.y, p.z)
+        end
+    end
     
     if not targetPos then
         -- 2. Jika tidak ada posisi tersimpan, gunakan posisi player
@@ -1818,7 +1823,13 @@ local function doAutoWaterOnce()
     
     weightStatus.Text = "💧 Watering..."
     weightStatus.TextColor3 = Color3.fromRGB(0, 200, 255)
-    weightProgress.Text = "💧 Target: " .. (config.toolsSelectedPlant or "posisi tersimpan")
+    
+    local selectedPlantName = config.toolsSelectedPlant or ""
+    if selectedPlantName ~= "" then
+        weightProgress.Text = "💧 Target: " .. selectedPlantName
+    else
+        weightProgress.Text = "💧 Target: posisi tersimpan"
+    end
     
     local tool = getWateringCanTool(wateringCanName)
     if not tool then
@@ -1827,23 +1838,28 @@ local function doAutoWaterOnce()
         return false
     end
     
-    -- Gunakan networking yang sama dengan Tab Tools
-    local networkingWeight = safeRequire(ReplicatedStorage.SharedModules.Networking)
-    if networkingWeight then
-        pcall(function()
+    -- Gunakan networkingWeight yang sudah di-load di awal Tab Weight
+    if networkingWeight and networkingWeight.WateringCan then
+        local success = pcall(function()
             networkingWeight.WateringCan.UseWateringCan:Fire(targetPos, wateringCanName, tool)
         end)
         
-        weightStatus.Text = "💧 Watering selesai!"
-        weightStatus.TextColor3 = C.green
-        task.wait(1)  -- Tunggu 1 detik setelah watering
-        return true
+        if success then
+            weightStatus.Text = "💧 Watering selesai!"
+            weightStatus.TextColor3 = C.green
+            task.wait(1)
+            return true
+        else
+            weightStatus.Text = "💧 Watering gagal (error fire)"
+            weightStatus.TextColor3 = C.red
+            return false
+        end
+    else
+        weightStatus.Text = "💧 Watering gagal (networking tidak tersedia)"
+        weightStatus.TextColor3 = C.red
+        return false
     end
-    
-    weightStatus.Text = "💧 Watering gagal"
-    weightStatus.TextColor3 = C.red
-    return false
-end
+        end
         
     local function startAutoLoop()
     isRunning = true
@@ -1876,23 +1892,25 @@ end
                 doShovelAll()
 
                 if isRunning then
-                    -- Auto watering setelah shovel
-                    if config.weightAutoWaterAfterShovel then
-                        weightProgress.Text = "💧 Auto watering..."
-                        doAutoWaterOnce()
-                    end
-
-                    -- Jeda 5 detik DIMULAI SETELAH watering selesai
-                    weightProgress.Text = "✅ Selesai! Jeda 5 detik..."
-                    weightStatus.Text = "✅ Menunggu..."
-                    weightStatus.TextColor3 = C.green
-
-                    for t = 5, 1, -1 do
-                        if not isRunning then break end
-                        weightProgress.Text = "✅ Scan lagi dalam " .. t .. "s"
-                        task.wait(1)
-                    end
-                end
+    -- Auto watering setelah shovel
+    if config.weightAutoWaterAfterShovel then
+        weightProgress.Text = "💧 Auto watering..."
+        pcall(function()
+            doAutoWaterOnce()
+        end)
+    end
+    
+    -- Jeda 5 detik DIMULAI SETELAH watering selesai
+    weightProgress.Text = "✅ Selesai! Jeda 5 detik..."
+    weightStatus.Text = "✅ Menunggu..."
+    weightStatus.TextColor3 = C.green
+    
+    for t = 5, 1, -1 do
+        if not isRunning then break end
+        weightProgress.Text = "✅ Scan lagi dalam " .. t .. "s"
+        task.wait(1)
+    end
+                            end
             end
         end
         
