@@ -2007,6 +2007,11 @@ local function doAutoWaterOnce()
 
     -- Fungsi untuk auto sprinkler 1x (selaras dengan Tab Tools)
 local function doAutoSprinklerOnce()
+    print("[DEBUG] doAutoSprinklerOnce called")
+    print("[DEBUG] config.weightAutoSprinklerBeforeScan:", config.weightAutoSprinklerBeforeScan)
+    print("[DEBUG] sprinklerCooldownInput:", sprinklerCooldownInput ~= nil)
+    print("[DEBUG] lastSprinklerPlaceTime:", lastSprinklerPlaceTime)
+    print("[DEBUG] networkingWeight:", networkingWeight ~= nil)
     if not config.weightAutoSprinklerBeforeScan then return false end
     
     -- Cek cooldown
