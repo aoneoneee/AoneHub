@@ -1,4 +1,4 @@
--- Auto Leveling System GUI (Preset Based)
+-- Auto Leveling System GUI (Rainbow Mode Fix)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -14,6 +14,90 @@ local PetsService = require(ReplicatedStorage.Modules.PetServices.PetsService)
 -- Constants
 local MAX_PET_SLOTS = 8
 local TARGET_LEVEL_DEFAULT = 100
+local BASE_WEIGHT_NORMAL = 3.5
+local BASE_WEIGHT_RAINBOW = 5.5
+local LEVEL_TARGET_NORMAL = 50
+local LEVEL_TARGET_RAINBOW = 40
+
+-- Functions
+local function getPlayerPetData()
+    local playerData = DataService:GetData()
+    if playerData and playerData.PetsData then
+        return playerData.PetsData
+    end
+    return nil
+end
+
+local function getPetType(petUUID)
+    local petsData = getPlayerPetData()
+    if not petsData then return "Unknown" end
+    
+    local petData = petsData.PetInventory.Data[petUUID]
+    if petData then
+        if petData.PetType then
+            return petData.PetType
+        elseif petData.PetData then
+            return petData.PetData.PetType or petData.PetData.Type or "Unknown"
+        elseif petData.Type then
+            return petData.Type
+        end
+    end
+    return "Unknown"
+end
+
+local function getPetLevel(petUUID)
+    local petsData = getPlayerPetData()
+    if not petsData then return 0 end
+    
+    local petData = petsData.PetInventory.Data[petUUID]
+    if petData then
+        if petData.Level then
+            return petData.Level
+        elseif petData.PetData then
+            return petData.PetData.Level or petData.PetData.CurrentLevel or 0
+        end
+    end
+    return 0
+end
+
+local function getPetWeight(petUUID)
+    local petsData = getPlayerPetData()
+    if not petsData then return 0 end
+    
+    local petData = petsData.PetInventory.Data[petUUID]
+    if petData then
+        if petData.BaseWeight then
+            return petData.BaseWeight
+        elseif petData.PetData and petData.PetData.BaseWeight then
+            return petData.PetData.BaseWeight
+        elseif petData.Weight then
+            return petData.Weight
+        elseif petData.PetData and petData.PetData.Weight then
+            return petData.PetData.Weight
+        end
+    end
+    return 0
+end
+
+local function getEquippedPets()
+    local petsData = getPlayerPetData()
+    if not petsData then return {} end
+    return petsData.EquippedPets or {}
+end
+
+local function equipPet(petUUID)
+    local success = pcall(function()
+        PetsService:EquipPet(petUUID, CFrame.new(0, 10, 0))
+    end)
+    return success
+end
+
+local function unequipPet(petUUID)
+    local success = pcall(function()
+        PetsService:UnequipPet(petUUID)
+    end)
+    return success
+end
 
 -- Save/Load System
 local function saveTeamPreset(presetName, petList)
@@ -24,9 +108,18 @@ local function saveTeamPreset(presetName, petList)
         saveFolder.Parent = workspace
     end
     
+    local petsWithInfo = {}
+    for _, petUUID in ipairs(petList) do
+        table.insert(petsWithInfo, {
+            UUID = petUUID,
+            PetType = getPetType(petUUID),
+            Level = getPetLevel(petUUID)
+        })
+    end
+    
     local presetData = {
         name = presetName,
-        pets = petList,
+        pets = petsWithInfo,
         savedAt = os.time()
     }
     
@@ -43,7 +136,6 @@ end
 
 local function loadTeamPresets()
     local presets = {}
-    
     local saveFolder = workspace:FindFirstChild("AutoLevel_Presets")
     if saveFolder then
         for _, child in pairs(saveFolder:GetChildren()) do
@@ -57,18 +149,20 @@ local function loadTeamPresets()
             end
         end
     end
-    
     return presets
 end
 
-local function deleteTeamPreset(presetName)
-    local saveFolder = workspace:FindFirstChild("AutoLevel_Presets")
-    if saveFolder then
-        local preset = saveFolder:FindFirstChild(presetName)
-        if preset then
-            preset:Destroy()
+local function getPresetUUIDs(presetName)
+    local presets = loadTeamPresets()
+    local preset = presets[presetName]
+    if preset then
+        local uuids = {}
+        for _, petInfo in ipairs(preset.pets) do
+            table.insert(uuids, petInfo.UUID)
         end
+        return uuids
     end
+    return {}
 end
 
 -- Main GUI
@@ -77,11 +171,10 @@ AutoLevelGUI.Name = "AutoLevelGUI"
 AutoLevelGUI.ResetOnSpawn = false
 AutoLevelGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 350, 0, 480)
-MainFrame.Position = UDim2.new(1, -370, 0.5, -240)
+MainFrame.Size = UDim2.new(0, 380, 0, 600)
+MainFrame.Position = UDim2.new(1, -400, 0.5, -300)
 MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -93,7 +186,6 @@ UICornerMain.Parent = MainFrame
 
 -- Title Bar
 local TitleBar = Instance.new("Frame")
-TitleBar.Name = "TitleBar"
 TitleBar.Size = UDim2.new(1, 0, 0, 40)
 TitleBar.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
 TitleBar.BorderSizePixel = 0
@@ -108,13 +200,12 @@ TitleText.Size = UDim2.new(0.6, 0, 1, 0)
 TitleText.Position = UDim2.new(0, 10, 0, 0)
 TitleText.BackgroundTransparency = 1
 TitleText.Font = Enum.Font.GothamBold
-TitleText.Text = "🐾 Auto Leveling"
+TitleText.Text = "🐾 Auto Leveling + Weight"
 TitleText.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleText.TextSize = 16
+TitleText.TextSize = 14
 TitleText.TextXAlignment = Enum.TextXAlignment.Left
 TitleText.Parent = TitleBar
 
--- Minimize Button
 local MinimizeButton = Instance.new("TextButton")
 MinimizeButton.Size = UDim2.new(0, 25, 0, 25)
 MinimizeButton.Position = UDim2.new(1, -60, 0, 8)
@@ -130,7 +221,6 @@ local UICornerMinimize = Instance.new("UICorner")
 UICornerMinimize.CornerRadius = UDim.new(0, 5)
 UICornerMinimize.Parent = MinimizeButton
 
--- Close Button
 local CloseButton = Instance.new("TextButton")
 CloseButton.Size = UDim2.new(0, 25, 0, 25)
 CloseButton.Position = UDim2.new(1, -30, 0, 8)
@@ -150,7 +240,6 @@ CloseButton.MouseButton1Click:Connect(function()
     AutoLevelGUI:Destroy()
 end)
 
--- Content Frame
 local ContentFrame = Instance.new("Frame")
 ContentFrame.Size = UDim2.new(1, 0, 1, -40)
 ContentFrame.Position = UDim2.new(0, 0, 0, 40)
@@ -158,16 +247,15 @@ ContentFrame.BackgroundTransparency = 1
 ContentFrame.BorderSizePixel = 0
 ContentFrame.Parent = MainFrame
 
--- Minimize Functionality
 local isMinimized = false
 MinimizeButton.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     if isMinimized then
-        MainFrame.Size = UDim2.new(0, 350, 0, 40)
+        MainFrame.Size = UDim2.new(0, 380, 0, 40)
         ContentFrame.Visible = false
         MinimizeButton.Text = "+"
     else
-        MainFrame.Size = UDim2.new(0, 350, 0, 480)
+        MainFrame.Size = UDim2.new(0, 380, 0, 600)
         ContentFrame.Visible = true
         MinimizeButton.Text = "—"
     end
@@ -219,7 +307,7 @@ ScrollFrame.BackgroundTransparency = 1
 ScrollFrame.BorderSizePixel = 0
 ScrollFrame.ScrollBarThickness = 4
 ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 800)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1000)
 ScrollFrame.Parent = ContentFrame
 
 local ContentLayout = Instance.new("UIListLayout")
@@ -228,16 +316,32 @@ ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ContentLayout.Parent = ScrollFrame
 
 -- Variables
-local selectedTeamPreset = nil -- Preset tim yang dipilih untuk leveling
-local selectedPetTypes = {} -- Pet type yang dipilih untuk target
-local queuedPets = {} -- Antrian semua pet target
-local equippedTargetPets = {} -- Pet target yang sedang di-equip
+local selectedTeamPreset = nil
+local selectedWeightPreset = nil
+local selectedAdvancedPreset = nil
+local selectedPetTypes = {}
+local queuedPets = {}
+local equippedTargetPets = {}
 local targetLevel = TARGET_LEVEL_DEFAULT
+local advancedTargetLevel = 150
 local isLeveling = false
+local isAutoWeight = false
+local isAdvancedLeveling = false
+local rainbowMode = false -- MODE rainbow (bukan filter pet)
 local targetSearchText = ""
-local petSearchText = "" -- Search untuk membuat preset
+local petSearchText = ""
+local tempPresetPets = {}
 
--- Create Section function
+-- Helper untuk mendapatkan target berdasarkan mode
+local function getWeightTarget()
+    return rainbowMode and BASE_WEIGHT_RAINBOW or BASE_WEIGHT_NORMAL
+end
+
+local function getLevelTargetForWeight()
+    return rainbowMode and LEVEL_TARGET_RAINBOW or LEVEL_TARGET_NORMAL
+end
+
+-- Create Section
 local function createSection(parent, title)
     local SectionFrame = Instance.new("Frame")
     SectionFrame.Size = UDim2.new(1, -10, 0, 200)
@@ -264,30 +368,29 @@ local function createSection(parent, title)
 end
 
 -- ============ PILIH TIM SECTION ============
-local TeamSelectSection, TeamSelectTitle = createSection(ScrollFrame, "👥 Pilih Tim Leveling")
+local TeamSelectSection = createSection(ScrollFrame, "👥 Pilih Tim Leveling")
 TeamSelectSection.LayoutOrder = 1
 TeamSelectSection.Size = UDim2.new(1, -10, 0, 120)
 
--- Selected Team Display
 local SelectedTeamLabel = Instance.new("TextLabel")
-SelectedTeamLabel.Size = UDim2.new(1, -20, 0, 25)
-SelectedTeamLabel.Position = UDim2.new(0, 10, 0, 30)
+SelectedTeamLabel.Size = UDim2.new(1, -20, 0, 35)
+SelectedTeamLabel.Position = UDim2.new(0, 10, 0, 28)
 SelectedTeamLabel.BackgroundColor3 = Color3.fromRGB(50, 80, 50)
 SelectedTeamLabel.BorderSizePixel = 0
 SelectedTeamLabel.Font = Enum.Font.GothamBold
-SelectedTeamLabel.Text = "Belum ada tim dipilih"
+SelectedTeamLabel.Text = "Tim Leveling: Belum dipilih"
 SelectedTeamLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-SelectedTeamLabel.TextSize = 11
+SelectedTeamLabel.TextSize = 9
+SelectedTeamLabel.TextWrapped = true
 SelectedTeamLabel.Parent = TeamSelectSection
 
 local UICornerSelectedTeam = Instance.new("UICorner")
 UICornerSelectedTeam.CornerRadius = UDim.new(0, 4)
 UICornerSelectedTeam.Parent = SelectedTeamLabel
 
--- Preset Dropdown
 local PresetDropdown = Instance.new("Frame")
-PresetDropdown.Size = UDim2.new(1, -20, 0, 30)
-PresetDropdown.Position = UDim2.new(0, 10, 0, 60)
+PresetDropdown.Size = UDim2.new(1, -20, 0, 28)
+PresetDropdown.Position = UDim2.new(0, 10, 0, 68)
 PresetDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
 PresetDropdown.BorderSizePixel = 0
 PresetDropdown.Parent = TeamSelectSection
@@ -300,20 +403,19 @@ local PresetDropdownButton = Instance.new("TextButton")
 PresetDropdownButton.Size = UDim2.new(1, 0, 1, 0)
 PresetDropdownButton.BackgroundTransparency = 1
 PresetDropdownButton.Font = Enum.Font.Gotham
-PresetDropdownButton.Text = "📂 Pilih Preset Tim"
+PresetDropdownButton.Text = "📂 Pilih Preset Tim Leveling"
 PresetDropdownButton.TextColor3 = Color3.fromRGB(200, 200, 200)
-PresetDropdownButton.TextSize = 11
+PresetDropdownButton.TextSize = 10
 PresetDropdownButton.Parent = PresetDropdown
 
--- Preset List
 local PresetListFrame = Instance.new("ScrollingFrame")
-PresetListFrame.Size = UDim2.new(1, -20, 0, 80)
-PresetListFrame.Position = UDim2.new(0, 10, 0, 95)
+PresetListFrame.Size = UDim2.new(1, -20, 0, 70)
+PresetListFrame.Position = UDim2.new(0, 10, 0, 100)
 PresetListFrame.BackgroundTransparency = 1
 PresetListFrame.BorderSizePixel = 0
 PresetListFrame.ScrollBarThickness = 3
 PresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-PresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 80)
+PresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 70)
 PresetListFrame.Visible = false
 PresetListFrame.Parent = TeamSelectSection
 
@@ -322,120 +424,86 @@ PresetListLayout.Padding = UDim.new(0, 3)
 PresetListLayout.Parent = PresetListFrame
 
 -- ============ BUAT PRESET SECTION ============
-local CreatePresetSection, CreatePresetTitle = createSection(ScrollFrame, "💾 Buat Preset Tim")
+local CreatePresetSection = createSection(ScrollFrame, "💾 Buat Preset Tim")
 CreatePresetSection.LayoutOrder = 2
-CreatePresetSection.Size = UDim2.new(1, -10, 0, 180)
+CreatePresetSection.Size = UDim2.new(1, -10, 0, 160)
 
--- Preset Name Input
 local PresetNameInput = Instance.new("TextBox")
-PresetNameInput.Size = UDim2.new(1, -20, 0, 28)
-PresetNameInput.Position = UDim2.new(0, 10, 0, 30)
+PresetNameInput.Size = UDim2.new(1, -20, 0, 25)
+PresetNameInput.Position = UDim2.new(0, 10, 0, 28)
 PresetNameInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
 PresetNameInput.BorderSizePixel = 0
 PresetNameInput.Font = Enum.Font.Gotham
 PresetNameInput.PlaceholderText = "Nama preset tim..."
 PresetNameInput.Text = ""
 PresetNameInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-PresetNameInput.TextSize = 11
+PresetNameInput.TextSize = 10
 PresetNameInput.Parent = CreatePresetSection
 
 local UICornerPresetName = Instance.new("UICorner")
 UICornerPresetName.CornerRadius = UDim.new(0, 4)
 UICornerPresetName.Parent = PresetNameInput
 
--- Pet Search
 local PetSearchBox = Instance.new("TextBox")
-PetSearchBox.Size = UDim2.new(1, -20, 0, 25)
-PetSearchBox.Position = UDim2.new(0, 10, 0, 62)
+PetSearchBox.Size = UDim2.new(1, -20, 0, 22)
+PetSearchBox.Position = UDim2.new(0, 10, 0, 56)
 PetSearchBox.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
 PetSearchBox.BorderSizePixel = 0
 PetSearchBox.Font = Enum.Font.Gotham
 PetSearchBox.PlaceholderText = "🔍 Cari pet..."
 PetSearchBox.Text = ""
 PetSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-PetSearchBox.TextSize = 11
+PetSearchBox.TextSize = 10
 PetSearchBox.Parent = CreatePresetSection
 
 local UICornerPetSearch = Instance.new("UICorner")
 UICornerPetSearch.CornerRadius = UDim.new(0, 4)
 UICornerPetSearch.Parent = PetSearchBox
 
--- Pet List (untuk membuat preset)
 local PetListFrame = Instance.new("ScrollingFrame")
-PetListFrame.Size = UDim2.new(1, -20, 0, 80)
-PetListFrame.Position = UDim2.new(0, 10, 0, 90)
+PetListFrame.Size = UDim2.new(1, -20, 0, 60)
+PetListFrame.Position = UDim2.new(0, 10, 0, 80)
 PetListFrame.BackgroundTransparency = 1
 PetListFrame.BorderSizePixel = 0
 PetListFrame.ScrollBarThickness = 3
 PetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-PetListFrame.CanvasSize = UDim2.new(0, 0, 0, 100)
+PetListFrame.CanvasSize = UDim2.new(0, 0, 0, 80)
 PetListFrame.Parent = CreatePresetSection
 
 local PetListLayout = Instance.new("UIListLayout")
-PetListLayout.Padding = UDim.new(0, 3)
+PetListLayout.Padding = UDim.new(0, 2)
 PetListLayout.Parent = PetListFrame
 
--- Save Preset Button
 local SavePresetButton = Instance.new("TextButton")
-SavePresetButton.Size = UDim2.new(1, -20, 0, 25)
-SavePresetButton.Position = UDim2.new(0, 10, 0, 150)
+SavePresetButton.Size = UDim2.new(1, -20, 0, 22)
+SavePresetButton.Position = UDim2.new(0, 10, 0, 135)
 SavePresetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
 SavePresetButton.BorderSizePixel = 0
 SavePresetButton.Font = Enum.Font.GothamBold
 SavePresetButton.Text = "💾 Simpan Preset"
 SavePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-SavePresetButton.TextSize = 11
+SavePresetButton.TextSize = 10
 SavePresetButton.Parent = CreatePresetSection
 
 local UICornerSave = Instance.new("UICorner")
 UICornerSave.CornerRadius = UDim.new(0, 4)
 UICornerSave.Parent = SavePresetButton
 
--- ============ TARGET LEVEL SECTION ============
-local LevelSection, LevelTitleLabel = createSection(ScrollFrame, "🎯 Target Level")
-LevelSection.LayoutOrder = 3
-LevelSection.Size = UDim2.new(1, -10, 0, 70)
-
-local LevelInput = Instance.new("TextBox")
-LevelInput.Size = UDim2.new(1, -20, 0, 30)
-LevelInput.Position = UDim2.new(0, 10, 0, 30)
-LevelInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-LevelInput.BorderSizePixel = 0
-LevelInput.Font = Enum.Font.Gotham
-LevelInput.PlaceholderText = "Target Level"
-LevelInput.Text = tostring(TARGET_LEVEL_DEFAULT)
-LevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-LevelInput.TextSize = 12
-LevelInput.Parent = LevelSection
-
-local UICornerLevelInput = Instance.new("UICorner")
-UICornerLevelInput.CornerRadius = UDim.new(0, 5)
-UICornerLevelInput.Parent = LevelInput
-
-LevelInput.FocusLost:Connect(function(enterPressed)
-    local newLevel = tonumber(LevelInput.Text)
-    if newLevel and newLevel > 0 then
-        targetLevel = newLevel
-    else
-        LevelInput.Text = tostring(targetLevel)
-    end
-end)
-
 -- ============ TARGET SECTION ============
-local TargetSection, TargetTitleLabel = createSection(ScrollFrame, "🎯 Pet Target")
-TargetSection.LayoutOrder = 4
-TargetSection.Size = UDim2.new(1, -10, 0, 180)
+local TargetSection = createSection(ScrollFrame, "🎯 Pet Target")
+TargetSection.LayoutOrder = 3
+TargetSection.Size = UDim2.new(1, -10, 0, 160)
 
 local TargetSearchBox = Instance.new("TextBox")
-TargetSearchBox.Size = UDim2.new(1, -20, 0, 25)
-TargetSearchBox.Position = UDim2.new(0, 10, 0, 30)
+TargetSearchBox.Size = UDim2.new(1, -20, 0, 22)
+TargetSearchBox.Position = UDim2.new(0, 10, 0, 28)
 TargetSearchBox.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
 TargetSearchBox.BorderSizePixel = 0
 TargetSearchBox.Font = Enum.Font.Gotham
 TargetSearchBox.PlaceholderText = "🔍 Cari pet target..."
 TargetSearchBox.Text = ""
 TargetSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-TargetSearchBox.TextSize = 11
+TargetSearchBox.TextSize = 10
 TargetSearchBox.Parent = TargetSection
 
 local UICornerTargetSearch = Instance.new("UICorner")
@@ -443,49 +511,200 @@ UICornerTargetSearch.CornerRadius = UDim.new(0, 4)
 UICornerTargetSearch.Parent = TargetSearchBox
 
 local TargetListFrame = Instance.new("ScrollingFrame")
-TargetListFrame.Size = UDim2.new(1, -20, 0, 100)
-TargetListFrame.Position = UDim2.new(0, 10, 0, 58)
+TargetListFrame.Size = UDim2.new(1, -20, 0, 80)
+TargetListFrame.Position = UDim2.new(0, 10, 0, 52)
 TargetListFrame.BackgroundTransparency = 1
 TargetListFrame.BorderSizePixel = 0
 TargetListFrame.ScrollBarThickness = 3
 TargetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, 100)
+TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, 80)
 TargetListFrame.Parent = TargetSection
 
 local TargetListLayout = Instance.new("UIListLayout")
-TargetListLayout.Padding = UDim.new(0, 3)
+TargetListLayout.Padding = UDim.new(0, 2)
 TargetListLayout.Parent = TargetListFrame
 
--- Scan Button
 local ScanButton = Instance.new("TextButton")
-ScanButton.Size = UDim2.new(1, -20, 0, 25)
-ScanButton.Position = UDim2.new(0, 10, 0, 155)
+ScanButton.Size = UDim2.new(1, -20, 0, 22)
+ScanButton.Position = UDim2.new(0, 10, 0, 135)
 ScanButton.BackgroundColor3 = Color3.fromRGB(60, 120, 200)
 ScanButton.BorderSizePixel = 0
 ScanButton.Font = Enum.Font.GothamBold
 ScanButton.Text = "🔍 Scan Pet Target"
 ScanButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ScanButton.TextSize = 11
+ScanButton.TextSize = 10
 ScanButton.Parent = TargetSection
 
 local UICornerScan = Instance.new("UICorner")
 UICornerScan.CornerRadius = UDim.new(0, 4)
 UICornerScan.Parent = ScanButton
 
+-- ============ AUTO WEIGHT SECTION ============
+local WeightSection = createSection(ScrollFrame, "⚖️ Auto Weight")
+WeightSection.LayoutOrder = 4
+WeightSection.Size = UDim2.new(1, -10, 0, 160)
+
+local WeightToggleButton = Instance.new("TextButton")
+WeightToggleButton.Size = UDim2.new(1, -20, 0, 28)
+WeightToggleButton.Position = UDim2.new(0, 10, 0, 28)
+WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+WeightToggleButton.BorderSizePixel = 0
+WeightToggleButton.Font = Enum.Font.GothamBold
+WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
+WeightToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+WeightToggleButton.TextSize = 11
+WeightToggleButton.Parent = WeightSection
+
+local UICornerWeightToggle = Instance.new("UICorner")
+UICornerWeightToggle.CornerRadius = UDim.new(0, 5)
+UICornerWeightToggle.Parent = WeightToggleButton
+
+-- Rainbow MODE Checkbox
+local RainbowModeButton = Instance.new("TextButton")
+RainbowModeButton.Size = UDim2.new(1, -20, 0, 25)
+RainbowModeButton.Position = UDim2.new(0, 10, 0, 60)
+RainbowModeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+RainbowModeButton.BorderSizePixel = 0
+RainbowModeButton.Font = Enum.Font.Gotham
+RainbowModeButton.Text = "☐ Rainbow Mode (BW: 5.5, Lv: 40)"
+RainbowModeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+RainbowModeButton.TextSize = 10
+RainbowModeButton.Parent = WeightSection
+
+local UICornerRainbow = Instance.new("UICorner")
+UICornerRainbow.CornerRadius = UDim.new(0, 4)
+UICornerRainbow.Parent = RainbowModeButton
+
+-- Weight Preset Dropdown
+local WeightPresetDropdown = Instance.new("Frame")
+WeightPresetDropdown.Size = UDim2.new(1, -20, 0, 28)
+WeightPresetDropdown.Position = UDim2.new(0, 10, 0, 90)
+WeightPresetDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+WeightPresetDropdown.BorderSizePixel = 0
+WeightPresetDropdown.Parent = WeightSection
+
+local UICornerWeightPreset = Instance.new("UICorner")
+UICornerWeightPreset.CornerRadius = UDim.new(0, 4)
+UICornerWeightPreset.Parent = WeightPresetDropdown
+
+local WeightPresetButton = Instance.new("TextButton")
+WeightPresetButton.Size = UDim2.new(1, 0, 1, 0)
+WeightPresetButton.BackgroundTransparency = 1
+WeightPresetButton.Font = Enum.Font.Gotham
+WeightPresetButton.Text = "📂 Pilih Preset Auto Weight"
+WeightPresetButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+WeightPresetButton.TextSize = 10
+WeightPresetButton.Parent = WeightPresetDropdown
+
+local WeightPresetListFrame = Instance.new("ScrollingFrame")
+WeightPresetListFrame.Size = UDim2.new(1, -20, 0, 60)
+WeightPresetListFrame.Position = UDim2.new(0, 10, 0, 120)
+WeightPresetListFrame.BackgroundTransparency = 1
+WeightPresetListFrame.BorderSizePixel = 0
+WeightPresetListFrame.ScrollBarThickness = 3
+WeightPresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+WeightPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 60)
+WeightPresetListFrame.Visible = false
+WeightPresetListFrame.Parent = WeightSection
+
+local WeightPresetLayout = Instance.new("UIListLayout")
+WeightPresetLayout.Padding = UDim.new(0, 2)
+WeightPresetLayout.Parent = WeightPresetListFrame
+
+-- ============ ADVANCED LEVELING SECTION ============
+local AdvancedSection = createSection(ScrollFrame, "🚀 Advanced Leveling (Opsional)")
+AdvancedSection.LayoutOrder = 5
+AdvancedSection.Size = UDim2.new(1, -10, 0, 120)
+
+local AdvancedToggleButton = Instance.new("TextButton")
+AdvancedToggleButton.Size = UDim2.new(1, -20, 0, 25)
+AdvancedToggleButton.Position = UDim2.new(0, 10, 0, 28)
+AdvancedToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+AdvancedToggleButton.BorderSizePixel = 0
+AdvancedToggleButton.Font = Enum.Font.GothamBold
+AdvancedToggleButton.Text = "🚀 Advanced: OFF"
+AdvancedToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+AdvancedToggleButton.TextSize = 10
+AdvancedToggleButton.Parent = AdvancedSection
+
+local UICornerAdvancedToggle = Instance.new("UICorner")
+UICornerAdvancedToggle.CornerRadius = UDim.new(0, 4)
+UICornerAdvancedToggle.Parent = AdvancedToggleButton
+
+local AdvancedLevelInput = Instance.new("TextBox")
+AdvancedLevelInput.Size = UDim2.new(1, -20, 0, 22)
+AdvancedLevelInput.Position = UDim2.new(0, 10, 0, 56)
+AdvancedLevelInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+AdvancedLevelInput.BorderSizePixel = 0
+AdvancedLevelInput.Font = Enum.Font.Gotham
+AdvancedLevelInput.PlaceholderText = "Advanced Target Level"
+AdvancedLevelInput.Text = "150"
+AdvancedLevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+AdvancedLevelInput.TextSize = 10
+AdvancedLevelInput.Parent = AdvancedSection
+
+local UICornerAdvancedLevel = Instance.new("UICorner")
+UICornerAdvancedLevel.CornerRadius = UDim.new(0, 4)
+UICornerAdvancedLevel.Parent = AdvancedLevelInput
+
+AdvancedLevelInput.FocusLost:Connect(function()
+    local newLevel = tonumber(AdvancedLevelInput.Text)
+    if newLevel and newLevel > 0 then
+        advancedTargetLevel = newLevel
+    else
+        AdvancedLevelInput.Text = tostring(advancedTargetLevel)
+    end
+end)
+
+local AdvancedPresetDropdown = Instance.new("Frame")
+AdvancedPresetDropdown.Size = UDim2.new(1, -20, 0, 25)
+AdvancedPresetDropdown.Position = UDim2.new(0, 10, 0, 82)
+AdvancedPresetDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+AdvancedPresetDropdown.BorderSizePixel = 0
+AdvancedPresetDropdown.Parent = AdvancedSection
+
+local UICornerAdvancedPreset = Instance.new("UICorner")
+UICornerAdvancedPreset.CornerRadius = UDim.new(0, 4)
+UICornerAdvancedPreset.Parent = AdvancedPresetDropdown
+
+local AdvancedPresetButton = Instance.new("TextButton")
+AdvancedPresetButton.Size = UDim2.new(1, 0, 1, 0)
+AdvancedPresetButton.BackgroundTransparency = 1
+AdvancedPresetButton.Font = Enum.Font.Gotham
+AdvancedPresetButton.Text = "📂 Pilih Preset Advanced"
+AdvancedPresetButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+AdvancedPresetButton.TextSize = 10
+AdvancedPresetButton.Parent = AdvancedPresetDropdown
+
+local AdvancedPresetListFrame = Instance.new("ScrollingFrame")
+AdvancedPresetListFrame.Size = UDim2.new(1, -20, 0, 50)
+AdvancedPresetListFrame.Position = UDim2.new(0, 10, 0, 110)
+AdvancedPresetListFrame.BackgroundTransparency = 1
+AdvancedPresetListFrame.BorderSizePixel = 0
+AdvancedPresetListFrame.ScrollBarThickness = 3
+AdvancedPresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+AdvancedPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 50)
+AdvancedPresetListFrame.Visible = false
+AdvancedPresetListFrame.Parent = AdvancedSection
+
+local AdvancedPresetLayout = Instance.new("UIListLayout")
+AdvancedPresetLayout.Padding = UDim.new(0, 2)
+AdvancedPresetLayout.Parent = AdvancedPresetListFrame
+
 -- ============ BUTTON SECTION ============
-local ButtonSection, ButtonTitleLabel = createSection(ScrollFrame, "⚙️ Kontrol")
-ButtonSection.LayoutOrder = 5
-ButtonSection.Size = UDim2.new(1, -10, 0, 100)
+local ButtonSection = createSection(ScrollFrame, "⚙️ Kontrol")
+ButtonSection.LayoutOrder = 6
+ButtonSection.Size = UDim2.new(1, -10, 0, 80)
 
 local ToggleButton = Instance.new("TextButton")
-ToggleButton.Size = UDim2.new(1, -20, 0, 35)
-ToggleButton.Position = UDim2.new(0, 10, 0, 30)
+ToggleButton.Size = UDim2.new(1, -20, 0, 30)
+ToggleButton.Position = UDim2.new(0, 10, 0, 25)
 ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
 ToggleButton.BorderSizePixel = 0
 ToggleButton.Font = Enum.Font.GothamBold
 ToggleButton.Text = "▶️ Mulai"
 ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleButton.TextSize = 12
+ToggleButton.TextSize = 11
 ToggleButton.Parent = ButtonSection
 
 local UICornerToggle = Instance.new("UICorner")
@@ -493,81 +712,17 @@ UICornerToggle.CornerRadius = UDim.new(0, 5)
 UICornerToggle.Parent = ToggleButton
 
 local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -20, 0, 20)
-StatusLabel.Position = UDim2.new(0, 10, 0, 70)
+StatusLabel.Size = UDim2.new(1, -20, 0, 15)
+StatusLabel.Position = UDim2.new(0, 10, 0, 58)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Font = Enum.Font.Gotham
 StatusLabel.Text = "Status: Idle"
 StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-StatusLabel.TextSize = 10
+StatusLabel.TextSize = 9
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.Parent = ButtonSection
 
--- Functions
-local function getPlayerPetData()
-    local playerData = DataService:GetData()
-    if playerData and playerData.PetsData then
-        return playerData.PetsData
-    end
-    return nil
-end
-
-local function getPetType(petUUID)
-    local petsData = getPlayerPetData()
-    if not petsData then return "Unknown" end
-    
-    local petData = petsData.PetInventory.Data[petUUID]
-    if petData then
-        if petData.PetType then
-            return petData.PetType
-        elseif petData.PetData then
-            return petData.PetData.PetType or 
-                   petData.PetData.Type or 
-                   "Unknown"
-        elseif petData.Type then
-            return petData.Type
-        end
-    end
-    return "Unknown"
-end
-
-local function getPetLevel(petUUID)
-    local petsData = getPlayerPetData()
-    if not petsData then return 0 end
-    
-    local petData = petsData.PetInventory.Data[petUUID]
-    if petData then
-        if petData.Level then
-            return petData.Level
-        elseif petData.PetData then
-            return petData.PetData.Level or 
-                   petData.PetData.CurrentLevel or 
-                   0
-        end
-    end
-    return 0
-end
-
-local function getEquippedPets()
-    local petsData = getPlayerPetData()
-    if not petsData then return {} end
-    return petsData.EquippedPets or {}
-end
-
-local function equipPet(petUUID)
-    local success = pcall(function()
-        PetsService:EquipPet(petUUID, CFrame.new(0, 10, 0))
-    end)
-    return success
-end
-
-local function unequipPet(petUUID)
-    local success = pcall(function()
-        PetsService:UnequipPet(petUUID)
-    end)
-    return success
-end
-
+-- Helper Functions
 local function clearDropdown(listFrame)
     for _, child in pairs(listFrame:GetChildren()) do
         if child:IsA("TextButton") then
@@ -576,67 +731,62 @@ local function clearDropdown(listFrame)
     end
 end
 
--- Temporary selected pets untuk membuat preset
-local tempPresetPets = {}
+local function updateStatus()
+    local teamCount = selectedTeamPreset and #getPresetUUIDs(selectedTeamPreset) or 0
+    local modeText = rainbowMode and "🌈" or "📊"
+    
+    StatusLabel.Text = string.format(
+        "%s Mode: %s | Tim: %d | Target: %d | Antrian: %d | Weight: %s | Adv: %s",
+        modeText,
+        rainbowMode and "Rainbow" or "Normal",
+        teamCount,
+        #equippedTargetPets,
+        #queuedPets,
+        isAutoWeight and "ON" or "OFF",
+        isAdvancedLeveling and "ON" or "OFF"
+    )
+end
 
--- Populate Preset Dropdown (untuk memilih tim)
-local function populatePresetDropdown()
-    clearDropdown(PresetListFrame)
+-- Populate Preset Dropdown (generic)
+local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
+    clearDropdown(listFrame)
     
     local presets = loadTeamPresets()
     local presetNames = {}
-    
     for name in pairs(presets) do
         table.insert(presetNames, name)
     end
-    
     table.sort(presetNames)
     
-    PresetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#presetNames * 28, 50))
+    listFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#presetNames * 25, 50))
     
     for i, presetName in ipairs(presetNames) do
         local preset = presets[presetName]
         
         local PresetButton = Instance.new("TextButton")
-        PresetButton.Size = UDim2.new(1, 0, 0, 25)
-        PresetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+        PresetButton.Size = UDim2.new(1, 0, 0, 22)
+        PresetButton.BackgroundColor3 = selectedPreset == presetName and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(70, 70, 85)
         PresetButton.BorderSizePixel = 0
         PresetButton.Font = Enum.Font.Gotham
         PresetButton.Text = string.format("📁 %s (%d pet)", presetName, #preset.pets)
         PresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        PresetButton.TextSize = 10
-        PresetButton.Parent = PresetListFrame
+        PresetButton.TextSize = 9
+        PresetButton.Parent = listFrame
         PresetButton.LayoutOrder = i
         
         local UICornerPreset = Instance.new("UICorner")
-        UICornerPreset.CornerRadius = UDim.new(0, 4)
+        UICornerPreset.CornerRadius = UDim.new(0, 3)
         UICornerPreset.Parent = PresetButton
         
-        -- Highlight jika dipilih
-        if selectedTeamPreset == presetName then
-            PresetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-        end
-        
         PresetButton.MouseButton1Click:Connect(function()
-            selectedTeamPreset = presetName
-            SelectedTeamLabel.Text = string.format("✅ Tim: %s (%d pet)", presetName, #preset.pets)
-            StatusLabel.Text = string.format("✅ Preset '%s' dipilih!", presetName)
-            PresetListFrame.Visible = false
-        end)
-        
-        PresetButton.MouseButton2Click:Connect(function()
-            deleteTeamPreset(presetName)
-            if selectedTeamPreset == presetName then
-                selectedTeamPreset = nil
-                SelectedTeamLabel.Text = "Belum ada tim dipilih"
-            end
-            StatusLabel.Text = string.format("🗑️ Preset '%s' dihapus!", presetName)
-            populatePresetDropdown()
+            onSelect(presetName)
+            listFrame.Visible = false
+            updateStatus()
         end)
     end
 end
 
--- Populate Pet List (untuk membuat preset)
+-- Populate Pet List
 local function populatePetList()
     clearDropdown(PetListFrame)
     
@@ -652,46 +802,32 @@ local function populatePetList()
         local isSelected = table.find(tempPresetPets, petUUID) ~= nil
         
         if petSearchText == "" or petType:lower():find(petSearchText:lower()) then
-            table.insert(allPets, {
-                UUID = petUUID,
-                PetType = petType,
-                Level = petLevel,
-                IsSelected = isSelected
-            })
+            table.insert(allPets, {UUID = petUUID, PetType = petType, Level = petLevel, IsSelected = isSelected})
         end
     end
     
     table.sort(allPets, function(a, b)
-        if a.IsSelected ~= b.IsSelected then
-            return a.IsSelected
-        else
-            return a.PetType < b.PetType
-        end
+        if a.IsSelected ~= b.IsSelected then return a.IsSelected
+        else return a.PetType < b.PetType end
     end)
     
-    PetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPets * 25, 50))
+    PetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPets * 22, 50))
     
     for i, petInfo in ipairs(allPets) do
         local PetButton = Instance.new("TextButton")
-        PetButton.Size = UDim2.new(1, 0, 0, 22)
-        PetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+        PetButton.Size = UDim2.new(1, 0, 0, 20)
+        PetButton.BackgroundColor3 = petInfo.IsSelected and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(70, 70, 85)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
+        PetButton.Text = petInfo.IsSelected and string.format("✓ %s (Lv.%d)", petInfo.PetType, petInfo.Level) or string.format("%s (Lv.%d)", petInfo.PetType, petInfo.Level)
         PetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        PetButton.TextSize = 10
+        PetButton.TextSize = 9
         PetButton.Parent = PetListFrame
         PetButton.LayoutOrder = i
         
         local UICornerPet = Instance.new("UICorner")
         UICornerPet.CornerRadius = UDim.new(0, 3)
         UICornerPet.Parent = PetButton
-        
-        if petInfo.IsSelected then
-            PetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-            PetButton.Text = string.format("✓ %s (Lv.%d)", petInfo.PetType, petInfo.Level)
-        else
-            PetButton.Text = string.format("%s (Lv.%d)", petInfo.PetType, petInfo.Level)
-        end
         
         PetButton.MouseButton1Click:Connect(function()
             local index = table.find(tempPresetPets, petInfo.UUID)
@@ -700,9 +836,6 @@ local function populatePetList()
             else
                 if #tempPresetPets < MAX_PET_SLOTS then
                     table.insert(tempPresetPets, petInfo.UUID)
-                else
-                    StatusLabel.Text = "⚠️ Maksimal 8 pet per preset!"
-                    return
                 end
             end
             populatePetList()
@@ -710,7 +843,7 @@ local function populatePetList()
     end
 end
 
--- Scan target pets
+-- Scan target pets (menggunakan mode)
 local function scanTargetPets()
     local petsData = getPlayerPetData()
     if not petsData then return {} end
@@ -718,16 +851,15 @@ local function scanTargetPets()
     local inventory = petsData.PetInventory.Data or {}
     local teamUUIDs = {}
     
-    -- Get UUIDs dari preset yang dipilih
     if selectedTeamPreset then
-        local presets = loadTeamPresets()
-        local preset = presets[selectedTeamPreset]
-        if preset then
-            for _, uuid in ipairs(preset.pets) do
-                teamUUIDs[uuid] = true
-            end
+        local uuids = getPresetUUIDs(selectedTeamPreset)
+        for _, uuid in ipairs(uuids) do
+            teamUUIDs[uuid] = true
         end
     end
+    
+    local weightTarget = getWeightTarget()
+    local levelTargetForWeight = getLevelTargetForWeight()
     
     local petTypes = {}
     
@@ -735,14 +867,21 @@ local function scanTargetPets()
         if not teamUUIDs[petUUID] then
             local petType = getPetType(petUUID)
             local petLevel = getPetLevel(petUUID)
+            local petWeight = getPetWeight(petUUID)
             
-            if petLevel < targetLevel then
+            local needsLeveling = petLevel < levelTargetForWeight
+            local needsWeight = petWeight < weightTarget
+            
+            if needsLeveling or needsWeight then
                 if not petTypes[petType] then
                     petTypes[petType] = {}
                 end
                 table.insert(petTypes[petType], {
                     UUID = petUUID,
-                    Level = petLevel
+                    Level = petLevel,
+                    Weight = petWeight,
+                    NeedsLeveling = needsLeveling,
+                    NeedsWeight = needsWeight
                 })
             end
         end
@@ -761,33 +900,26 @@ local function populateTargetDropdown()
     for petType, petInstances in pairs(petTypes) do
         if targetSearchText == "" or petType:lower():find(targetSearchText:lower()) then
             local isSelected = table.find(selectedPetTypes, petType) ~= nil
-            table.insert(allPetTypes, {
-                PetType = petType,
-                Instances = petInstances,
-                Count = #petInstances,
-                IsSelected = isSelected
-            })
+            table.insert(allPetTypes, {PetType = petType, Instances = petInstances, Count = #petInstances, IsSelected = isSelected})
         end
     end
     
     table.sort(allPetTypes, function(a, b)
-        if a.IsSelected ~= b.IsSelected then
-            return a.IsSelected
-        else
-            return a.PetType < b.PetType
-        end
+        if a.IsSelected ~= b.IsSelected then return a.IsSelected
+        else return a.PetType < b.PetType end
     end)
     
-    TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPetTypes * 25, 50))
+    TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPetTypes * 22, 50))
     
     for i, petInfo in ipairs(allPetTypes) do
         local PetButton = Instance.new("TextButton")
-        PetButton.Size = UDim2.new(1, 0, 0, 22)
-        PetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+        PetButton.Size = UDim2.new(1, 0, 0, 20)
+        PetButton.BackgroundColor3 = petInfo.IsSelected and Color3.fromRGB(200, 150, 50) or Color3.fromRGB(70, 70, 85)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
+        PetButton.Text = petInfo.IsSelected and string.format("✓ %s (x%d)", petInfo.PetType, petInfo.Count) or string.format("%s (x%d)", petInfo.PetType, petInfo.Count)
         PetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        PetButton.TextSize = 10
+        PetButton.TextSize = 9
         PetButton.Parent = TargetListFrame
         PetButton.LayoutOrder = i
         
@@ -795,19 +927,11 @@ local function populateTargetDropdown()
         UICornerTarget.CornerRadius = UDim.new(0, 3)
         UICornerTarget.Parent = PetButton
         
-        if petInfo.IsSelected then
-            PetButton.BackgroundColor3 = Color3.fromRGB(200, 150, 50)
-            PetButton.Text = string.format("✓ %s (x%d)", petInfo.PetType, petInfo.Count)
-        else
-            PetButton.Text = string.format("%s (x%d)", petInfo.PetType, petInfo.Count)
-        end
-        
         PetButton.MouseButton1Click:Connect(function()
             local typeIndex = table.find(selectedPetTypes, petInfo.PetType)
             
             if typeIndex then
                 table.remove(selectedPetTypes, typeIndex)
-                
                 for j = #queuedPets, 1, -1 do
                     if getPetType(queuedPets[j]) == petInfo.PetType then
                         table.remove(queuedPets, j)
@@ -815,7 +939,6 @@ local function populateTargetDropdown()
                 end
             else
                 table.insert(selectedPetTypes, petInfo.PetType)
-                
                 for _, petInstance in ipairs(petInfo.Instances) do
                     if not table.find(queuedPets, petInstance.UUID) then
                         table.insert(queuedPets, petInstance.UUID)
@@ -824,41 +947,91 @@ local function populateTargetDropdown()
             end
             
             populateTargetDropdown()
+            updateStatus()
         end)
     end
 end
 
--- Save Preset Button
+-- Event Handlers
 SavePresetButton.MouseButton1Click:Connect(function()
     local presetName = PresetNameInput.Text
-    
-    if presetName == "" then
-        StatusLabel.Text = "⚠️ Masukkan nama preset!"
-        return
-    end
-    
-    if #tempPresetPets == 0 then
-        StatusLabel.Text = "⚠️ Pilih minimal 1 pet!"
-        return
-    end
+    if presetName == "" then StatusLabel.Text = "⚠️ Masukkan nama preset!" return end
+    if #tempPresetPets == 0 then StatusLabel.Text = "⚠️ Pilih minimal 1 pet!" return end
     
     saveTeamPreset(presetName, tempPresetPets)
     StatusLabel.Text = string.format("✅ Preset '%s' disimpan!", presetName)
     PresetNameInput.Text = ""
     tempPresetPets = {}
     populatePetList()
-    populatePresetDropdown()
 end)
 
--- Preset Dropdown toggle
 PresetDropdownButton.MouseButton1Click:Connect(function()
     PresetListFrame.Visible = not PresetListFrame.Visible
     if PresetListFrame.Visible then
-        populatePresetDropdown()
+        populatePresetDropdown(PresetListFrame, selectedTeamPreset, function(name)
+            selectedTeamPreset = name
+            SelectedTeamLabel.Text = string.format("Tim Leveling: %s", name)
+        end)
     end
 end)
 
--- Search handlers
+WeightPresetButton.MouseButton1Click:Connect(function()
+    WeightPresetListFrame.Visible = not WeightPresetListFrame.Visible
+    if WeightPresetListFrame.Visible then
+        populatePresetDropdown(WeightPresetListFrame, selectedWeightPreset, function(name)
+            selectedWeightPreset = name
+            WeightPresetButton.Text = string.format("📂 %s", name)
+        end)
+    end
+end)
+
+AdvancedPresetButton.MouseButton1Click:Connect(function()
+    AdvancedPresetListFrame.Visible = not AdvancedPresetListFrame.Visible
+    if AdvancedPresetListFrame.Visible then
+        populatePresetDropdown(AdvancedPresetListFrame, selectedAdvancedPreset, function(name)
+            selectedAdvancedPreset = name
+            AdvancedPresetButton.Text = string.format("📂 %s", name)
+        end)
+    end
+end)
+
+WeightToggleButton.MouseButton1Click:Connect(function()
+    isAutoWeight = not isAutoWeight
+    if isAutoWeight then
+        WeightToggleButton.Text = "⚖️ Auto Weight: ON"
+        WeightToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+    else
+        WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
+        WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+    end
+    updateStatus()
+end)
+
+AdvancedToggleButton.MouseButton1Click:Connect(function()
+    isAdvancedLeveling = not isAdvancedLeveling
+    if isAdvancedLeveling then
+        AdvancedToggleButton.Text = "🚀 Advanced: ON"
+        AdvancedToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+    else
+        AdvancedToggleButton.Text = "🚀 Advanced: OFF"
+        AdvancedToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+    end
+    updateStatus()
+end)
+
+-- Rainbow MODE toggle
+RainbowModeButton.MouseButton1Click:Connect(function()
+    rainbowMode = not rainbowMode
+    if rainbowMode then
+        RainbowModeButton.Text = "☑ Rainbow Mode (BW: 5.5, Lv: 40)"
+        RainbowModeButton.BackgroundColor3 = Color3.fromRGB(200, 150, 50)
+    else
+        RainbowModeButton.Text = "☐ Rainbow Mode (BW: 5.5, Lv: 40)"
+        RainbowModeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+    end
+    updateStatus()
+end)
+
 PetSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
     petSearchText = PetSearchBox.Text
     populatePetList()
@@ -869,127 +1042,203 @@ TargetSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
     populateTargetDropdown()
 end)
 
--- Scan Button
 ScanButton.MouseButton1Click:Connect(function()
-    StatusLabel.Text = "Status: Scanning..."
+    StatusLabel.Text = "Scanning..."
     wait(0.1)
     populateTargetDropdown()
-    StatusLabel.Text = "Status: Scan selesai!"
+    updateStatus()
 end)
 
--- Toggle Button - MAIN LOGIC
+-- MAIN LOGIC
 ToggleButton.MouseButton1Click:Connect(function()
     if isLeveling then
         isLeveling = false
         ToggleButton.Text = "▶️ Mulai"
         ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
-        StatusLabel.Text = "Status: Stopped"
+        updateStatus()
         return
     end
     
     if not selectedTeamPreset then
-        StatusLabel.Text = "Status: Pilih preset tim dulu!"
+        StatusLabel.Text = "⚠️ Pilih preset tim leveling!"
         return
     end
     
     if #queuedPets == 0 then
-        StatusLabel.Text = "Status: Pilih pet target dulu!"
+        StatusLabel.Text = "⚠️ Pilih pet target dulu!"
         return
     end
     
-    -- Get team pets dari preset
-    local presets = loadTeamPresets()
-    local preset = presets[selectedTeamPreset]
-    if not preset then
-        StatusLabel.Text = "Status: Preset tidak ditemukan!"
+    if isAutoWeight and not selectedWeightPreset then
+        StatusLabel.Text = "⚠️ Pilih preset auto weight!"
         return
     end
     
-    local teamPets = preset.pets
+    if isAdvancedLeveling and not selectedAdvancedPreset then
+        StatusLabel.Text = "⚠️ Pilih preset advanced!"
+        return
+    end
     
     isLeveling = true
     ToggleButton.Text = "⏹️ Stop"
     ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    StatusLabel.Text = "Status: Membersihkan slot..."
     
     spawn(function()
-        -- UNEQUIP SEMUA
-        local currentEquipped = getEquippedPets()
-        for _, petUUID in ipairs(currentEquipped) do
-            unequipPet(petUUID)
-            wait(0.5)
-        end
-        
-        wait(2)
-        StatusLabel.Text = "✅ Slot bersih!"
-        
-        -- EQUIP TIM
-        for _, petUUID in ipairs(teamPets) do
-            equipPet(petUUID)
-            wait(1)
-        end
-        
-        wait(2)
-        StatusLabel.Text = "✅ Tim di-equip!"
-        
-        -- EQUIP TARGET
-        local availableSlots = MAX_PET_SLOTS - #teamPets
-        local petsToEquip = math.min(availableSlots, #queuedPets)
-        
-        for i = 1, petsToEquip do
-            if #queuedPets > 0 then
-                local petUUID = queuedPets[1]
-                local petLevel = getPetLevel(petUUID)
+        while isLeveling do
+            local weightTarget = getWeightTarget()
+            local levelTargetForWeight = getLevelTargetForWeight()
+            
+            -- ============ AUTO WEIGHT LOOP ============
+            if isAutoWeight then
+                StatusLabel.Text = string.format("⚖️ Scan weight (Target: %.1f)...", weightTarget)
                 
-                if petLevel < targetLevel then
-                    local success = equipPet(petUUID)
-                    if success then
-                        table.remove(queuedPets, 1)
-                        table.insert(equippedTargetPets, petUUID)
+                local weightPets = {}
+                for _, petUUID in ipairs(queuedPets) do
+                    local petWeight = getPetWeight(petUUID)
+                    if petWeight < weightTarget then
+                        table.insert(weightPets, petUUID)
                     end
-                else
-                    table.remove(queuedPets, 1)
                 end
                 
-                wait(1)
-            end
-        end
-        
-        wait(2)
-        StatusLabel.Text = "✅ Setup selesai!"
-        
-        -- MONITORING
-        while isLeveling do
-            for i = #equippedTargetPets, 1, -1 do
-                local petUUID = equippedTargetPets[i]
-                local petLevel = getPetLevel(petUUID)
-                local petType = getPetType(petUUID)
-                
-                if petLevel >= targetLevel then
-                    StatusLabel.Text = string.format("🎉 %s Lv.%d!", petType, targetLevel)
+                if #weightPets > 0 then
+                    StatusLabel.Text = string.format("⚖️ %d pet butuh weight", #weightPets)
                     
-                    unequipPet(petUUID)
-                    table.remove(equippedTargetPets, i)
+                    -- Leveling ke target level untuk weight
+                    local levelTargets = {}
+                    for _, petUUID in ipairs(weightPets) do
+                        if getPetLevel(petUUID) < levelTargetForWeight then
+                            table.insert(levelTargets, petUUID)
+                        end
+                    end
                     
-                    wait(1)
-                    
-                    if #queuedPets > 0 then
-                        local nextPetUUID = queuedPets[1]
-                        local nextPetLevel = getPetLevel(nextPetUUID)
+                    if #levelTargets > 0 then
+                        StatusLabel.Text = string.format("📈 Leveling %d pet ke Lv.%d...", #levelTargets, levelTargetForWeight)
                         
-                        if nextPetLevel < targetLevel then
-                            equipPet(nextPetUUID)
-                            table.remove(queuedPets, 1)
-                            table.insert(equippedTargetPets, nextPetUUID)
-                        else
-                            table.remove(queuedPets, 1)
+                        local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
+                        local currentEquipped = getEquippedPets()
+                        for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
+                        for _, uuid in ipairs(teamUUIDs) do equipPet(uuid) wait(0.5) end
+                        
+                        local availableSlots = MAX_PET_SLOTS - #teamUUIDs
+                        local toEquip = math.min(availableSlots, #levelTargets)
+                        for i = 1, toEquip do
+                            equipPet(levelTargets[i])
+                            wait(0.5)
                         end
                         
-                        wait(1)
+                        while isLeveling do
+                            local allDone = true
+                            for _, petUUID in ipairs(levelTargets) do
+                                if getPetLevel(petUUID) < levelTargetForWeight then
+                                    allDone = false
+                                    break
+                                end
+                            end
+                            if allDone then break end
+                            wait(5)
+                        end
                     end
+                    
+                    -- Ganti ke tim weight
+                    StatusLabel.Text = "⚖️ Ganti ke tim weight..."
+                    local weightUUIDs = getPresetUUIDs(selectedWeightPreset)
+                    local currentEquipped = getEquippedPets()
+                    for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
+                    for _, uuid in ipairs(weightUUIDs) do equipPet(uuid) wait(0.5) end
+                    
+                    -- Equip pet yang siap weight
+                    local readyForWeight = {}
+                    for _, petUUID in ipairs(weightPets) do
+                        if getPetLevel(petUUID) >= levelTargetForWeight then
+                            table.insert(readyForWeight, petUUID)
+                        end
+                    end
+                    
+                    local availableSlots = MAX_PET_SLOTS - #weightUUIDs
+                    local toEquip = math.min(availableSlots, #readyForWeight)
+                    for i = 1, toEquip do
+                        equipPet(readyForWeight[i])
+                        wait(0.5)
+                    end
+                    
+                    -- Tunggu proses weight
+                    StatusLabel.Text = "⚖️ Proses weight..."
+                    wait(10)
+                    
+                    -- Cek weight
+                    local stillNeedWeight = false
+                    for _, petUUID in ipairs(weightPets) do
+                        if getPetWeight(petUUID) < weightTarget then
+                            stillNeedWeight = true
+                            break
+                        end
+                    end
+                    
+                    if stillNeedWeight then
+                        StatusLabel.Text = "🔄 Masih ada yang butuh weight, ulangi..."
+                    else
+                        StatusLabel.Text = "✅ Semua weight tercapai!"
+                        isAutoWeight = false
+                        WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
+                        WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+                    end
+                else
+                    StatusLabel.Text = "✅ Tidak ada pet yang butuh weight"
+                    isAutoWeight = false
+                    WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
+                    WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
                 end
             end
             
+            -- ============ LEVELING LOOP ============
+            local finalTargetLevel = isAdvancedLeveling and advancedTargetLevel or (isAutoWeight and levelTargetForWeight or targetLevel)
+            
+            StatusLabel.Text = string.format("📈 Leveling ke Lv.%d...", finalTargetLevel)
+            
+            local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
+            local currentEquipped = getEquippedPets()
+            for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
+            for _, uuid in ipairs(teamUUIDs) do equipPet(uuid) wait(0.5) end
+            
+            local availableSlots = MAX_PET_SLOTS - #teamUUIDs
+            local toEquip = math.min(availableSlots, #queuedPets)
+            
+            equippedTargetPets = {}
+            for i = 1, toEquip do
+                if #queuedPets > 0 then
+                    local petUUID = queuedPets[1]
+                    table.remove(queuedPets, 1)
+                    equipPet(petUUID)
+                    table.insert(equippedTargetPets, petUUID)
+                    wait(0.5)
+                end
+            end
+            
+            -- Monitoring
+            while isLeveling and #equippedTargetPets > 0 do
+                for i = #equippedTargetPets, 1, -1 do
+                    local petUUID = equippedTargetPets[i]
+                    local petLevel = getPetLevel(petUUID)
+                    
+                    if petLevel >= finalTargetLevel then
+                        unequipPet(petUUID)
+                        table.remove(equippedTargetPets, i)
+                        
+                        if #queuedPets > 0 then
+                            local nextPet = queuedPets[1]
+                            table.remove(queuedPets, 1)
+                            equipPet(nextPet)
+                            table.insert(equippedTargetPets, nextPet)
+                        end
+                        wait(0.5)
+                    end
+                end
+                
+                updateStatus()
+                wait(5)
+            end
+            
+            -- Cek selesai
             if #queuedPets == 0 and #equippedTargetPets == 0 then
                 StatusLabel.Text = "🎉 Semua selesai!"
                 isLeveling = false
@@ -1005,8 +1254,8 @@ end)
 
 -- Initial setup
 populatePetList()
-populatePresetDropdown()
+updateStatus()
 
 AutoLevelGUI.Parent = playerGui
 
-print("✅ Auto Leveling System (Preset Based) loaded!")
+print("✅ Auto Leveling + Weight System loaded!")
