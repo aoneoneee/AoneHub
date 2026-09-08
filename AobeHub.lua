@@ -1,4 +1,4 @@
--- Auto Leveling System GUI (Fixed - Continuous Leveling)
+-- Auto Leveling System GUI (Full Featured)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -23,8 +23,8 @@ AutoLevelGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 -- Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 300, 0, 450)
-MainFrame.Position = UDim2.new(1, -320, 0.5, -225)
+MainFrame.Size = UDim2.new(0, 350, 0, 500)
+MainFrame.Position = UDim2.new(1, -370, 0.5, -250)
 MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -47,7 +47,7 @@ UICornerTitle.CornerRadius = UDim.new(0, 10)
 UICornerTitle.Parent = TitleBar
 
 local TitleText = Instance.new("TextLabel")
-TitleText.Size = UDim2.new(0.7, 0, 1, 0)
+TitleText.Size = UDim2.new(0.6, 0, 1, 0)
 TitleText.Position = UDim2.new(0, 10, 0, 0)
 TitleText.BackgroundTransparency = 1
 TitleText.Font = Enum.Font.GothamBold
@@ -106,11 +106,11 @@ local isMinimized = false
 MinimizeButton.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     if isMinimized then
-        MainFrame.Size = UDim2.new(0, 300, 0, 40)
+        MainFrame.Size = UDim2.new(0, 350, 0, 40)
         ContentFrame.Visible = false
         MinimizeButton.Text = "+"
     else
-        MainFrame.Size = UDim2.new(0, 300, 0, 450)
+        MainFrame.Size = UDim2.new(0, 350, 0, 500)
         ContentFrame.Visible = true
         MinimizeButton.Text = "—"
     end
@@ -162,7 +162,7 @@ ScrollFrame.BackgroundTransparency = 1
 ScrollFrame.BorderSizePixel = 0
 ScrollFrame.ScrollBarThickness = 4
 ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 700)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 800)
 ScrollFrame.Parent = ContentFrame
 
 local ContentLayout = Instance.new("UIListLayout")
@@ -171,18 +171,20 @@ ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ContentLayout.Parent = ScrollFrame
 
 -- Variables
-local teamPets = {} -- Pet tim yang dipilih
-local selectedPetTypes = {} -- Pet type yang dipilih untuk leveling (misal: {"Dog", "Cat"})
-local queuedPets = {} -- Antrian semua pet yang perlu di-leveling (UUID list)
+local teamPets = {} -- Pet tim yang dipilih (UUID list)
+local selectedPetTypes = {} -- Pet type yang dipilih untuk target
+local queuedPets = {} -- Antrian semua pet target
 local equippedTargetPets = {} -- Pet target yang sedang di-equip
 local targetLevel = TARGET_LEVEL_DEFAULT
 local isLeveling = false
 local equippedPetsCount = 0
+local teamSearchText = ""
+local targetSearchText = ""
 
 -- Create Section function
 local function createSection(parent, title)
     local SectionFrame = Instance.new("Frame")
-    SectionFrame.Size = UDim2.new(1, -10, 0, 150)
+    SectionFrame.Size = UDim2.new(1, -10, 0, 200)
     SectionFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
     SectionFrame.BorderSizePixel = 0
     SectionFrame.Parent = parent
@@ -193,7 +195,7 @@ local function createSection(parent, title)
     
     local SectionTitle = Instance.new("TextLabel")
     SectionTitle.Size = UDim2.new(1, -20, 0, 25)
-    SectionTitle.Position = UDim2.new(0, 10, 0, 3)
+    SectionTitle.Position = UDim2.new(0, 10, 0, 5)
     SectionTitle.BackgroundTransparency = 1
     SectionTitle.Font = Enum.Font.GothamBold
     SectionTitle.Text = title
@@ -208,11 +210,11 @@ end
 -- Create all sections
 local TeamSection, TeamTitleLabel = createSection(ScrollFrame, "👥 Tim Leveling")
 TeamSection.LayoutOrder = 1
-TeamSection.Size = UDim2.new(1, -10, 0, 180)
+TeamSection.Size = UDim2.new(1, -10, 0, 200)
 
 local LevelSection, LevelTitleLabel = createSection(ScrollFrame, "🎯 Target Level")
 LevelSection.LayoutOrder = 2
-LevelSection.Size = UDim2.new(1, -10, 0, 80)
+LevelSection.Size = UDim2.new(1, -10, 0, 70)
 
 local TargetSection, TargetTitleLabel = createSection(ScrollFrame, "🎯 Pet Target")
 TargetSection.LayoutOrder = 3
@@ -222,47 +224,44 @@ local ButtonSection, ButtonTitleLabel = createSection(ScrollFrame, "⚙️ Kontr
 ButtonSection.LayoutOrder = 4
 ButtonSection.Size = UDim2.new(1, -10, 0, 120)
 
--- Team Pets Dropdown
-local TeamDropdown = Instance.new("Frame")
-TeamDropdown.Size = UDim2.new(1, -20, 0, 30)
-TeamDropdown.Position = UDim2.new(0, 10, 0, 30)
-TeamDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-TeamDropdown.BorderSizePixel = 0
-TeamDropdown.Parent = TeamSection
+-- ============ TEAM SECTION ============
+-- Search Bar Team
+local TeamSearchBox = Instance.new("TextBox")
+TeamSearchBox.Size = UDim2.new(1, -20, 0, 25)
+TeamSearchBox.Position = UDim2.new(0, 10, 0, 32)
+TeamSearchBox.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+TeamSearchBox.BorderSizePixel = 0
+TeamSearchBox.Font = Enum.Font.Gotham
+TeamSearchBox.PlaceholderText = "🔍 Cari pet tim..."
+TeamSearchBox.Text = ""
+TeamSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+TeamSearchBox.TextSize = 11
+TeamSearchBox.Parent = TeamSection
 
-local UICornerTeamDropdown = Instance.new("UICorner")
-UICornerTeamDropdown.CornerRadius = UDim.new(0, 5)
-UICornerTeamDropdown.Parent = TeamDropdown
-
-local TeamDropdownButton = Instance.new("TextButton")
-TeamDropdownButton.Size = UDim2.new(1, 0, 1, 0)
-TeamDropdownButton.BackgroundTransparency = 1
-TeamDropdownButton.Font = Enum.Font.Gotham
-TeamDropdownButton.Text = "Pilih Pet Tim"
-TeamDropdownButton.TextColor3 = Color3.fromRGB(200, 200, 200)
-TeamDropdownButton.TextSize = 12
-TeamDropdownButton.Parent = TeamDropdown
+local UICornerTeamSearch = Instance.new("UICorner")
+UICornerTeamSearch.CornerRadius = UDim.new(0, 4)
+UICornerTeamSearch.Parent = TeamSearchBox
 
 -- Team Pets List
 local TeamListFrame = Instance.new("ScrollingFrame")
-TeamListFrame.Size = UDim2.new(1, -20, 0, 120)
-TeamListFrame.Position = UDim2.new(0, 10, 0, 65)
+TeamListFrame.Size = UDim2.new(1, -20, 0, 140)
+TeamListFrame.Position = UDim2.new(0, 10, 0, 60)
 TeamListFrame.BackgroundTransparency = 1
 TeamListFrame.BorderSizePixel = 0
 TeamListFrame.ScrollBarThickness = 3
 TeamListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
 TeamListFrame.CanvasSize = UDim2.new(0, 0, 0, 100)
-TeamListFrame.Visible = false
 TeamListFrame.Parent = TeamSection
 
 local TeamListLayout = Instance.new("UIListLayout")
-TeamListLayout.Padding = UDim.new(0, 2)
+TeamListLayout.Padding = UDim.new(0, 3)
+TeamListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 TeamListLayout.Parent = TeamListFrame
 
--- Target Level Input
+-- ============ TARGET LEVEL SECTION ============
 local LevelInput = Instance.new("TextBox")
 LevelInput.Size = UDim2.new(1, -20, 0, 30)
-LevelInput.Position = UDim2.new(0, 10, 0, 35)
+LevelInput.Position = UDim2.new(0, 10, 0, 32)
 LevelInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
 LevelInput.BorderSizePixel = 0
 LevelInput.Font = Enum.Font.Gotham
@@ -285,43 +284,41 @@ LevelInput.FocusLost:Connect(function(enterPressed)
     end
 end)
 
--- Target Pets Dropdown
-local TargetDropdown = Instance.new("Frame")
-TargetDropdown.Size = UDim2.new(1, -20, 0, 30)
-TargetDropdown.Position = UDim2.new(0, 10, 0, 30)
-TargetDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-TargetDropdown.BorderSizePixel = 0
-TargetDropdown.Parent = TargetSection
+-- ============ TARGET SECTION ============
+-- Search Bar Target
+local TargetSearchBox = Instance.new("TextBox")
+TargetSearchBox.Size = UDim2.new(1, -20, 0, 25)
+TargetSearchBox.Position = UDim2.new(0, 10, 0, 32)
+TargetSearchBox.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+TargetSearchBox.BorderSizePixel = 0
+TargetSearchBox.Font = Enum.Font.Gotham
+TargetSearchBox.PlaceholderText = "🔍 Cari pet target..."
+TargetSearchBox.Text = ""
+TargetSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+TargetSearchBox.TextSize = 11
+TargetSearchBox.Parent = TargetSection
 
-local UICornerTargetDropdown = Instance.new("UICorner")
-UICornerTargetDropdown.CornerRadius = UDim.new(0, 5)
-UICornerTargetDropdown.Parent = TargetDropdown
-
-local TargetDropdownButton = Instance.new("TextButton")
-TargetDropdownButton.Size = UDim2.new(1, 0, 1, 0)
-TargetDropdownButton.BackgroundTransparency = 1
-TargetDropdownButton.Font = Enum.Font.Gotham
-TargetDropdownButton.Text = "Pilih Pet Target"
-TargetDropdownButton.TextColor3 = Color3.fromRGB(200, 200, 200)
-TargetDropdownButton.TextSize = 12
-TargetDropdownButton.Parent = TargetDropdown
+local UICornerTargetSearch = Instance.new("UICorner")
+UICornerTargetSearch.CornerRadius = UDim.new(0, 4)
+UICornerTargetSearch.Parent = TargetSearchBox
 
 -- Target Pets List
 local TargetListFrame = Instance.new("ScrollingFrame")
 TargetListFrame.Size = UDim2.new(1, -20, 0, 140)
-TargetListFrame.Position = UDim2.new(0, 10, 0, 65)
+TargetListFrame.Position = UDim2.new(0, 10, 0, 60)
 TargetListFrame.BackgroundTransparency = 1
 TargetListFrame.BorderSizePixel = 0
 TargetListFrame.ScrollBarThickness = 3
 TargetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, 120)
-TargetListFrame.Visible = false
+TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, 100)
 TargetListFrame.Parent = TargetSection
 
 local TargetListLayout = Instance.new("UIListLayout")
-TargetListLayout.Padding = UDim.new(0, 2)
+TargetListLayout.Padding = UDim.new(0, 3)
+TargetListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 TargetListLayout.Parent = TargetListFrame
 
+-- ============ BUTTON SECTION ============
 -- Scan Button
 local ScanButton = Instance.new("TextButton")
 ScanButton.Size = UDim2.new(1, -20, 0, 30)
@@ -443,65 +440,114 @@ local function clearDropdown(listFrame)
     end
 end
 
+-- Populate Team Dropdown (dengan search dan selected di atas)
 local function populateTeamDropdown()
     clearDropdown(TeamListFrame)
     
+    local petsData = getPlayerPetData()
+    if not petsData then return end
+    
+    local inventory = petsData.PetInventory.Data or {}
     local equippedPets = getEquippedPets()
-    equippedPetsCount = #equippedPets
     
-    TeamListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#equippedPets * 25, 50))
-    
-    for _, petUUID in ipairs(equippedPets) do
+    -- Buat list pet dengan status
+    local allPets = {}
+    for petUUID, _ in pairs(inventory) do
         local petType = getPetType(petUUID)
         local petLevel = getPetLevel(petUUID)
+        local isEquipped = table.find(equippedPets, petUUID) ~= nil
+        local isSelected = table.find(teamPets, petUUID) ~= nil
         
+        -- Filter by search text
+        if teamSearchText == "" or petType:lower():find(teamSearchText:lower()) then
+            table.insert(allPets, {
+                UUID = petUUID,
+                PetType = petType,
+                Level = petLevel,
+                IsEquipped = isEquipped,
+                IsSelected = isSelected
+            })
+        end
+    end
+    
+    -- Sort: Selected di atas, lalu equipped, lalu lainnya
+    table.sort(allPets, function(a, b)
+        if a.IsSelected ~= b.IsSelected then
+            return a.IsSelected -- Selected dulu
+        elseif a.IsEquipped ~= b.IsEquipped then
+            return a.IsEquipped -- Equipped kedua
+        else
+            return a.PetType < b.PetType -- Alphabetical
+        end
+    end)
+    
+    -- Update canvas size
+    TeamListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPets * 28, 50))
+    
+    -- Create buttons
+    for i, petInfo in ipairs(allPets) do
         local PetButton = Instance.new("TextButton")
-        PetButton.Size = UDim2.new(1, 0, 0, 22)
+        PetButton.Size = UDim2.new(1, 0, 0, 25)
         PetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
-        PetButton.Text = string.format("%s (Lv.%d)", petType, petLevel)
         PetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
         PetButton.TextSize = 10
         PetButton.Parent = TeamListFrame
+        PetButton.LayoutOrder = i
         
         local UICornerPet = Instance.new("UICorner")
-        UICornerPet.CornerRadius = UDim.new(0, 3)
+        UICornerPet.CornerRadius = UDim.new(0, 4)
         UICornerPet.Parent = PetButton
         
-        if table.find(teamPets, petUUID) then
-            PetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+        -- Set warna berdasarkan status
+        if petInfo.IsSelected then
+            PetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50) -- Hijau untuk selected
+            PetButton.Text = string.format("✓ %s (Lv.%d) [Tim]", petInfo.PetType, petInfo.Level)
+        elseif petInfo.IsEquipped then
+            PetButton.BackgroundColor3 = Color3.fromRGB(100, 100, 120) -- Abu untuk equipped
+            PetButton.Text = string.format("%s (Lv.%d) [Equipped]", petInfo.PetType, petInfo.Level)
+        else
+            PetButton.Text = string.format("%s (Lv.%d)", petInfo.PetType, petInfo.Level)
         end
         
         PetButton.MouseButton1Click:Connect(function()
-            local teamIndex = table.find(teamPets, petUUID)
+            local teamIndex = table.find(teamPets, petInfo.UUID)
             if teamIndex then
+                -- Hapus dari tim
                 table.remove(teamPets, teamIndex)
                 PetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+                StatusLabel.Text = string.format("❌ %s dihapus dari tim", petInfo.PetType)
             else
-                table.insert(teamPets, petUUID)
-                PetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+                -- Tambahkan ke tim
+                if #teamPets < MAX_PET_SLOTS then
+                    table.insert(teamPets, petInfo.UUID)
+                    PetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+                    StatusLabel.Text = string.format("✅ %s ditambahkan ke tim", petInfo.PetType)
+                else
+                    StatusLabel.Text = "⚠️ Slot tim penuh!"
+                end
             end
+            
+            -- Refresh dropdown
+            wait(0.1)
+            populateTeamDropdown()
             updateSlotInfo()
         end)
     end
 end
 
+-- Scan target pets
 local function scanTargetPets()
     local petsData = getPlayerPetData()
     if not petsData then return {} end
     
     local inventory = petsData.PetInventory.Data or {}
-    local equippedPets = getEquippedPets()
     local petTypes = {}
     
-    local equippedSet = {}
-    for _, uuid in ipairs(equippedPets) do
-        equippedSet[uuid] = true
-    end
-    
-    for petUUID, petData in pairs(inventory) do
-        if not equippedSet[petUUID] then
+    -- Kumpulkan semua pet yang bukan tim dan di bawah target level
+    for petUUID, _ in pairs(inventory) do
+        if not table.find(teamPets, petUUID) then
             local petType = getPetType(petUUID)
             local petLevel = getPetLevel(petUUID)
             
@@ -520,69 +566,96 @@ local function scanTargetPets()
     return petTypes
 end
 
+-- Populate Target Dropdown (dengan search dan selected di atas)
 local function populateTargetDropdown()
     clearDropdown(TargetListFrame)
     
     local petTypes = scanTargetPets()
+    local allPetTypes = {}
     
-    local totalCount = 0
-    for _ in pairs(petTypes) do
-        totalCount = totalCount + 1
+    -- Convert ke array untuk sorting
+    for petType, petInstances in pairs(petTypes) do
+        -- Filter by search text
+        if targetSearchText == "" or petType:lower():find(targetSearchText:lower()) then
+            local isSelected = table.find(selectedPetTypes, petType) ~= nil
+            table.insert(allPetTypes, {
+                PetType = petType,
+                Instances = petInstances,
+                Count = #petInstances,
+                IsSelected = isSelected
+            })
+        end
     end
     
-    TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(totalCount * 25, 50))
+    -- Sort: Selected di atas, lalu alphabetical
+    table.sort(allPetTypes, function(a, b)
+        if a.IsSelected ~= b.IsSelected then
+            return a.IsSelected
+        else
+            return a.PetType < b.PetType
+        end
+    end)
     
-    for petType, petInstances in pairs(petTypes) do
-        local firstPet = petInstances[1]
-        
+    -- Update canvas size
+    TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPetTypes * 28, 50))
+    
+    -- Create buttons
+    for i, petInfo in ipairs(allPetTypes) do
         local PetButton = Instance.new("TextButton")
-        PetButton.Size = UDim2.new(1, 0, 0, 22)
+        PetButton.Size = UDim2.new(1, 0, 0, 25)
         PetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
-        PetButton.Text = string.format("%s (x%d) - Lv.%d", petType, #petInstances, firstPet.Level)
         PetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
         PetButton.TextSize = 10
         PetButton.Parent = TargetListFrame
+        PetButton.LayoutOrder = i
         
         local UICornerTarget = Instance.new("UICorner")
-        UICornerTarget.CornerRadius = UDim.new(0, 3)
+        UICornerTarget.CornerRadius = UDim.new(0, 4)
         UICornerTarget.Parent = PetButton
         
-        -- Check if this pet type is selected
-        local isSelected = table.find(selectedPetTypes, petType) ~= nil
-        
-        if isSelected then
-            PetButton.BackgroundColor3 = Color3.fromRGB(200, 150, 50)
+        if petInfo.IsSelected then
+            PetButton.BackgroundColor3 = Color3.fromRGB(200, 150, 50) -- Orange untuk selected
+            PetButton.Text = string.format("✓ %s (x%d)", petInfo.PetType, petInfo.Count)
+        else
+            PetButton.Text = string.format("%s (x%d)", petInfo.PetType, petInfo.Count)
         end
         
         PetButton.MouseButton1Click:Connect(function()
-            local typeIndex = table.find(selectedPetTypes, petType)
+            local typeIndex = table.find(selectedPetTypes, petInfo.PetType)
             
             if typeIndex then
-                -- Remove this pet type from selection
+                -- Remove dari selected
                 table.remove(selectedPetTypes, typeIndex)
                 PetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
                 
-                -- Remove all queued pets of this type
-                for i = #queuedPets, 1, -1 do
-                    if getPetType(queuedPets[i]) == petType then
-                        table.remove(queuedPets, i)
+                -- Remove dari queue
+                for j = #queuedPets, 1, -1 do
+                    if getPetType(queuedPets[j]) == petInfo.PetType then
+                        table.remove(queuedPets, j)
                     end
                 end
+                
+                StatusLabel.Text = string.format("❌ %s dihapus dari target", petInfo.PetType)
             else
-                -- Add this pet type to selection
-                table.insert(selectedPetTypes, petType)
+                -- Tambahkan ke selected
+                table.insert(selectedPetTypes, petInfo.PetType)
                 PetButton.BackgroundColor3 = Color3.fromRGB(200, 150, 50)
                 
-                -- Add all pets of this type to queue
-                for _, petInstance in ipairs(petInstances) do
+                -- Tambahkan semua instance ke queue
+                for _, petInstance in ipairs(petInfo.Instances) do
                     if not table.find(queuedPets, petInstance.UUID) then
                         table.insert(queuedPets, petInstance.UUID)
                     end
                 end
+                
+                StatusLabel.Text = string.format("✅ %s (x%d) ditambahkan ke target", petInfo.PetType, petInfo.Count)
             end
             
+            -- Refresh dropdown
+            wait(0.1)
+            populateTargetDropdown()
             updateSlotInfo()
         end)
     end
@@ -595,42 +668,40 @@ local function updateSlotInfo()
     
     if TeamTitleLabel then
         TeamTitleLabel.Text = string.format(
-            "👥 Tim Leveling (Equipped: %d/%d)", 
-            equippedPetsCount, 
-            MAX_PET_SLOTS
+            "👥 Tim Leveling (Dipilih: %d)", 
+            #teamPets
         )
     end
     
     if TargetTitleLabel then
         TargetTitleLabel.Text = string.format(
-            "🎯 Pet Target (Antrian: %d)", 
+            "🎯 Pet Target (Dipilih: %d tipe, Antrian: %d)", 
+            #selectedPetTypes,
             #queuedPets
         )
     end
     
     if StatusLabel then
         StatusLabel.Text = string.format(
-            "Equipped: %d | Antrian: %d | Sisa Slot: %d",
-            equippedPetsCount,
+            "Tim: %d | Target: %d | Antrian: %d | Equipped: %d/%d",
+            #teamPets,
+            #selectedPetTypes,
             #queuedPets,
-            availableSlots
+            equippedPetsCount,
+            MAX_PET_SLOTS
         )
     end
 end
 
--- Dropdown toggle handlers
-TeamDropdownButton.MouseButton1Click:Connect(function()
-    TeamListFrame.Visible = not TeamListFrame.Visible
-    if TeamListFrame.Visible then
-        populateTeamDropdown()
-    end
+-- Search handlers
+TeamSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    teamSearchText = TeamSearchBox.Text
+    populateTeamDropdown()
 end)
 
-TargetDropdownButton.MouseButton1Click:Connect(function()
-    TargetListFrame.Visible = not TargetListFrame.Visible
-    if TargetListFrame.Visible then
-        populateTargetDropdown()
-    end
+TargetSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    targetSearchText = TargetSearchBox.Text
+    populateTargetDropdown()
 end)
 
 -- Scan Button
@@ -658,86 +729,160 @@ ToggleButton.MouseButton1Click:Connect(function()
         return
     end
     
+    if #teamPets == 0 then
+        StatusLabel.Text = "Status: Pilih minimal 1 pet tim!"
+        return
+    end
+    
     isLeveling = true
     ToggleButton.Text = "⏹️ Stop"
     ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    StatusLabel.Text = "Status: Leveling..."
+    StatusLabel.Text = "Status: Membersihkan slot..."
     
     -- Auto Leveling Loop
     spawn(function()
-        while isLeveling do
-            -- Update equipped count
-            equippedPetsCount = getEquippedPetsCount()
+        -- LANGKAH 1: UNEQUIP SEMUA
+        StatusLabel.Text = "🔄 Membersihkan semua slot..."
+        
+        local currentEquipped = getEquippedPets()
+        for _, petUUID in ipairs(currentEquipped) do
+            local petType = getPetType(petUUID)
+            unequipPet(petUUID)
+            StatusLabel.Text = string.format("❌ Unequip %s...", petType)
+            wait(0.5)
+        end
+        
+        wait(2)
+        StatusLabel.Text = "✅ Semua slot bersih!"
+        
+        -- LANGKAH 2: EQUIP TIM
+        StatusLabel.Text = "🔄 Meng-equip pet tim..."
+        
+        local teamEquippedCount = 0
+        for _, petUUID in ipairs(teamPets) do
+            local petType = getPetType(petUUID)
             
-            -- Hitung slot kosong
-            local availableSlots = math.max(MAX_PET_SLOTS - equippedPetsCount, 0)
+            StatusLabel.Text = string.format("Meng-equip tim: %s...", petType)
             
-            -- Cek jika ada slot kosong dan masih ada antrian
-            if availableSlots > 0 and #queuedPets > 0 then
-                StatusLabel.Text = string.format("Slot kosong: %d, Antrian: %d", availableSlots, #queuedPets)
-                
-                -- Equip pets dari antrian
-                local petsToEquip = math.min(availableSlots, #queuedPets)
-                for i = 1, petsToEquip do
-                    if #queuedPets > 0 then
-                        local petUUID = queuedPets[1] -- Ambil dari depan antrian
-                        local petType = getPetType(petUUID)
-                        local petLevel = getPetLevel(petUUID)
-                        
-                        -- Cek level sebelum equip
-                        if petLevel < targetLevel then
-                            StatusLabel.Text = string.format("Meng-equip %s (Lv.%d)...", petType, petLevel)
-                            
-                            -- Equip pet
-                            local success = equipPet(petUUID)
-                            if success then
-                                -- Hapus dari antrian
-                                table.remove(queuedPets, 1)
-                                table.insert(equippedTargetPets, petUUID)
-                                StatusLabel.Text = string.format("✅ %s di-equip! (Antrian: %d)", petType, #queuedPets)
-                            else
-                                StatusLabel.Text = string.format("❌ Gagal equip %s", petType)
-                            end
-                        else
-                            -- Pet sudah mencapai level, hapus dari antrian
-                            table.remove(queuedPets, 1)
-                            StatusLabel.Text = string.format("⏭️ %s sudah Lv.%d, skip", petType, petLevel)
-                        end
-                        
-                        wait(1) -- Tunggu 1 detik antara equip
-                    end
-                end
-                
-                -- Update setelah equip
-                wait(2)
-                equippedPetsCount = getEquippedPetsCount()
-                updateSlotInfo()
+            local success = equipPet(petUUID)
+            if success then
+                teamEquippedCount = teamEquippedCount + 1
+                StatusLabel.Text = string.format("✅ Tim %s di-equip!", petType)
+            else
+                StatusLabel.Text = string.format("❌ Gagal equip tim %s", petType)
             end
             
-            -- Cek semua equipped target pets
+            wait(1)
+        end
+        
+        wait(2)
+        StatusLabel.Text = string.format("✅ %d pet tim di-equip!", teamEquippedCount)
+        
+        -- LANGKAH 3: EQUIP TARGET
+        local availableSlots = MAX_PET_SLOTS - teamEquippedCount
+        
+        StatusLabel.Text = string.format(
+            "Sisa slot: %d | Antrian: %d",
+            availableSlots,
+            #queuedPets
+        )
+        
+        local petsToEquip = math.min(availableSlots, #queuedPets)
+        
+        for i = 1, petsToEquip do
+            if #queuedPets > 0 then
+                local petUUID = queuedPets[1]
+                local petType = getPetType(petUUID)
+                local petLevel = getPetLevel(petUUID)
+                
+                if petLevel < targetLevel then
+                    StatusLabel.Text = string.format(
+                        "Meng-equip target: %s (Lv.%d)...",
+                        petType,
+                        petLevel
+                    )
+                    
+                    local success = equipPet(petUUID)
+                    if success then
+                        table.remove(queuedPets, 1)
+                        table.insert(equippedTargetPets, petUUID)
+                        StatusLabel.Text = string.format(
+                            "✅ Target %s di-equip! (Antrian: %d)",
+                            petType,
+                            #queuedPets
+                        )
+                    else
+                        StatusLabel.Text = string.format("❌ Gagal equip target %s", petType)
+                    end
+                else
+                    table.remove(queuedPets, 1)
+                    StatusLabel.Text = string.format("⏭️ %s sudah Lv.%d, skip", petType, petLevel)
+                end
+                
+                wait(1)
+            end
+        end
+        
+        wait(2)
+        StatusLabel.Text = string.format(
+            "✅ Setup selesai! Tim: %d | Target: %d | Antrian: %d",
+            teamEquippedCount,
+            #equippedTargetPets,
+            #queuedPets
+        )
+        
+        -- LANGKAH 4: MONITORING LOOP
+        while isLeveling do
+            equippedPetsCount = getEquippedPetsCount()
+            
+            -- Cek equipped target pets
             for i = #equippedTargetPets, 1, -1 do
                 local petUUID = equippedTargetPets[i]
                 local petLevel = getPetLevel(petUUID)
                 local petType = getPetType(petUUID)
                 
                 if petLevel >= targetLevel then
-                    -- Pet mencapai target level
                     StatusLabel.Text = string.format("🎉 %s mencapai Lv.%d!", petType, targetLevel)
                     
-                    -- Unequip pet yang sudah selesai
                     unequipPet(petUUID)
-                    
-                    -- Hapus dari equipped target list
                     table.remove(equippedTargetPets, i)
                     
-                    -- Update count setelah unequip
                     wait(1)
                     equippedPetsCount = getEquippedPetsCount()
-                    updateSlotInfo()
+                    
+                    -- Isi slot kosong dari antrian
+                    if #queuedPets > 0 then
+                        local nextPetUUID = queuedPets[1]
+                        local nextPetType = getPetType(nextPetUUID)
+                        local nextPetLevel = getPetLevel(nextPetUUID)
+                        
+                        if nextPetLevel < targetLevel then
+                            StatusLabel.Text = string.format(
+                                "Meng-equip %s (Lv.%d)...",
+                                nextPetType,
+                                nextPetLevel
+                            )
+                            
+                            local success = equipPet(nextPetUUID)
+                            if success then
+                                table.remove(queuedPets, 1)
+                                table.insert(equippedTargetPets, nextPetUUID)
+                                StatusLabel.Text = string.format(
+                                    "✅ %s di-equip! (Antrian: %d)",
+                                    nextPetType,
+                                    #queuedPets
+                                )
+                            end
+                        else
+                            table.remove(queuedPets, 1)
+                        end
+                        
+                        wait(1)
+                    end
                 end
             end
             
-            -- Cek jika semua antrian dan equipped target selesai
+            -- Cek jika semua selesai
             if #queuedPets == 0 and #equippedTargetPets == 0 then
                 StatusLabel.Text = "🎉 Semua pet target selesai leveling!"
                 isLeveling = false
@@ -747,15 +892,14 @@ ToggleButton.MouseButton1Click:Connect(function()
                 break
             end
             
-            -- Update status
             updateSlotInfo()
-            
-            wait(5) -- Check setiap 5 detik
+            wait(5)
         end
     end)
 end)
 
 -- Initial setup
+populateTeamDropdown()
 updateSlotInfo()
 
 -- Add GUI to PlayerGui
