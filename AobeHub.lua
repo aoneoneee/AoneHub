@@ -1,4 +1,4 @@
--- Auto Leveling System GUI (Fixed Save/Load)
+-- Auto Leveling System GUI (Preset Based)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -15,9 +15,8 @@ local PetsService = require(ReplicatedStorage.Modules.PetServices.PetsService)
 local MAX_PET_SLOTS = 8
 local TARGET_LEVEL_DEFAULT = 100
 
--- Save/Load Tim System (Menggunakan Instance untuk penyimpanan)
+-- Save/Load System
 local function saveTeamPreset(presetName, petList)
-    -- Simpan di workspace sebagai StringValue
     local saveFolder = workspace:FindFirstChild("AutoLevel_Presets")
     if not saveFolder then
         saveFolder = Instance.new("Folder")
@@ -31,7 +30,6 @@ local function saveTeamPreset(presetName, petList)
         savedAt = os.time()
     }
     
-    -- Cek jika sudah ada
     local existingPreset = saveFolder:FindFirstChild(presetName)
     if existingPreset then
         existingPreset:Destroy()
@@ -82,8 +80,8 @@ AutoLevelGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 -- Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 380, 0, 550)
-MainFrame.Position = UDim2.new(1, -400, 0.5, -275)
+MainFrame.Size = UDim2.new(0, 350, 0, 480)
+MainFrame.Position = UDim2.new(1, -370, 0.5, -240)
 MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -165,11 +163,11 @@ local isMinimized = false
 MinimizeButton.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     if isMinimized then
-        MainFrame.Size = UDim2.new(0, 380, 0, 40)
+        MainFrame.Size = UDim2.new(0, 350, 0, 40)
         ContentFrame.Visible = false
         MinimizeButton.Text = "+"
     else
-        MainFrame.Size = UDim2.new(0, 380, 0, 550)
+        MainFrame.Size = UDim2.new(0, 350, 0, 480)
         ContentFrame.Visible = true
         MinimizeButton.Text = "—"
     end
@@ -221,7 +219,7 @@ ScrollFrame.BackgroundTransparency = 1
 ScrollFrame.BorderSizePixel = 0
 ScrollFrame.ScrollBarThickness = 4
 ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 900)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 800)
 ScrollFrame.Parent = ContentFrame
 
 local ContentLayout = Instance.new("UIListLayout")
@@ -230,16 +228,14 @@ ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ContentLayout.Parent = ScrollFrame
 
 -- Variables
-local teamPets = {}
-local selectedPetTypes = {}
-local queuedPets = {}
-local equippedTargetPets = {}
+local selectedTeamPreset = nil -- Preset tim yang dipilih untuk leveling
+local selectedPetTypes = {} -- Pet type yang dipilih untuk target
+local queuedPets = {} -- Antrian semua pet target
+local equippedTargetPets = {} -- Pet target yang sedang di-equip
 local targetLevel = TARGET_LEVEL_DEFAULT
 local isLeveling = false
-local equippedPetsCount = 0
-local teamSearchText = ""
 local targetSearchText = ""
-local currentPresetName = ""
+local petSearchText = "" -- Search untuk membuat preset
 
 -- Create Section function
 local function createSection(parent, title)
@@ -267,48 +263,34 @@ local function createSection(parent, title)
     return SectionFrame, SectionTitle
 end
 
--- ============ PRESET SECTION ============
-local PresetSection, PresetTitleLabel = createSection(ScrollFrame, "💾 Preset Tim")
-PresetSection.LayoutOrder = 1
-PresetSection.Size = UDim2.new(1, -10, 0, 120)
+-- ============ PILIH TIM SECTION ============
+local TeamSelectSection, TeamSelectTitle = createSection(ScrollFrame, "👥 Pilih Tim Leveling")
+TeamSelectSection.LayoutOrder = 1
+TeamSelectSection.Size = UDim2.new(1, -10, 0, 120)
 
-local PresetNameInput = Instance.new("TextBox")
-PresetNameInput.Size = UDim2.new(0.6, -10, 0, 28)
-PresetNameInput.Position = UDim2.new(0, 10, 0, 30)
-PresetNameInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-PresetNameInput.BorderSizePixel = 0
-PresetNameInput.Font = Enum.Font.Gotham
-PresetNameInput.PlaceholderText = "Nama tim..."
-PresetNameInput.Text = ""
-PresetNameInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-PresetNameInput.TextSize = 11
-PresetNameInput.Parent = PresetSection
+-- Selected Team Display
+local SelectedTeamLabel = Instance.new("TextLabel")
+SelectedTeamLabel.Size = UDim2.new(1, -20, 0, 25)
+SelectedTeamLabel.Position = UDim2.new(0, 10, 0, 30)
+SelectedTeamLabel.BackgroundColor3 = Color3.fromRGB(50, 80, 50)
+SelectedTeamLabel.BorderSizePixel = 0
+SelectedTeamLabel.Font = Enum.Font.GothamBold
+SelectedTeamLabel.Text = "Belum ada tim dipilih"
+SelectedTeamLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+SelectedTeamLabel.TextSize = 11
+SelectedTeamLabel.Parent = TeamSelectSection
 
-local UICornerPresetName = Instance.new("UICorner")
-UICornerPresetName.CornerRadius = UDim.new(0, 4)
-UICornerPresetName.Parent = PresetNameInput
+local UICornerSelectedTeam = Instance.new("UICorner")
+UICornerSelectedTeam.CornerRadius = UDim.new(0, 4)
+UICornerSelectedTeam.Parent = SelectedTeamLabel
 
-local SavePresetButton = Instance.new("TextButton")
-SavePresetButton.Size = UDim2.new(0.35, -10, 0, 28)
-SavePresetButton.Position = UDim2.new(0.62, 5, 0, 30)
-SavePresetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
-SavePresetButton.BorderSizePixel = 0
-SavePresetButton.Font = Enum.Font.GothamBold
-SavePresetButton.Text = "💾 Simpan"
-SavePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-SavePresetButton.TextSize = 11
-SavePresetButton.Parent = PresetSection
-
-local UICornerSave = Instance.new("UICorner")
-UICornerSave.CornerRadius = UDim.new(0, 4)
-UICornerSave.Parent = SavePresetButton
-
+-- Preset Dropdown
 local PresetDropdown = Instance.new("Frame")
 PresetDropdown.Size = UDim2.new(1, -20, 0, 30)
-PresetDropdown.Position = UDim2.new(0, 10, 0, 65)
+PresetDropdown.Position = UDim2.new(0, 10, 0, 60)
 PresetDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
 PresetDropdown.BorderSizePixel = 0
-PresetDropdown.Parent = PresetSection
+PresetDropdown.Parent = TeamSelectSection
 
 local UICornerPresetDropdown = Instance.new("UICorner")
 UICornerPresetDropdown.CornerRadius = UDim.new(0, 4)
@@ -323,55 +305,91 @@ PresetDropdownButton.TextColor3 = Color3.fromRGB(200, 200, 200)
 PresetDropdownButton.TextSize = 11
 PresetDropdownButton.Parent = PresetDropdown
 
+-- Preset List
 local PresetListFrame = Instance.new("ScrollingFrame")
 PresetListFrame.Size = UDim2.new(1, -20, 0, 80)
-PresetListFrame.Position = UDim2.new(0, 10, 0, 100)
+PresetListFrame.Position = UDim2.new(0, 10, 0, 95)
 PresetListFrame.BackgroundTransparency = 1
 PresetListFrame.BorderSizePixel = 0
 PresetListFrame.ScrollBarThickness = 3
 PresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
 PresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 80)
 PresetListFrame.Visible = false
-PresetListFrame.Parent = PresetSection
+PresetListFrame.Parent = TeamSelectSection
 
 local PresetListLayout = Instance.new("UIListLayout")
 PresetListLayout.Padding = UDim.new(0, 3)
 PresetListLayout.Parent = PresetListFrame
 
--- ============ TEAM SECTION ============
-local TeamSection, TeamTitleLabel = createSection(ScrollFrame, "👥 Tim Leveling")
-TeamSection.LayoutOrder = 2
-TeamSection.Size = UDim2.new(1, -10, 0, 180)
+-- ============ BUAT PRESET SECTION ============
+local CreatePresetSection, CreatePresetTitle = createSection(ScrollFrame, "💾 Buat Preset Tim")
+CreatePresetSection.LayoutOrder = 2
+CreatePresetSection.Size = UDim2.new(1, -10, 0, 180)
 
-local TeamSearchBox = Instance.new("TextBox")
-TeamSearchBox.Size = UDim2.new(1, -20, 0, 25)
-TeamSearchBox.Position = UDim2.new(0, 10, 0, 30)
-TeamSearchBox.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-TeamSearchBox.BorderSizePixel = 0
-TeamSearchBox.Font = Enum.Font.Gotham
-TeamSearchBox.PlaceholderText = "🔍 Cari pet tim..."
-TeamSearchBox.Text = ""
-TeamSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-TeamSearchBox.TextSize = 11
-TeamSearchBox.Parent = TeamSection
+-- Preset Name Input
+local PresetNameInput = Instance.new("TextBox")
+PresetNameInput.Size = UDim2.new(1, -20, 0, 28)
+PresetNameInput.Position = UDim2.new(0, 10, 0, 30)
+PresetNameInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+PresetNameInput.BorderSizePixel = 0
+PresetNameInput.Font = Enum.Font.Gotham
+PresetNameInput.PlaceholderText = "Nama preset tim..."
+PresetNameInput.Text = ""
+PresetNameInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+PresetNameInput.TextSize = 11
+PresetNameInput.Parent = CreatePresetSection
 
-local UICornerTeamSearch = Instance.new("UICorner")
-UICornerTeamSearch.CornerRadius = UDim.new(0, 4)
-UICornerTeamSearch.Parent = TeamSearchBox
+local UICornerPresetName = Instance.new("UICorner")
+UICornerPresetName.CornerRadius = UDim.new(0, 4)
+UICornerPresetName.Parent = PresetNameInput
 
-local TeamListFrame = Instance.new("ScrollingFrame")
-TeamListFrame.Size = UDim2.new(1, -20, 0, 120)
-TeamListFrame.Position = UDim2.new(0, 10, 0, 58)
-TeamListFrame.BackgroundTransparency = 1
-TeamListFrame.BorderSizePixel = 0
-TeamListFrame.ScrollBarThickness = 3
-TeamListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-TeamListFrame.CanvasSize = UDim2.new(0, 0, 0, 100)
-TeamListFrame.Parent = TeamSection
+-- Pet Search
+local PetSearchBox = Instance.new("TextBox")
+PetSearchBox.Size = UDim2.new(1, -20, 0, 25)
+PetSearchBox.Position = UDim2.new(0, 10, 0, 62)
+PetSearchBox.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+PetSearchBox.BorderSizePixel = 0
+PetSearchBox.Font = Enum.Font.Gotham
+PetSearchBox.PlaceholderText = "🔍 Cari pet..."
+PetSearchBox.Text = ""
+PetSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+PetSearchBox.TextSize = 11
+PetSearchBox.Parent = CreatePresetSection
 
-local TeamListLayout = Instance.new("UIListLayout")
-TeamListLayout.Padding = UDim.new(0, 3)
-TeamListLayout.Parent = TeamListFrame
+local UICornerPetSearch = Instance.new("UICorner")
+UICornerPetSearch.CornerRadius = UDim.new(0, 4)
+UICornerPetSearch.Parent = PetSearchBox
+
+-- Pet List (untuk membuat preset)
+local PetListFrame = Instance.new("ScrollingFrame")
+PetListFrame.Size = UDim2.new(1, -20, 0, 80)
+PetListFrame.Position = UDim2.new(0, 10, 0, 90)
+PetListFrame.BackgroundTransparency = 1
+PetListFrame.BorderSizePixel = 0
+PetListFrame.ScrollBarThickness = 3
+PetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+PetListFrame.CanvasSize = UDim2.new(0, 0, 0, 100)
+PetListFrame.Parent = CreatePresetSection
+
+local PetListLayout = Instance.new("UIListLayout")
+PetListLayout.Padding = UDim.new(0, 3)
+PetListLayout.Parent = PetListFrame
+
+-- Save Preset Button
+local SavePresetButton = Instance.new("TextButton")
+SavePresetButton.Size = UDim2.new(1, -20, 0, 25)
+SavePresetButton.Position = UDim2.new(0, 10, 0, 150)
+SavePresetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+SavePresetButton.BorderSizePixel = 0
+SavePresetButton.Font = Enum.Font.GothamBold
+SavePresetButton.Text = "💾 Simpan Preset"
+SavePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SavePresetButton.TextSize = 11
+SavePresetButton.Parent = CreatePresetSection
+
+local UICornerSave = Instance.new("UICorner")
+UICornerSave.CornerRadius = UDim.new(0, 4)
+UICornerSave.Parent = SavePresetButton
 
 -- ============ TARGET LEVEL SECTION ============
 local LevelSection, LevelTitleLabel = createSection(ScrollFrame, "🎯 Target Level")
@@ -425,7 +443,7 @@ UICornerTargetSearch.CornerRadius = UDim.new(0, 4)
 UICornerTargetSearch.Parent = TargetSearchBox
 
 local TargetListFrame = Instance.new("ScrollingFrame")
-TargetListFrame.Size = UDim2.new(1, -20, 0, 120)
+TargetListFrame.Size = UDim2.new(1, -20, 0, 100)
 TargetListFrame.Position = UDim2.new(0, 10, 0, 58)
 TargetListFrame.BackgroundTransparency = 1
 TargetListFrame.BorderSizePixel = 0
@@ -438,29 +456,30 @@ local TargetListLayout = Instance.new("UIListLayout")
 TargetListLayout.Padding = UDim.new(0, 3)
 TargetListLayout.Parent = TargetListFrame
 
--- ============ BUTTON SECTION ============
-local ButtonSection, ButtonTitleLabel = createSection(ScrollFrame, "⚙️ Kontrol")
-ButtonSection.LayoutOrder = 5
-ButtonSection.Size = UDim2.new(1, -10, 0, 120)
-
+-- Scan Button
 local ScanButton = Instance.new("TextButton")
-ScanButton.Size = UDim2.new(1, -20, 0, 30)
-ScanButton.Position = UDim2.new(0, 10, 0, 30)
+ScanButton.Size = UDim2.new(1, -20, 0, 25)
+ScanButton.Position = UDim2.new(0, 10, 0, 155)
 ScanButton.BackgroundColor3 = Color3.fromRGB(60, 120, 200)
 ScanButton.BorderSizePixel = 0
 ScanButton.Font = Enum.Font.GothamBold
 ScanButton.Text = "🔍 Scan Pet Target"
 ScanButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ScanButton.TextSize = 12
-ScanButton.Parent = ButtonSection
+ScanButton.TextSize = 11
+ScanButton.Parent = TargetSection
 
 local UICornerScan = Instance.new("UICorner")
-UICornerScan.CornerRadius = UDim.new(0, 5)
+UICornerScan.CornerRadius = UDim.new(0, 4)
 UICornerScan.Parent = ScanButton
 
+-- ============ BUTTON SECTION ============
+local ButtonSection, ButtonTitleLabel = createSection(ScrollFrame, "⚙️ Kontrol")
+ButtonSection.LayoutOrder = 5
+ButtonSection.Size = UDim2.new(1, -10, 0, 100)
+
 local ToggleButton = Instance.new("TextButton")
-ToggleButton.Size = UDim2.new(1, -20, 0, 30)
-ToggleButton.Position = UDim2.new(0, 10, 0, 65)
+ToggleButton.Size = UDim2.new(1, -20, 0, 35)
+ToggleButton.Position = UDim2.new(0, 10, 0, 30)
 ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
 ToggleButton.BorderSizePixel = 0
 ToggleButton.Font = Enum.Font.GothamBold
@@ -475,7 +494,7 @@ UICornerToggle.Parent = ToggleButton
 
 local StatusLabel = Instance.new("TextLabel")
 StatusLabel.Size = UDim2.new(1, -20, 0, 20)
-StatusLabel.Position = UDim2.new(0, 10, 0, 100)
+StatusLabel.Position = UDim2.new(0, 10, 0, 70)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Font = Enum.Font.Gotham
 StatusLabel.Text = "Status: Idle"
@@ -535,10 +554,6 @@ local function getEquippedPets()
     return petsData.EquippedPets or {}
 end
 
-local function getEquippedPetsCount()
-    return #getEquippedPets()
-end
-
 local function equipPet(petUUID)
     local success = pcall(function()
         PetsService:EquipPet(petUUID, CFrame.new(0, 10, 0))
@@ -561,34 +576,10 @@ local function clearDropdown(listFrame)
     end
 end
 
-local function updateSlotInfo()
-    if TeamTitleLabel then
-        TeamTitleLabel.Text = string.format(
-            "👥 Tim Leveling (Dipilih: %d%s)", 
-            #teamPets,
-            currentPresetName ~= "" and " - " .. currentPresetName or ""
-        )
-    end
-    
-    if TargetTitleLabel then
-        TargetTitleLabel.Text = string.format(
-            "🎯 Pet Target (Tipe: %d, Antrian: %d)", 
-            #selectedPetTypes,
-            #queuedPets
-        )
-    end
-    
-    if StatusLabel then
-        StatusLabel.Text = string.format(
-            "Tim: %d | Target: %d | Antrian: %d",
-            #teamPets,
-            #selectedPetTypes,
-            #queuedPets
-        )
-    end
-end
+-- Temporary selected pets untuk membuat preset
+local tempPresetPets = {}
 
--- Populate Preset Dropdown
+-- Populate Preset Dropdown (untuk memilih tim)
 local function populatePresetDropdown()
     clearDropdown(PresetListFrame)
     
@@ -621,28 +612,33 @@ local function populatePresetDropdown()
         UICornerPreset.CornerRadius = UDim.new(0, 4)
         UICornerPreset.Parent = PresetButton
         
+        -- Highlight jika dipilih
+        if selectedTeamPreset == presetName then
+            PresetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+        end
+        
         PresetButton.MouseButton1Click:Connect(function()
-            teamPets = {}
-            for _, petUUID in ipairs(preset.pets) do
-                table.insert(teamPets, petUUID)
-            end
-            currentPresetName = presetName
-            StatusLabel.Text = string.format("✅ Preset '%s' dimuat!", presetName)
-            populateTeamDropdown()
-            updateSlotInfo()
+            selectedTeamPreset = presetName
+            SelectedTeamLabel.Text = string.format("✅ Tim: %s (%d pet)", presetName, #preset.pets)
+            StatusLabel.Text = string.format("✅ Preset '%s' dipilih!", presetName)
+            PresetListFrame.Visible = false
         end)
         
         PresetButton.MouseButton2Click:Connect(function()
             deleteTeamPreset(presetName)
+            if selectedTeamPreset == presetName then
+                selectedTeamPreset = nil
+                SelectedTeamLabel.Text = "Belum ada tim dipilih"
+            end
             StatusLabel.Text = string.format("🗑️ Preset '%s' dihapus!", presetName)
             populatePresetDropdown()
         end)
     end
 end
 
--- Populate Team Dropdown
-local function populateTeamDropdown()
-    clearDropdown(TeamListFrame)
+-- Populate Pet List (untuk membuat preset)
+local function populatePetList()
+    clearDropdown(PetListFrame)
     
     local petsData = getPlayerPetData()
     if not petsData then return end
@@ -653,9 +649,9 @@ local function populateTeamDropdown()
     for petUUID, _ in pairs(inventory) do
         local petType = getPetType(petUUID)
         local petLevel = getPetLevel(petUUID)
-        local isSelected = table.find(teamPets, petUUID) ~= nil
+        local isSelected = table.find(tempPresetPets, petUUID) ~= nil
         
-        if teamSearchText == "" or petType:lower():find(teamSearchText:lower()) then
+        if petSearchText == "" or petType:lower():find(petSearchText:lower()) then
             table.insert(allPets, {
                 UUID = petUUID,
                 PetType = petType,
@@ -673,21 +669,21 @@ local function populateTeamDropdown()
         end
     end)
     
-    TeamListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPets * 28, 50))
+    PetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPets * 25, 50))
     
     for i, petInfo in ipairs(allPets) do
         local PetButton = Instance.new("TextButton")
-        PetButton.Size = UDim2.new(1, 0, 0, 25)
+        PetButton.Size = UDim2.new(1, 0, 0, 22)
         PetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
         PetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
         PetButton.TextSize = 10
-        PetButton.Parent = TeamListFrame
+        PetButton.Parent = PetListFrame
         PetButton.LayoutOrder = i
         
         local UICornerPet = Instance.new("UICorner")
-        UICornerPet.CornerRadius = UDim.new(0, 4)
+        UICornerPet.CornerRadius = UDim.new(0, 3)
         UICornerPet.Parent = PetButton
         
         if petInfo.IsSelected then
@@ -698,21 +694,18 @@ local function populateTeamDropdown()
         end
         
         PetButton.MouseButton1Click:Connect(function()
-            local teamIndex = table.find(teamPets, petInfo.UUID)
-            if teamIndex then
-                table.remove(teamPets, teamIndex)
-                StatusLabel.Text = string.format("❌ %s dihapus dari tim", petInfo.PetType)
+            local index = table.find(tempPresetPets, petInfo.UUID)
+            if index then
+                table.remove(tempPresetPets, index)
             else
-                if #teamPets < MAX_PET_SLOTS then
-                    table.insert(teamPets, petInfo.UUID)
-                    StatusLabel.Text = string.format("✅ %s ditambahkan ke tim", petInfo.PetType)
+                if #tempPresetPets < MAX_PET_SLOTS then
+                    table.insert(tempPresetPets, petInfo.UUID)
                 else
-                    StatusLabel.Text = "⚠️ Slot tim penuh!"
+                    StatusLabel.Text = "⚠️ Maksimal 8 pet per preset!"
+                    return
                 end
             end
-            
-            populateTeamDropdown()
-            updateSlotInfo()
+            populatePetList()
         end)
     end
 end
@@ -723,10 +716,23 @@ local function scanTargetPets()
     if not petsData then return {} end
     
     local inventory = petsData.PetInventory.Data or {}
+    local teamUUIDs = {}
+    
+    -- Get UUIDs dari preset yang dipilih
+    if selectedTeamPreset then
+        local presets = loadTeamPresets()
+        local preset = presets[selectedTeamPreset]
+        if preset then
+            for _, uuid in ipairs(preset.pets) do
+                teamUUIDs[uuid] = true
+            end
+        end
+    end
+    
     local petTypes = {}
     
     for petUUID, _ in pairs(inventory) do
-        if not table.find(teamPets, petUUID) then
+        if not teamUUIDs[petUUID] then
             local petType = getPetType(petUUID)
             local petLevel = getPetLevel(petUUID)
             
@@ -772,11 +778,11 @@ local function populateTargetDropdown()
         end
     end)
     
-    TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPetTypes * 28, 50))
+    TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPetTypes * 25, 50))
     
     for i, petInfo in ipairs(allPetTypes) do
         local PetButton = Instance.new("TextButton")
-        PetButton.Size = UDim2.new(1, 0, 0, 25)
+        PetButton.Size = UDim2.new(1, 0, 0, 22)
         PetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
@@ -786,7 +792,7 @@ local function populateTargetDropdown()
         PetButton.LayoutOrder = i
         
         local UICornerTarget = Instance.new("UICorner")
-        UICornerTarget.CornerRadius = UDim.new(0, 4)
+        UICornerTarget.CornerRadius = UDim.new(0, 3)
         UICornerTarget.Parent = PetButton
         
         if petInfo.IsSelected then
@@ -807,8 +813,6 @@ local function populateTargetDropdown()
                         table.remove(queuedPets, j)
                     end
                 end
-                
-                StatusLabel.Text = string.format("❌ %s dihapus dari target", petInfo.PetType)
             else
                 table.insert(selectedPetTypes, petInfo.PetType)
                 
@@ -817,34 +821,32 @@ local function populateTargetDropdown()
                         table.insert(queuedPets, petInstance.UUID)
                     end
                 end
-                
-                StatusLabel.Text = string.format("✅ %s (x%d) ditambahkan", petInfo.PetType, petInfo.Count)
             end
             
             populateTargetDropdown()
-            updateSlotInfo()
         end)
     end
 end
 
--- Save Preset
+-- Save Preset Button
 SavePresetButton.MouseButton1Click:Connect(function()
     local presetName = PresetNameInput.Text
     
     if presetName == "" then
-        StatusLabel.Text = "⚠️ Masukkan nama tim dulu!"
+        StatusLabel.Text = "⚠️ Masukkan nama preset!"
         return
     end
     
-    if #teamPets == 0 then
-        StatusLabel.Text = "⚠️ Pilih pet tim dulu!"
+    if #tempPresetPets == 0 then
+        StatusLabel.Text = "⚠️ Pilih minimal 1 pet!"
         return
     end
     
-    saveTeamPreset(presetName, teamPets)
-    currentPresetName = presetName
-    StatusLabel.Text = string.format("✅ Tim '%s' disimpan!", presetName)
+    saveTeamPreset(presetName, tempPresetPets)
+    StatusLabel.Text = string.format("✅ Preset '%s' disimpan!", presetName)
     PresetNameInput.Text = ""
+    tempPresetPets = {}
+    populatePetList()
     populatePresetDropdown()
 end)
 
@@ -857,13 +859,14 @@ PresetDropdownButton.MouseButton1Click:Connect(function()
 end)
 
 -- Search handlers
-TeamSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-    teamSearchText = TeamSearchBox.Text
-    populateTeamDropdown()
+PetSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    petSearchText = PetSearchBox.Text
+    populatePetList()
 end)
 
 TargetSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-    targetSearchText = TargetSearchBox.Text    populateTargetDropdown()
+    targetSearchText = TargetSearchBox.Text
+    populateTargetDropdown()
 end)
 
 -- Scan Button
@@ -884,15 +887,25 @@ ToggleButton.MouseButton1Click:Connect(function()
         return
     end
     
+    if not selectedTeamPreset then
+        StatusLabel.Text = "Status: Pilih preset tim dulu!"
+        return
+    end
+    
     if #queuedPets == 0 then
         StatusLabel.Text = "Status: Pilih pet target dulu!"
         return
     end
     
-    if #teamPets == 0 then
-        StatusLabel.Text = "Status: Pilih tim dulu!"
+    -- Get team pets dari preset
+    local presets = loadTeamPresets()
+    local preset = presets[selectedTeamPreset]
+    if not preset then
+        StatusLabel.Text = "Status: Preset tidak ditemukan!"
         return
     end
+    
+    local teamPets = preset.pets
     
     isLeveling = true
     ToggleButton.Text = "⏹️ Stop"
@@ -900,7 +913,7 @@ ToggleButton.MouseButton1Click:Connect(function()
     StatusLabel.Text = "Status: Membersihkan slot..."
     
     spawn(function()
-        -- LANGKAH 1: UNEQUIP SEMUA
+        -- UNEQUIP SEMUA
         local currentEquipped = getEquippedPets()
         for _, petUUID in ipairs(currentEquipped) do
             unequipPet(petUUID)
@@ -910,7 +923,7 @@ ToggleButton.MouseButton1Click:Connect(function()
         wait(2)
         StatusLabel.Text = "✅ Slot bersih!"
         
-        -- LANGKAH 2: EQUIP TIM
+        -- EQUIP TIM
         for _, petUUID in ipairs(teamPets) do
             equipPet(petUUID)
             wait(1)
@@ -919,7 +932,7 @@ ToggleButton.MouseButton1Click:Connect(function()
         wait(2)
         StatusLabel.Text = "✅ Tim di-equip!"
         
-        -- LANGKAH 3: EQUIP TARGET
+        -- EQUIP TARGET
         local availableSlots = MAX_PET_SLOTS - #teamPets
         local petsToEquip = math.min(availableSlots, #queuedPets)
         
@@ -945,7 +958,7 @@ ToggleButton.MouseButton1Click:Connect(function()
         wait(2)
         StatusLabel.Text = "✅ Setup selesai!"
         
-        -- LANGKAH 4: MONITORING
+        -- MONITORING
         while isLeveling do
             for i = #equippedTargetPets, 1, -1 do
                 local petUUID = equippedTargetPets[i]
@@ -991,10 +1004,9 @@ ToggleButton.MouseButton1Click:Connect(function()
 end)
 
 -- Initial setup
-populateTeamDropdown()
+populatePetList()
 populatePresetDropdown()
-updateSlotInfo()
 
 AutoLevelGUI.Parent = playerGui
 
-print("✅ Auto Leveling System dengan Preset Tim loaded!")
+print("✅ Auto Leveling System (Preset Based) loaded!")
