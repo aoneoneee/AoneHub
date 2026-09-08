@@ -1,4 +1,4 @@
--- Auto Leveling System GUI (Dengan Save/Load Tim)
+-- Auto Leveling System GUI (Fixed Save/Load)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -15,51 +15,62 @@ local PetsService = require(ReplicatedStorage.Modules.PetServices.PetsService)
 local MAX_PET_SLOTS = 8
 local TARGET_LEVEL_DEFAULT = 100
 
--- Save/Load Tim System
+-- Save/Load Tim System (Menggunakan Instance untuk penyimpanan)
 local function saveTeamPreset(presetName, petList)
-    local saveData = {
-        presets = {}
-    }
-    
-    -- Load existing data
-    local existingData = readfile("AutoLevel_Presets.json")
-    if existingData then
-        local success, decoded = pcall(function()
-            return HttpService:JSONDecode(existingData)
-        end)
-        if success and decoded and decoded.presets then
-            saveData = decoded
-        end
+    -- Simpan di workspace sebagai StringValue
+    local saveFolder = workspace:FindFirstChild("AutoLevel_Presets")
+    if not saveFolder then
+        saveFolder = Instance.new("Folder")
+        saveFolder.Name = "AutoLevel_Presets"
+        saveFolder.Parent = workspace
     end
     
-    -- Add/Update preset
-    saveData.presets[presetName] = {
+    local presetData = {
         name = presetName,
         pets = petList,
         savedAt = os.time()
     }
     
-    -- Save
-    writefile("AutoLevel_Presets.json", HttpService:JSONEncode(saveData))
+    -- Cek jika sudah ada
+    local existingPreset = saveFolder:FindFirstChild(presetName)
+    if existingPreset then
+        existingPreset:Destroy()
+    end
+    
+    local stringValue = Instance.new("StringValue")
+    stringValue.Name = presetName
+    stringValue.Value = HttpService:JSONEncode(presetData)
+    stringValue.Parent = saveFolder
 end
 
 local function loadTeamPresets()
-    local success, data = pcall(function()
-        return readfile("AutoLevel_Presets.json")
-    end)
+    local presets = {}
     
-    if success and data then
-        local decoded = HttpService:JSONDecode(data)
-        return decoded.presets or {}
+    local saveFolder = workspace:FindFirstChild("AutoLevel_Presets")
+    if saveFolder then
+        for _, child in pairs(saveFolder:GetChildren()) do
+            if child:IsA("StringValue") then
+                local success, decoded = pcall(function()
+                    return HttpService:JSONDecode(child.Value)
+                end)
+                if success and decoded then
+                    presets[child.Name] = decoded
+                end
+            end
+        end
     end
-    return {}
+    
+    return presets
 end
 
 local function deleteTeamPreset(presetName)
-    local presets = loadTeamPresets()
-    presets[presetName] = nil
-    
-    writefile("AutoLevel_Presets.json", HttpService:JSONEncode({presets = presets}))
+    local saveFolder = workspace:FindFirstChild("AutoLevel_Presets")
+    if saveFolder then
+        local preset = saveFolder:FindFirstChild(presetName)
+        if preset then
+            preset:Destroy()
+        end
+    end
 end
 
 -- Main GUI
@@ -219,10 +230,10 @@ ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ContentLayout.Parent = ScrollFrame
 
 -- Variables
-local teamPets = {} -- Pet tim yang dipilih (UUID list)
-local selectedPetTypes = {} -- Pet type yang dipilih untuk target
-local queuedPets = {} -- Antrian semua pet target
-local equippedTargetPets = {} -- Pet target yang sedang di-equip
+local teamPets = {}
+local selectedPetTypes = {}
+local queuedPets = {}
+local equippedTargetPets = {}
 local targetLevel = TARGET_LEVEL_DEFAULT
 local isLeveling = false
 local equippedPetsCount = 0
@@ -261,7 +272,6 @@ local PresetSection, PresetTitleLabel = createSection(ScrollFrame, "💾 Preset 
 PresetSection.LayoutOrder = 1
 PresetSection.Size = UDim2.new(1, -10, 0, 120)
 
--- Preset Name Input
 local PresetNameInput = Instance.new("TextBox")
 PresetNameInput.Size = UDim2.new(0.6, -10, 0, 28)
 PresetNameInput.Position = UDim2.new(0, 10, 0, 30)
@@ -278,7 +288,6 @@ local UICornerPresetName = Instance.new("UICorner")
 UICornerPresetName.CornerRadius = UDim.new(0, 4)
 UICornerPresetName.Parent = PresetNameInput
 
--- Save Button
 local SavePresetButton = Instance.new("TextButton")
 SavePresetButton.Size = UDim2.new(0.35, -10, 0, 28)
 SavePresetButton.Position = UDim2.new(0.62, 5, 0, 30)
@@ -294,7 +303,6 @@ local UICornerSave = Instance.new("UICorner")
 UICornerSave.CornerRadius = UDim.new(0, 4)
 UICornerSave.Parent = SavePresetButton
 
--- Preset Dropdown
 local PresetDropdown = Instance.new("Frame")
 PresetDropdown.Size = UDim2.new(1, -20, 0, 30)
 PresetDropdown.Position = UDim2.new(0, 10, 0, 65)
@@ -315,7 +323,6 @@ PresetDropdownButton.TextColor3 = Color3.fromRGB(200, 200, 200)
 PresetDropdownButton.TextSize = 11
 PresetDropdownButton.Parent = PresetDropdown
 
--- Preset List
 local PresetListFrame = Instance.new("ScrollingFrame")
 PresetListFrame.Size = UDim2.new(1, -20, 0, 80)
 PresetListFrame.Position = UDim2.new(0, 10, 0, 100)
@@ -336,7 +343,6 @@ local TeamSection, TeamTitleLabel = createSection(ScrollFrame, "👥 Tim Levelin
 TeamSection.LayoutOrder = 2
 TeamSection.Size = UDim2.new(1, -10, 0, 180)
 
--- Search Bar Team
 local TeamSearchBox = Instance.new("TextBox")
 TeamSearchBox.Size = UDim2.new(1, -20, 0, 25)
 TeamSearchBox.Position = UDim2.new(0, 10, 0, 30)
@@ -353,7 +359,6 @@ local UICornerTeamSearch = Instance.new("UICorner")
 UICornerTeamSearch.CornerRadius = UDim.new(0, 4)
 UICornerTeamSearch.Parent = TeamSearchBox
 
--- Team Pets List
 local TeamListFrame = Instance.new("ScrollingFrame")
 TeamListFrame.Size = UDim2.new(1, -20, 0, 120)
 TeamListFrame.Position = UDim2.new(0, 10, 0, 58)
@@ -403,7 +408,6 @@ local TargetSection, TargetTitleLabel = createSection(ScrollFrame, "🎯 Pet Tar
 TargetSection.LayoutOrder = 4
 TargetSection.Size = UDim2.new(1, -10, 0, 180)
 
--- Search Bar Target
 local TargetSearchBox = Instance.new("TextBox")
 TargetSearchBox.Size = UDim2.new(1, -20, 0, 25)
 TargetSearchBox.Position = UDim2.new(0, 10, 0, 30)
@@ -420,7 +424,6 @@ local UICornerTargetSearch = Instance.new("UICorner")
 UICornerTargetSearch.CornerRadius = UDim.new(0, 4)
 UICornerTargetSearch.Parent = TargetSearchBox
 
--- Target Pets List
 local TargetListFrame = Instance.new("ScrollingFrame")
 TargetListFrame.Size = UDim2.new(1, -20, 0, 120)
 TargetListFrame.Position = UDim2.new(0, 10, 0, 58)
@@ -440,7 +443,6 @@ local ButtonSection, ButtonTitleLabel = createSection(ScrollFrame, "⚙️ Kontr
 ButtonSection.LayoutOrder = 5
 ButtonSection.Size = UDim2.new(1, -10, 0, 120)
 
--- Scan Button
 local ScanButton = Instance.new("TextButton")
 ScanButton.Size = UDim2.new(1, -20, 0, 30)
 ScanButton.Position = UDim2.new(0, 10, 0, 30)
@@ -456,7 +458,6 @@ local UICornerScan = Instance.new("UICorner")
 UICornerScan.CornerRadius = UDim.new(0, 5)
 UICornerScan.Parent = ScanButton
 
--- Toggle Button
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Size = UDim2.new(1, -20, 0, 30)
 ToggleButton.Position = UDim2.new(0, 10, 0, 65)
@@ -472,7 +473,6 @@ local UICornerToggle = Instance.new("UICorner")
 UICornerToggle.CornerRadius = UDim.new(0, 5)
 UICornerToggle.Parent = ToggleButton
 
--- Status Label
 local StatusLabel = Instance.new("TextLabel")
 StatusLabel.Size = UDim2.new(1, -20, 0, 20)
 StatusLabel.Position = UDim2.new(0, 10, 0, 100)
@@ -621,7 +621,6 @@ local function populatePresetDropdown()
         UICornerPreset.CornerRadius = UDim.new(0, 4)
         UICornerPreset.Parent = PresetButton
         
-        -- Load button
         PresetButton.MouseButton1Click:Connect(function()
             teamPets = {}
             for _, petUUID in ipairs(preset.pets) do
@@ -633,7 +632,6 @@ local function populatePresetDropdown()
             updateSlotInfo()
         end)
         
-        -- Delete button (right-click)
         PresetButton.MouseButton2Click:Connect(function()
             deleteTeamPreset(presetName)
             StatusLabel.Text = string.format("🗑️ Preset '%s' dihapus!", presetName)
@@ -667,7 +665,6 @@ local function populateTeamDropdown()
         end
     end
     
-    -- Sort: Selected di atas
     table.sort(allPets, function(a, b)
         if a.IsSelected ~= b.IsSelected then
             return a.IsSelected
@@ -866,8 +863,7 @@ TeamSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 
 TargetSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-    targetSearchText = TargetSearchBox.Text
-    populateTargetDropdown()
+    targetSearchText = TargetSearchBox.Text    populateTargetDropdown()
 end)
 
 -- Scan Button
