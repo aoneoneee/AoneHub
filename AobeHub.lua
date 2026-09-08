@@ -1,4 +1,4 @@
--- Auto Leveling System GUI (With Auto-Equip)
+-- Auto Leveling System GUI (Fixed - Continuous Leveling)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -171,8 +171,10 @@ ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ContentLayout.Parent = ScrollFrame
 
 -- Variables
-local teamPets = {}
-local targetPets = {}
+local teamPets = {} -- Pet tim yang dipilih
+local selectedPetTypes = {} -- Pet type yang dipilih untuk leveling (misal: {"Dog", "Cat"})
+local queuedPets = {} -- Antrian semua pet yang perlu di-leveling (UUID list)
+local equippedTargetPets = {} -- Pet target yang sedang di-equip
 local targetLevel = TARGET_LEVEL_DEFAULT
 local isLeveling = false
 local equippedPetsCount = 0
@@ -419,7 +421,6 @@ local function getEquippedPetsCount()
     return #getEquippedPets()
 end
 
--- Function to equip pet
 local function equipPet(petUUID)
     local success = pcall(function()
         PetsService:EquipPet(petUUID, CFrame.new(0, 10, 0))
@@ -427,7 +428,6 @@ local function equipPet(petUUID)
     return success
 end
 
--- Function to unequip pet
 local function unequipPet(petUUID)
     local success = pcall(function()
         PetsService:UnequipPet(petUUID)
@@ -549,47 +549,40 @@ local function populateTargetDropdown()
         UICornerTarget.CornerRadius = UDim.new(0, 3)
         UICornerTarget.Parent = PetButton
         
-        local isSelected = false
-        for _, targetUUID in ipairs(targetPets) do
-            if getPetType(targetUUID) == petType then
-                isSelected = true
-                break
-            end
-        end
+        -- Check if this pet type is selected
+        local isSelected = table.find(selectedPetTypes, petType) ~= nil
         
         if isSelected then
             PetButton.BackgroundColor3 = Color3.fromRGB(200, 150, 50)
         end
         
         PetButton.MouseButton1Click:Connect(function()
-            local availableSlots = MAX_PET_SLOTS - getEquippedPetsCount()
+            local typeIndex = table.find(selectedPetTypes, petType)
             
-            local selectedCount = 0
-            for _, targetUUID in ipairs(targetPets) do
-                if getPetType(targetUUID) == petType then
-                    selectedCount = selectedCount + 1
-                end
-            end
-            
-            if selectedCount > 0 then
-                for i = #targetPets, 1, -1 do
-                    if getPetType(targetPets[i]) == petType then
-                        table.remove(targetPets, i)
-                    end
-                end
+            if typeIndex then
+                -- Remove this pet type from selection
+                table.remove(selectedPetTypes, typeIndex)
                 PetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
-            else
-                for _, petInstance in ipairs(petInstances) do
-                    if #targetPets < availableSlots then
-                        if not table.find(targetPets, petInstance.UUID) then
-                            table.insert(targetPets, petInstance.UUID)
-                        end
-                    else
-                        break
+                
+                -- Remove all queued pets of this type
+                for i = #queuedPets, 1, -1 do
+                    if getPetType(queuedPets[i]) == petType then
+                        table.remove(queuedPets, i)
                     end
                 end
+            else
+                -- Add this pet type to selection
+                table.insert(selectedPetTypes, petType)
                 PetButton.BackgroundColor3 = Color3.fromRGB(200, 150, 50)
+                
+                -- Add all pets of this type to queue
+                for _, petInstance in ipairs(petInstances) do
+                    if not table.find(queuedPets, petInstance.UUID) then
+                        table.insert(queuedPets, petInstance.UUID)
+                    end
+                end
             end
+            
             updateSlotInfo()
         end)
     end
@@ -610,17 +603,17 @@ local function updateSlotInfo()
     
     if TargetTitleLabel then
         TargetTitleLabel.Text = string.format(
-            "🎯 Pet Target (Sisa Slot: %d)", 
-            math.max(availableSlots - #targetPets, 0)
+            "🎯 Pet Target (Antrian: %d)", 
+            #queuedPets
         )
     end
     
     if StatusLabel then
         StatusLabel.Text = string.format(
-            "Equipped: %d | Target: %d | Sisa: %d",
+            "Equipped: %d | Antrian: %d | Sisa Slot: %d",
             equippedPetsCount,
-            #targetPets,
-            math.max(availableSlots - #targetPets, 0)
+            #queuedPets,
+            availableSlots
         )
     end
 end
@@ -660,7 +653,7 @@ ToggleButton.MouseButton1Click:Connect(function()
     end
     
     -- Start leveling
-    if #targetPets == 0 then
+    if #queuedPets == 0 then
         StatusLabel.Text = "Status: Pilih pet target dulu!"
         return
     end
@@ -668,7 +661,7 @@ ToggleButton.MouseButton1Click:Connect(function()
     isLeveling = true
     ToggleButton.Text = "⏹️ Stop"
     ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    StatusLabel.Text = "Status: Mengisi slot..."
+    StatusLabel.Text = "Status: Leveling..."
     
     -- Auto Leveling Loop
     spawn(function()
@@ -679,45 +672,51 @@ ToggleButton.MouseButton1Click:Connect(function()
             -- Hitung slot kosong
             local availableSlots = math.max(MAX_PET_SLOTS - equippedPetsCount, 0)
             
-            -- Cek jika ada slot kosong dan masih ada target
-            if availableSlots > 0 and #targetPets > 0 then
-                -- Equip target pets ke slot kosong
-                local equippedNow = 0
-                for i = 1, math.min(availableSlots, #targetPets) do
-                    local petUUID = targetPets[i]
-                    local petType = getPetType(petUUID)
-                    
-                    -- Cek level sebelum equip
-                    if getPetLevel(petUUID) < targetLevel then
-                        StatusLabel.Text = string.format("Meng-equip %s...", petType)
+            -- Cek jika ada slot kosong dan masih ada antrian
+            if availableSlots > 0 and #queuedPets > 0 then
+                StatusLabel.Text = string.format("Slot kosong: %d, Antrian: %d", availableSlots, #queuedPets)
+                
+                -- Equip pets dari antrian
+                local petsToEquip = math.min(availableSlots, #queuedPets)
+                for i = 1, petsToEquip do
+                    if #queuedPets > 0 then
+                        local petUUID = queuedPets[1] -- Ambil dari depan antrian
+                        local petType = getPetType(petUUID)
+                        local petLevel = getPetLevel(petUUID)
                         
-                        -- Equip pet
-                        local success = equipPet(petUUID)
-                        if success then
-                            equippedNow = equippedNow + 1
-                            StatusLabel.Text = string.format("✅ %s di-equip!", petType)
+                        -- Cek level sebelum equip
+                        if petLevel < targetLevel then
+                            StatusLabel.Text = string.format("Meng-equip %s (Lv.%d)...", petType, petLevel)
+                            
+                            -- Equip pet
+                            local success = equipPet(petUUID)
+                            if success then
+                                -- Hapus dari antrian
+                                table.remove(queuedPets, 1)
+                                table.insert(equippedTargetPets, petUUID)
+                                StatusLabel.Text = string.format("✅ %s di-equip! (Antrian: %d)", petType, #queuedPets)
+                            else
+                                StatusLabel.Text = string.format("❌ Gagal equip %s", petType)
+                            end
                         else
-                            StatusLabel.Text = string.format("❌ Gagal equip %s", petType)
+                            -- Pet sudah mencapai level, hapus dari antrian
+                            table.remove(queuedPets, 1)
+                            StatusLabel.Text = string.format("⏭️ %s sudah Lv.%d, skip", petType, petLevel)
                         end
                         
                         wait(1) -- Tunggu 1 detik antara equip
-                    else
-                        -- Pet sudah mencapai level, hapus dari target
-                        table.remove(targetPets, i)
-                        i = i - 1
                     end
                 end
                 
-                -- Update equipped count setelah equip
+                -- Update setelah equip
                 wait(2)
                 equippedPetsCount = getEquippedPetsCount()
                 updateSlotInfo()
             end
             
-            -- Cek semua target pets
-            local allComplete = true
-            for i = #targetPets, 1, -1 do
-                local petUUID = targetPets[i]
+            -- Cek semua equipped target pets
+            for i = #equippedTargetPets, 1, -1 do
+                local petUUID = equippedTargetPets[i]
                 local petLevel = getPetLevel(petUUID)
                 local petType = getPetType(petUUID)
                 
@@ -728,21 +727,19 @@ ToggleButton.MouseButton1Click:Connect(function()
                     -- Unequip pet yang sudah selesai
                     unequipPet(petUUID)
                     
-                    -- Hapus dari target list
-                    table.remove(targetPets, i)
+                    -- Hapus dari equipped target list
+                    table.remove(equippedTargetPets, i)
                     
                     -- Update count setelah unequip
                     wait(1)
                     equippedPetsCount = getEquippedPetsCount()
                     updateSlotInfo()
-                else
-                    allComplete = false
                 end
             end
             
-            -- Cek jika semua target selesai
-            if allComplete and #targetPets == 0 then
-                StatusLabel.Text = "🎉 Semua target selesai leveling!"
+            -- Cek jika semua antrian dan equipped target selesai
+            if #queuedPets == 0 and #equippedTargetPets == 0 then
+                StatusLabel.Text = "🎉 Semua pet target selesai leveling!"
                 isLeveling = false
                 ToggleButton.Text = "▶️ Mulai"
                 ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
