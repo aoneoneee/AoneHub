@@ -1,4 +1,4 @@
--- Auto Leveling System GUI (Fixed)
+-- Auto Leveling System GUI (Fixed with PetType)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -19,61 +19,100 @@ AutoLevelGUI.Name = "AutoLevelGUI"
 AutoLevelGUI.ResetOnSpawn = false
 AutoLevelGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Main Frame
+-- Main Frame (Lebih kecil)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 400, 0, 600)
-MainFrame.Position = UDim2.new(1, -420, 0.5, -300)
+MainFrame.Size = UDim2.new(0, 300, 0, 450)
+MainFrame.Position = UDim2.new(1, -320, 0.5, -225)
 MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = AutoLevelGUI
 
 local UICornerMain = Instance.new("UICorner")
-UICornerMain.CornerRadius = UDim.new(0, 12)
+UICornerMain.CornerRadius = UDim.new(0, 10)
 UICornerMain.Parent = MainFrame
 
 -- Title Bar
 local TitleBar = Instance.new("Frame")
 TitleBar.Name = "TitleBar"
-TitleBar.Size = UDim2.new(1, 0, 0, 50)
+TitleBar.Size = UDim2.new(1, 0, 0, 40)
 TitleBar.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
 TitleBar.BorderSizePixel = 0
 TitleBar.Parent = MainFrame
 
 local UICornerTitle = Instance.new("UICorner")
-UICornerTitle.CornerRadius = UDim.new(0, 12)
+UICornerTitle.CornerRadius = UDim.new(0, 10)
 UICornerTitle.Parent = TitleBar
 
 local TitleText = Instance.new("TextLabel")
-TitleText.Size = UDim2.new(0.8, 0, 1, 0)
-TitleText.Position = UDim2.new(0, 15, 0, 0)
+TitleText.Size = UDim2.new(0.7, 0, 1, 0)
+TitleText.Position = UDim2.new(0, 10, 0, 0)
 TitleText.BackgroundTransparency = 1
 TitleText.Font = Enum.Font.GothamBold
-TitleText.Text = "🐾 Auto Leveling System"
+TitleText.Text = "🐾 Auto Leveling"
 TitleText.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleText.TextSize = 20
+TitleText.TextSize = 16
 TitleText.TextXAlignment = Enum.TextXAlignment.Left
 TitleText.Parent = TitleBar
 
+-- Minimize Button
+local MinimizeButton = Instance.new("TextButton")
+MinimizeButton.Size = UDim2.new(0, 25, 0, 25)
+MinimizeButton.Position = UDim2.new(1, -60, 0, 8)
+MinimizeButton.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
+MinimizeButton.BorderSizePixel = 0
+MinimizeButton.Font = Enum.Font.GothamBold
+MinimizeButton.Text = "—"
+MinimizeButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+MinimizeButton.TextSize = 14
+MinimizeButton.Parent = TitleBar
+
+local UICornerMinimize = Instance.new("UICorner")
+UICornerMinimize.CornerRadius = UDim.new(0, 5)
+UICornerMinimize.Parent = MinimizeButton
+
 -- Close Button
 local CloseButton = Instance.new("TextButton")
-CloseButton.Size = UDim2.new(0, 30, 0, 30)
-CloseButton.Position = UDim2.new(1, -40, 0, 10)
+CloseButton.Size = UDim2.new(0, 25, 0, 25)
+CloseButton.Position = UDim2.new(1, -30, 0, 8)
 CloseButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 CloseButton.BorderSizePixel = 0
 CloseButton.Font = Enum.Font.GothamBold
 CloseButton.Text = "X"
 CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseButton.TextSize = 16
+CloseButton.TextSize = 14
 CloseButton.Parent = TitleBar
 
 local UICornerClose = Instance.new("UICorner")
-UICornerClose.CornerRadius = UDim.new(0, 6)
+UICornerClose.CornerRadius = UDim.new(0, 5)
 UICornerClose.Parent = CloseButton
 
 CloseButton.MouseButton1Click:Connect(function()
     AutoLevelGUI:Destroy()
+end)
+
+-- Content Frame (untuk minimize)
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Size = UDim2.new(1, 0, 1, -40)
+ContentFrame.Position = UDim2.new(0, 0, 0, 40)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.BorderSizePixel = 0
+ContentFrame.Parent = MainFrame
+
+-- Minimize Functionality
+local isMinimized = false
+MinimizeButton.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    if isMinimized then
+        MainFrame.Size = UDim2.new(0, 300, 0, 40)
+        ContentFrame.Visible = false
+        MinimizeButton.Text = "+"
+    else
+        MainFrame.Size = UDim2.new(0, 300, 0, 450)
+        ContentFrame.Visible = true
+        MinimizeButton.Text = "—"
+    end
 end)
 
 -- Draggable
@@ -116,17 +155,17 @@ end)
 
 -- Scroll Frame
 local ScrollFrame = Instance.new("ScrollingFrame")
-ScrollFrame.Size = UDim2.new(1, -20, 1, -60)
-ScrollFrame.Position = UDim2.new(0, 10, 0, 55)
+ScrollFrame.Size = UDim2.new(1, -20, 1, -10)
+ScrollFrame.Position = UDim2.new(0, 10, 0, 5)
 ScrollFrame.BackgroundTransparency = 1
 ScrollFrame.BorderSizePixel = 0
-ScrollFrame.ScrollBarThickness = 6
+ScrollFrame.ScrollBarThickness = 4
 ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 800)
-ScrollFrame.Parent = MainFrame
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 700)
+ScrollFrame.Parent = ContentFrame
 
 local ContentLayout = Instance.new("UIListLayout")
-ContentLayout.Padding = UDim.new(0, 10)
+ContentLayout.Padding = UDim.new(0, 8)
 ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ContentLayout.Parent = ScrollFrame
 
@@ -135,10 +174,6 @@ local teamPets = {}
 local targetPets = {}
 local targetLevel = TARGET_LEVEL_DEFAULT
 local isLeveling = false
-
--- Store section titles for later updates
-local TeamSectionTitle = nil
-local TargetSectionTitle = nil
 
 -- Functions
 local function getPlayerPetData()
@@ -149,20 +184,23 @@ local function getPlayerPetData()
     return nil
 end
 
-local function getPetDisplayName(petUUID)
+-- Get PetType dari UUID
+local function getPetType(petUUID)
     local petsData = getPlayerPetData()
     if not petsData then return "Unknown" end
     
     local petData = petsData.PetInventory.Data[petUUID]
     if petData then
-        -- Try different possible name fields
-        if petData.PetData then
-            return petData.PetData.Name or 
-                   petData.PetData.DisplayName or 
+        -- Try different possible PetType fields
+        if petData.PetType then
+            return petData.PetType
+        elseif petData.PetData then
+            return petData.PetData.PetType or 
+                   petData.PetData.Type or 
                    petData.PetData.PetName or 
-                   "Unknown Pet"
-        elseif petData.Name then
-            return petData.Name
+                   "Unknown"
+        elseif petData.Type then
+            return petData.Type
         end
     end
     return "Unknown"
@@ -174,13 +212,12 @@ local function getPetLevel(petUUID)
     
     local petData = petsData.PetInventory.Data[petUUID]
     if petData then
-        if petData.PetData then
+        if petData.Level then
+            return petData.Level
+        elseif petData.PetData then
             return petData.PetData.Level or 
                    petData.PetData.CurrentLevel or 
-                   petData.Level or 
                    0
-        elseif petData.Level then
-            return petData.Level
         end
     end
     return 0
@@ -189,23 +226,23 @@ end
 -- Create Section
 local function createSection(parent, title)
     local SectionFrame = Instance.new("Frame")
-    SectionFrame.Size = UDim2.new(1, -10, 0, 200)
+    SectionFrame.Size = UDim2.new(1, -10, 0, 150)
     SectionFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
     SectionFrame.BorderSizePixel = 0
     SectionFrame.Parent = parent
     
     local UICornerSection = Instance.new("UICorner")
-    UICornerSection.CornerRadius = UDim.new(0, 8)
+    UICornerSection.CornerRadius = UDim.new(0, 6)
     UICornerSection.Parent = SectionFrame
     
     local SectionTitle = Instance.new("TextLabel")
-    SectionTitle.Size = UDim2.new(1, -20, 0, 30)
-    SectionTitle.Position = UDim2.new(0, 10, 0, 5)
+    SectionTitle.Size = UDim2.new(1, -20, 0, 25)
+    SectionTitle.Position = UDim2.new(0, 10, 0, 3)
     SectionTitle.BackgroundTransparency = 1
     SectionTitle.Font = Enum.Font.GothamBold
     SectionTitle.Text = title
     SectionTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SectionTitle.TextSize = 16
+    SectionTitle.TextSize = 13
     SectionTitle.TextXAlignment = Enum.TextXAlignment.Left
     SectionTitle.Parent = SectionFrame
     
@@ -213,66 +250,66 @@ local function createSection(parent, title)
 end
 
 -- Team Pets Section
-local TeamSection, TeamTitleLabel = createSection(ScrollFrame, "👥 Tim Leveling (Sisa Slot: " .. MAX_PET_SLOTS .. ")")
+local TeamSection, TeamTitleLabel = createSection(ScrollFrame, "👥 Tim Leveling (Sisa: " .. MAX_PET_SLOTS .. ")")
 TeamSection.LayoutOrder = 1
-TeamSection.Size = UDim2.new(1, -10, 0, 250)
+TeamSection.Size = UDim2.new(1, -10, 0, 180)
 
 -- Team Pets Dropdown
 local TeamDropdown = Instance.new("Frame")
-TeamDropdown.Size = UDim2.new(1, -20, 0, 35)
-TeamDropdown.Position = UDim2.new(0, 10, 0, 40)
+TeamDropdown.Size = UDim2.new(1, -20, 0, 30)
+TeamDropdown.Position = UDim2.new(0, 10, 0, 30)
 TeamDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
 TeamDropdown.BorderSizePixel = 0
 TeamDropdown.Parent = TeamSection
 
 local UICornerTeamDropdown = Instance.new("UICorner")
-UICornerTeamDropdown.CornerRadius = UDim.new(0, 6)
+UICornerTeamDropdown.CornerRadius = UDim.new(0, 5)
 UICornerTeamDropdown.Parent = TeamDropdown
 
 local TeamDropdownButton = Instance.new("TextButton")
 TeamDropdownButton.Size = UDim2.new(1, 0, 1, 0)
 TeamDropdownButton.BackgroundTransparency = 1
 TeamDropdownButton.Font = Enum.Font.Gotham
-TeamDropdownButton.Text = "Pilih Pet Tim (Click)"
+TeamDropdownButton.Text = "Pilih Pet Tim"
 TeamDropdownButton.TextColor3 = Color3.fromRGB(200, 200, 200)
-TeamDropdownButton.TextSize = 14
+TeamDropdownButton.TextSize = 12
 TeamDropdownButton.Parent = TeamDropdown
 
 -- Team Pets List
 local TeamListFrame = Instance.new("ScrollingFrame")
-TeamListFrame.Size = UDim2.new(1, -20, 0, 150)
-TeamListFrame.Position = UDim2.new(0, 10, 0, 80)
+TeamListFrame.Size = UDim2.new(1, -20, 0, 120)
+TeamListFrame.Position = UDim2.new(0, 10, 0, 65)
 TeamListFrame.BackgroundTransparency = 1
 TeamListFrame.BorderSizePixel = 0
-TeamListFrame.ScrollBarThickness = 4
+TeamListFrame.ScrollBarThickness = 3
 TeamListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-TeamListFrame.CanvasSize = UDim2.new(0, 0, 0, 200)
+TeamListFrame.CanvasSize = UDim2.new(0, 0, 0, 100)
 TeamListFrame.Visible = false
 TeamListFrame.Parent = TeamSection
 
 local TeamListLayout = Instance.new("UIListLayout")
-TeamListLayout.Padding = UDim.new(0, 3)
+TeamListLayout.Padding = UDim.new(0, 2)
 TeamListLayout.Parent = TeamListFrame
 
 -- Target Level Section
-local LevelSection = createSection(ScrollFrame, "🎯 Target Level")
+local LevelSection, LevelTitleLabel = createSection(ScrollFrame, "🎯 Target Level")
 LevelSection.LayoutOrder = 2
-LevelSection.Size = UDim2.new(1, -10, 0, 100)
+LevelSection.Size = UDim2.new(1, -10, 0, 80)
 
 local LevelInput = Instance.new("TextBox")
-LevelInput.Size = UDim2.new(1, -20, 0, 40)
-LevelInput.Position = UDim2.new(0, 10, 0, 40)
+LevelInput.Size = UDim2.new(1, -20, 0, 30)
+LevelInput.Position = UDim2.new(0, 10, 0, 35)
 LevelInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
 LevelInput.BorderSizePixel = 0
 LevelInput.Font = Enum.Font.Gotham
-LevelInput.PlaceholderText = "Target Level (default: 100)"
+LevelInput.PlaceholderText = "Target Level"
 LevelInput.Text = tostring(TARGET_LEVEL_DEFAULT)
 LevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-LevelInput.TextSize = 14
+LevelInput.TextSize = 12
 LevelInput.Parent = LevelSection
 
 local UICornerLevelInput = Instance.new("UICorner")
-UICornerLevelInput.CornerRadius = UDim.new(0, 6)
+UICornerLevelInput.CornerRadius = UDim.new(0, 5)
 UICornerLevelInput.Parent = LevelInput
 
 LevelInput.FocusLost:Connect(function(enterPressed)
@@ -285,93 +322,93 @@ LevelInput.FocusLost:Connect(function(enterPressed)
 end)
 
 -- Target Pets Section
-local TargetSection, TargetTitleLabel = createSection(ScrollFrame, "🎯 Pet Target Leveling")
+local TargetSection, TargetTitleLabel = createSection(ScrollFrame, "🎯 Pet Target")
 TargetSection.LayoutOrder = 3
-TargetSection.Size = UDim2.new(1, -10, 0, 300)
+TargetSection.Size = UDim2.new(1, -10, 0, 200)
 
 -- Target Pets Dropdown
 local TargetDropdown = Instance.new("Frame")
-TargetDropdown.Size = UDim2.new(1, -20, 0, 35)
-TargetDropdown.Position = UDim2.new(0, 10, 0, 40)
+TargetDropdown.Size = UDim2.new(1, -20, 0, 30)
+TargetDropdown.Position = UDim2.new(0, 10, 0, 30)
 TargetDropdown.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
 TargetDropdown.BorderSizePixel = 0
 TargetDropdown.Parent = TargetSection
 
 local UICornerTargetDropdown = Instance.new("UICorner")
-UICornerTargetDropdown.CornerRadius = UDim.new(0, 6)
+UICornerTargetDropdown.CornerRadius = UDim.new(0, 5)
 UICornerTargetDropdown.Parent = TargetDropdown
 
 local TargetDropdownButton = Instance.new("TextButton")
 TargetDropdownButton.Size = UDim2.new(1, 0, 1, 0)
 TargetDropdownButton.BackgroundTransparency = 1
 TargetDropdownButton.Font = Enum.Font.Gotham
-TargetDropdownButton.Text = "Pilih Pet Target (Click)"
+TargetDropdownButton.Text = "Pilih Pet Target"
 TargetDropdownButton.TextColor3 = Color3.fromRGB(200, 200, 200)
-TargetDropdownButton.TextSize = 14
+TargetDropdownButton.TextSize = 12
 TargetDropdownButton.Parent = TargetDropdown
 
 -- Target Pets List
 local TargetListFrame = Instance.new("ScrollingFrame")
-TargetListFrame.Size = UDim2.new(1, -20, 0, 200)
-TargetListFrame.Position = UDim2.new(0, 10, 0, 80)
+TargetListFrame.Size = UDim2.new(1, -20, 0, 140)
+TargetListFrame.Position = UDim2.new(0, 10, 0, 65)
 TargetListFrame.BackgroundTransparency = 1
 TargetListFrame.BorderSizePixel = 0
-TargetListFrame.ScrollBarThickness = 4
+TargetListFrame.ScrollBarThickness = 3
 TargetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, 300)
+TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, 120)
 TargetListFrame.Visible = false
 TargetListFrame.Parent = TargetSection
 
 local TargetListLayout = Instance.new("UIListLayout")
-TargetListLayout.Padding = UDim.new(0, 3)
+TargetListLayout.Padding = UDim.new(0, 2)
 TargetListLayout.Parent = TargetListFrame
 
 -- Buttons Section
-local ButtonSection = createSection(ScrollFrame, "⚙️ Kontrol")
+local ButtonSection, ButtonTitleLabel = createSection(ScrollFrame, "⚙️ Kontrol")
 ButtonSection.LayoutOrder = 4
-ButtonSection.Size = UDim2.new(1, -10, 0, 150)
+ButtonSection.Size = UDim2.new(1, -10, 0, 120)
 
 -- Scan Button
 local ScanButton = Instance.new("TextButton")
-ScanButton.Size = UDim2.new(1, -20, 0, 35)
-ScanButton.Position = UDim2.new(0, 10, 0, 40)
+ScanButton.Size = UDim2.new(1, -20, 0, 30)
+ScanButton.Position = UDim2.new(0, 10, 0, 30)
 ScanButton.BackgroundColor3 = Color3.fromRGB(60, 120, 200)
 ScanButton.BorderSizePixel = 0
 ScanButton.Font = Enum.Font.GothamBold
 ScanButton.Text = "🔍 Scan Pet Target"
 ScanButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ScanButton.TextSize = 14
+ScanButton.TextSize = 12
 ScanButton.Parent = ButtonSection
 
 local UICornerScan = Instance.new("UICorner")
-UICornerScan.CornerRadius = UDim.new(0, 6)
+UICornerScan.CornerRadius = UDim.new(0, 5)
 UICornerScan.Parent = ScanButton
 
--- Start Button
-local StartButton = Instance.new("TextButton")
-StartButton.Size = UDim2.new(1, -20, 0, 35)
-StartButton.Position = UDim2.new(0, 10, 0, 80)
-StartButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
-StartButton.BorderSizePixel = 0
-StartButton.Font = Enum.Font.GothamBold
-StartButton.Text = "▶️ Mulai Auto Leveling"
-StartButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-StartButton.TextSize = 14
-StartButton.Parent = ButtonSection
+-- Toggle Button
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Size = UDim2.new(1, -20, 0, 30)
+ToggleButton.Position = UDim2.new(0, 10, 0, 65)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+ToggleButton.BorderSizePixel = 0
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.Text = "▶️ Mulai"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 12
+ToggleButton.Parent = ButtonSection
 
-local UICornerStart = Instance.new("UICorner")
-UICornerStart.CornerRadius = UDim.new(0, 6)
-UICornerStart.Parent = StartButton
+local UICornerToggle = Instance.new("UICorner")
+UICornerToggle.CornerRadius = UDim.new(0, 5)
+UICornerToggle.Parent = ToggleButton
 
 -- Status Label
 local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -20, 0, 25)
-StatusLabel.Position = UDim2.new(0, 10, 0, 120)
+StatusLabel.Size = UDim2.new(1, -20, 0, 20)
+StatusLabel.Position = UDim2.new(0, 10, 0, 100)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Font = Enum.Font.Gotham
 StatusLabel.Text = "Status: Idle"
 StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-StatusLabel.TextSize = 12
+StatusLabel.TextSize = 10
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.Parent = ButtonSection
 
@@ -392,24 +429,24 @@ local function populateTeamDropdown()
     
     local equippedPets = petsData.EquippedPets or {}
     
-    TeamListFrame.CanvasSize = UDim2.new(0, 0, 0, #equippedPets * 28)
+    TeamListFrame.CanvasSize = UDim2.new(0, 0, 0, #equippedPets * 25)
     
     for _, petUUID in ipairs(equippedPets) do
-        local petName = getPetDisplayName(petUUID)
+        local petType = getPetType(petUUID)
         local petLevel = getPetLevel(petUUID)
         
         local PetButton = Instance.new("TextButton")
-        PetButton.Size = UDim2.new(1, 0, 0, 25)
+        PetButton.Size = UDim2.new(1, 0, 0, 22)
         PetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
-        PetButton.Text = string.format("%s (Lv.%d)", petName, petLevel)
+        PetButton.Text = string.format("%s (Lv.%d)", petType, petLevel)
         PetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        PetButton.TextSize = 12
+        PetButton.TextSize = 10
         PetButton.Parent = TeamListFrame
         
         local UICornerPet = Instance.new("UICorner")
-        UICornerPet.CornerRadius = UDim.new(0, 4)
+        UICornerPet.CornerRadius = UDim.new(0, 3)
         UICornerPet.Parent = PetButton
         
         -- Check if already in team
@@ -438,61 +475,61 @@ local function scanTargetPets()
     if not petsData then return {} end
     
     local inventory = petsData.PetInventory.Data or {}
-    local petNames = {}
+    local petTypes = {}
     
-    -- Collect unique pet names below target level
+    -- Collect unique pet types below target level
     for petUUID, petData in pairs(inventory) do
-        local petName = getPetDisplayName(petUUID)
+        local petType = getPetType(petUUID)
         local petLevel = getPetLevel(petUUID)
         
         if petLevel < targetLevel and not table.find(teamPets, petUUID) then
-            if not petNames[petName] then
-                petNames[petName] = {}
+            if not petTypes[petType] then
+                petTypes[petType] = {}
             end
-            table.insert(petNames[petName], {
+            table.insert(petTypes[petType], {
                 UUID = petUUID,
                 Level = petLevel
             })
         end
     end
     
-    return petNames
+    return petTypes
 end
 
 local function populateTargetDropdown()
     clearDropdown(TargetListFrame)
     
-    local petNames = scanTargetPets()
+    local petTypes = scanTargetPets()
     
     local totalCount = 0
-    for _ in pairs(petNames) do
+    for _ in pairs(petTypes) do
         totalCount = totalCount + 1
     end
     
-    TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(totalCount * 30, 50))
+    TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(totalCount * 25, 50))
     
-    for petName, petInstances in pairs(petNames) do
-        -- Only show one entry per pet name
+    for petType, petInstances in pairs(petTypes) do
+        -- Only show one entry per pet type
         local firstPet = petInstances[1]
         
         local PetButton = Instance.new("TextButton")
-        PetButton.Size = UDim2.new(1, 0, 0, 25)
+        PetButton.Size = UDim2.new(1, 0, 0, 22)
         PetButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
-        PetButton.Text = string.format("%s (x%d) - Lv.%d", petName, #petInstances, firstPet.Level)
+        PetButton.Text = string.format("%s (x%d) - Lv.%d", petType, #petInstances, firstPet.Level)
         PetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        PetButton.TextSize = 12
+        PetButton.TextSize = 10
         PetButton.Parent = TargetListFrame
         
         local UICornerTarget = Instance.new("UICorner")
-        UICornerTarget.CornerRadius = UDim.new(0, 4)
+        UICornerTarget.CornerRadius = UDim.new(0, 3)
         UICornerTarget.Parent = PetButton
         
         -- Check if this pet type is selected
         local isSelected = false
         for _, targetUUID in ipairs(targetPets) do
-            if getPetDisplayName(targetUUID) == petName then
+            if getPetType(targetUUID) == petType then
                 isSelected = true
                 break
             end
@@ -509,15 +546,15 @@ local function populateTargetDropdown()
             -- Check if already selected
             local selectedCount = 0
             for _, targetUUID in ipairs(targetPets) do
-                if getPetDisplayName(targetUUID) == petName then
+                if getPetType(targetUUID) == petType then
                     selectedCount = selectedCount + 1
                 end
             end
             
             if selectedCount > 0 then
-                -- Remove all pets with this name
+                -- Remove all pets with this type
                 for i = #targetPets, 1, -1 do
-                    if getPetDisplayName(targetPets[i]) == petName then
+                    if getPetType(targetPets[i]) == petType then
                         table.remove(targetPets, i)
                     end
                 end
@@ -546,12 +583,12 @@ local function updateSlotInfo()
     
     -- Update team section title
     if TeamTitleLabel then
-        TeamTitleLabel.Text = "👥 Tim Leveling (Sisa Slot: " .. availableSlots .. ")"
+        TeamTitleLabel.Text = "👥 Tim Leveling (Sisa: " .. availableSlots .. ")"
     end
     
     -- Update status
     StatusLabel.Text = string.format(
-        "Status: Team: %d | Target: %d | Sisa Slot: %d",
+        "Status: Team: %d | Target: %d | Sisa: %d",
         #teamPets,
         #targetPets,
         availableSlots
@@ -581,29 +618,31 @@ ScanButton.MouseButton1Click:Connect(function()
     StatusLabel.Text = "Status: Scan selesai!"
 end)
 
--- Start Button
-StartButton.MouseButton1Click:Connect(function()
+-- Toggle Button
+ToggleButton.MouseButton1Click:Connect(function()
     if isLeveling then
+        -- Stop leveling
         isLeveling = false
-        StartButton.Text = "▶️ Mulai Auto Leveling"
-        StartButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+        ToggleButton.Text = "▶️ Mulai"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
         StatusLabel.Text = "Status: Stopped"
         return
     end
     
+    -- Start leveling
     if #targetPets == 0 then
-        StatusLabel.Text = "Status: Pilih pet target dulu!"
+        StatusLabel.Text = "Status: Pilih pet target!"
         return
     end
     
     if #teamPets == 0 then
-        StatusLabel.Text = "Status: Pilih minimal 1 pet tim!"
+        StatusLabel.Text = "Status: Pilih pet tim!"
         return
     end
     
     isLeveling = true
-    StartButton.Text = "⏹️ Stop Auto Leveling"
-    StartButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    ToggleButton.Text = "⏹️ Stop"
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     StatusLabel.Text = "Status: Leveling..."
     
     -- Auto Leveling Loop
@@ -615,12 +654,12 @@ StartButton.MouseButton1Click:Connect(function()
             for i = #targetPets, 1, -1 do
                 local petUUID = targetPets[i]
                 local petLevel = getPetLevel(petUUID)
-                local petName = getPetDisplayName(petUUID)
+                local petType = getPetType(petUUID)
                 
                 if petLevel >= targetLevel then
                     -- Pet reached target level, remove from targets
                     table.remove(targetPets, i)
-                    StatusLabel.Text = string.format("✅ %s mencapai level %d!", petName, targetLevel)
+                    StatusLabel.Text = string.format("✅ %s Lv.%d!", petType, targetLevel)
                 else
                     allComplete = false
                 end
@@ -628,10 +667,10 @@ StartButton.MouseButton1Click:Connect(function()
             
             -- Check if all targets complete
             if allComplete then
-                StatusLabel.Text = "🎉 Semua pet target selesai leveling!"
+                StatusLabel.Text = "🎉 Semua selesai!"
                 isLeveling = false
-                StartButton.Text = "▶️ Mulai Auto Leveling"
-                StartButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+                ToggleButton.Text = "▶️ Mulai"
+                ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
                 updateSlotInfo()
                 break
             end
