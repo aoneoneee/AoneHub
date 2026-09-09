@@ -1136,7 +1136,7 @@ ScanButton.MouseButton1Click:Connect(function()
     updateStatus()
 end)
 
--- MAIN LOGIC (Fixed - Unequip di Awal)
+-- MAIN LOGIC (Fixed Unequip)
 ToggleButton.MouseButton1Click:Connect(function()
     if isLeveling then
         isLeveling = false
@@ -1170,22 +1170,83 @@ ToggleButton.MouseButton1Click:Connect(function()
     ToggleButton.Text = "⏹️ Stop"
     ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     
-    spawn(function()
-        -- ==========================================
-        -- LANGKAH 0: UNEQUIP SEMUA PET DI AWAL
-        -- ==========================================
+    -- Fungsi unequip dengan verifikasi (di dalam spawn)
+    local function unequipAllPets()
         StatusLabel.Text = "🔄 Membersihkan semua slot..."
         
-        local currentEquipped = getEquippedPets()
-        for _, uuid in ipairs(currentEquipped) do
-            local petType = getPetType(uuid)
-            unequipPet(uuid)
-            StatusLabel.Text = string.format("❌ Unequip %s...", petType)
+        local maxAttempts = 3
+        local attempt = 0
+        
+        while attempt < maxAttempts and isLeveling do
+            local equippedPets = getEquippedPets()
+            
+            if #equippedPets == 0 then
+                StatusLabel.Text = "✅ Semua slot bersih!"
+                return true
+            end
+            
+            StatusLabel.Text = string.format("🔄 Unequip %d pet...", #equippedPets)
+            
+            for _, petUUID in ipairs(equippedPets) do
+                local petType = getPetType(petUUID)
+                local success = unequipPet(petUUID)
+                
+                if success then
+                    StatusLabel.Text = string.format("❌ Unequip %s...", petType)
+                else
+                    StatusLabel.Text = string.format("⚠️ Gagal unequip %s", petType)
+                end
+                
+                wait(0.5)
+            end
+            
+            attempt = attempt + 1
+            wait(2)
+        end
+        
+        -- Cek final
+        local finalEquipped = getEquippedPets()
+        if #finalEquipped == 0 then
+            StatusLabel.Text = "✅ Semua slot bersih!"
+            return true
+        else
+            StatusLabel.Text = string.format("⚠️ Masih ada %d pet equipped", #finalEquipped)
+            return false
+        end
+    end
+    
+    -- Fungsi equip dengan verifikasi
+    local function equipPetList(petList, label)
+        local successCount = 0
+        
+        for _, petUUID in ipairs(petList) do
+            local petType = getPetType(petUUID)
+            local success = equipPet(petUUID)
+            
+            if success then
+                successCount = successCount + 1
+                StatusLabel.Text = string.format("✅ %s %s...", label, petType)
+            else
+                StatusLabel.Text = string.format("⚠️ Gagal equip %s", petType)
+            end
+            
             wait(0.5)
         end
         
+        wait(1)
+        return successCount
+    end
+    
+    spawn(function()
+        -- ==========================================
+        -- LANGKAH 0: UNEQUIP SEMUA PET
+        -- ==========================================
+        local unequipSuccess = unequipAllPets()
+        if not unequipSuccess then
+            StatusLabel.Text = "⚠️ Gagal membersihkan slot, lanjutkan..."
+        end
+        
         wait(2)
-        StatusLabel.Text = "✅ Semua slot bersih!"
         
         -- ==========================================
         -- MAIN LOOP
@@ -1219,13 +1280,13 @@ ToggleButton.MouseButton1Click:Connect(function()
                     if #levelTargets > 0 then
                         StatusLabel.Text = string.format("📈 Leveling %d pet ke Lv.%d...", #levelTargets, levelTargetForWeight)
                         
-                        -- Unequip semua dulu
-                        local currentEquipped = getEquippedPets()
-                        for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
+                        -- Unequip semua
+                        unequipAllPets()
+                        wait(1)
                         
                         -- Equip tim leveling
                         local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
-                        for _, uuid in ipairs(teamUUIDs) do equipPet(uuid) wait(0.5) end
+                        equipPetList(teamUUIDs, "Tim:")
                         
                         -- Equip target leveling
                         local availableSlots = MAX_PET_SLOTS - #teamUUIDs
@@ -1235,6 +1296,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                             wait(0.5)
                         end
                         
+                        -- Tunggu leveling weight selesai
                         while isLeveling do
                             local allDone = true
                             for _, petUUID in ipairs(levelTargets) do
@@ -1244,21 +1306,22 @@ ToggleButton.MouseButton1Click:Connect(function()
                                 end
                             end
                             if allDone then break end
+                            updateStatus()
                             wait(5)
                         end
                     end
                     
                     StatusLabel.Text = "🔄 Ganti ke tim weight..."
                     
-                    -- Unequip semua dulu
-                    local currentEquipped = getEquippedPets()
-                    for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
+                    -- Unequip semua
+                    unequipAllPets()
+                    wait(1)
                     
                     -- Equip tim weight
                     local weightUUIDs = getPresetUUIDs(selectedWeightPreset)
-                    for _, uuid in ipairs(weightUUIDs) do equipPet(uuid) wait(0.5) end
+                    equipPetList(weightUUIDs, "Weight:")
                     
-                    -- Equip pet yang siap weight
+                    -- Equip pet siap weight
                     local readyForWeight = {}
                     for _, petUUID in ipairs(weightPets) do
                         if getPetLevel(petUUID) >= levelTargetForWeight then
@@ -1311,13 +1374,13 @@ ToggleButton.MouseButton1Click:Connect(function()
             end
             
             if #queuedPets > 0 then
-                -- Unequip semua dulu
-                local currentEquipped = getEquippedPets()
-                for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
+                -- Unequip semua
+                unequipAllPets()
+                wait(1)
                 
                 -- Equip tim leveling normal
                 local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
-                for _, uuid in ipairs(teamUUIDs) do equipPet(uuid) wait(0.5) end
+                equipPetList(teamUUIDs, "Tim:")
                 
                 -- Equip target
                 local availableSlots = MAX_PET_SLOTS - #teamUUIDs
@@ -1373,30 +1436,15 @@ ToggleButton.MouseButton1Click:Connect(function()
                     StatusLabel.Text = string.format("✅ Semua Lv.%d tercapai!", targetLevel)
                     wait(1)
                     
-                    StatusLabel.Text = "🔄 Membersihkan semua slot..."
-                    
-                    -- UNEQUIP SEMUA PET
-                    local currentEquipped = getEquippedPets()
-                    for _, uuid in ipairs(currentEquipped) do
-                        local petType = getPetType(uuid)
-                        unequipPet(uuid)
-                        StatusLabel.Text = string.format("❌ Unequip %s...", petType)
-                        wait(0.5)
-                    end
-                    
-                    wait(2)
-                    StatusLabel.Text = "✅ Semua slot bersih!"
+                    -- UNEQUIP SEMUA
+                    unequipAllPets()
+                    wait(1)
                     
                     StatusLabel.Text = "🚀 Equip tim advanced..."
                     
                     -- EQUIP TIM ADVANCED
                     local advancedUUIDs = getPresetUUIDs(selectedAdvancedPreset)
-                    for _, uuid in ipairs(advancedUUIDs) do
-                        local petType = getPetType(uuid)
-                        equipPet(uuid)
-                        StatusLabel.Text = string.format("✅ Equip %s (Advanced)...", petType)
-                        wait(0.5)
-                    end
+                    equipPetList(advancedUUIDs, "Advanced:")
                     
                     wait(2)
                     StatusLabel.Text = string.format("🚀 Leveling advanced ke Lv.%d...", advancedTargetLevel)
@@ -1405,17 +1453,15 @@ ToggleButton.MouseButton1Click:Connect(function()
                     local availableSlots = MAX_PET_SLOTS - #advancedUUIDs
                     local toEquip = math.min(availableSlots, #allSelectedPets)
                     
-                    local advancedEquippedPets = {}
                     for i = 1, toEquip do
                         local petUUID = allSelectedPets[i]
                         local petType = getPetType(petUUID)
                         equipPet(petUUID)
-                        table.insert(advancedEquippedPets, petUUID)
                         StatusLabel.Text = string.format("✅ Equip target %s...", petType)
                         wait(0.5)
                     end
                     
-                    -- MONITORING ADVANCED LEVELING
+                    -- MONITORING ADVANCED
                     while isLeveling do
                         local allAdvancedDone = true
                         for _, petUUID in ipairs(allSelectedPets) do
