@@ -1136,7 +1136,7 @@ ScanButton.MouseButton1Click:Connect(function()
     updateStatus()
 end)
 
--- MAIN LOGIC (Fixed Advanced Leveling)
+-- MAIN LOGIC (Fixed - Unequip di Awal)
 ToggleButton.MouseButton1Click:Connect(function()
     if isLeveling then
         isLeveling = false
@@ -1171,6 +1171,25 @@ ToggleButton.MouseButton1Click:Connect(function()
     ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     
     spawn(function()
+        -- ==========================================
+        -- LANGKAH 0: UNEQUIP SEMUA PET DI AWAL
+        -- ==========================================
+        StatusLabel.Text = "🔄 Membersihkan semua slot..."
+        
+        local currentEquipped = getEquippedPets()
+        for _, uuid in ipairs(currentEquipped) do
+            local petType = getPetType(uuid)
+            unequipPet(uuid)
+            StatusLabel.Text = string.format("❌ Unequip %s...", petType)
+            wait(0.5)
+        end
+        
+        wait(2)
+        StatusLabel.Text = "✅ Semua slot bersih!"
+        
+        -- ==========================================
+        -- MAIN LOOP
+        -- ==========================================
         while isLeveling do
             local weightTarget = getWeightTarget()
             local levelTargetForWeight = getLevelTargetForWeight()
@@ -1200,11 +1219,15 @@ ToggleButton.MouseButton1Click:Connect(function()
                     if #levelTargets > 0 then
                         StatusLabel.Text = string.format("📈 Leveling %d pet ke Lv.%d...", #levelTargets, levelTargetForWeight)
                         
-                        local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
+                        -- Unequip semua dulu
                         local currentEquipped = getEquippedPets()
                         for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
+                        
+                        -- Equip tim leveling
+                        local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
                         for _, uuid in ipairs(teamUUIDs) do equipPet(uuid) wait(0.5) end
                         
+                        -- Equip target leveling
                         local availableSlots = MAX_PET_SLOTS - #teamUUIDs
                         local toEquip = math.min(availableSlots, #levelTargets)
                         for i = 1, toEquip do
@@ -1225,12 +1248,17 @@ ToggleButton.MouseButton1Click:Connect(function()
                         end
                     end
                     
-                    StatusLabel.Text = "⚖️ Ganti ke tim weight..."
-                    local weightUUIDs = getPresetUUIDs(selectedWeightPreset)
+                    StatusLabel.Text = "🔄 Ganti ke tim weight..."
+                    
+                    -- Unequip semua dulu
                     local currentEquipped = getEquippedPets()
                     for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
+                    
+                    -- Equip tim weight
+                    local weightUUIDs = getPresetUUIDs(selectedWeightPreset)
                     for _, uuid in ipairs(weightUUIDs) do equipPet(uuid) wait(0.5) end
                     
+                    -- Equip pet yang siap weight
                     local readyForWeight = {}
                     for _, petUUID in ipairs(weightPets) do
                         if getPetLevel(petUUID) >= levelTargetForWeight then
@@ -1275,7 +1303,6 @@ ToggleButton.MouseButton1Click:Connect(function()
             -- ============ LEVELING NORMAL ============
             StatusLabel.Text = string.format("📈 Leveling normal ke Lv.%d...", targetLevel)
             
-            -- Refresh queued dari allSelectedPets yang belum mencapai targetLevel
             queuedPets = {}
             for _, petUUID in ipairs(allSelectedPets) do
                 if getPetLevel(petUUID) < targetLevel then
@@ -1284,10 +1311,12 @@ ToggleButton.MouseButton1Click:Connect(function()
             end
             
             if #queuedPets > 0 then
-                -- Equip tim leveling normal
-                local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
+                -- Unequip semua dulu
                 local currentEquipped = getEquippedPets()
                 for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
+                
+                -- Equip tim leveling normal
+                local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
                 for _, uuid in ipairs(teamUUIDs) do equipPet(uuid) wait(0.5) end
                 
                 -- Equip target
@@ -1332,7 +1361,6 @@ ToggleButton.MouseButton1Click:Connect(function()
             
             -- ============ CEK ADVANCED LEVELING ============
             if isAdvancedLeveling then
-                -- Cek apakah semua sudah mencapai targetLevel normal
                 local allReachedNormalTarget = true
                 for _, petUUID in ipairs(allSelectedPets) do
                     if getPetLevel(petUUID) < targetLevel then
@@ -1345,33 +1373,49 @@ ToggleButton.MouseButton1Click:Connect(function()
                     StatusLabel.Text = string.format("✅ Semua Lv.%d tercapai!", targetLevel)
                     wait(1)
                     
-                    StatusLabel.Text = "🚀 Ganti ke tim advanced..."
+                    StatusLabel.Text = "🔄 Membersihkan semua slot..."
                     
-                    -- Unequip semua
+                    -- UNEQUIP SEMUA PET
                     local currentEquipped = getEquippedPets()
-                    for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
-                    
-                    -- Equip tim advanced
-                    local advancedUUIDs = getPresetUUIDs(selectedAdvancedPreset)
-                    for _, uuid in ipairs(advancedUUIDs) do
-                        equipPet(uuid)
+                    for _, uuid in ipairs(currentEquipped) do
+                        local petType = getPetType(uuid)
+                        unequipPet(uuid)
+                        StatusLabel.Text = string.format("❌ Unequip %s...", petType)
                         wait(0.5)
                     end
                     
-                    StatusLabel.Text = string.format("🚀 Tim advanced di-equip! Leveling ke Lv.%d...", advancedTargetLevel)
+                    wait(2)
+                    StatusLabel.Text = "✅ Semua slot bersih!"
                     
-                    -- Equip semua selected pets untuk advanced leveling
+                    StatusLabel.Text = "🚀 Equip tim advanced..."
+                    
+                    -- EQUIP TIM ADVANCED
+                    local advancedUUIDs = getPresetUUIDs(selectedAdvancedPreset)
+                    for _, uuid in ipairs(advancedUUIDs) do
+                        local petType = getPetType(uuid)
+                        equipPet(uuid)
+                        StatusLabel.Text = string.format("✅ Equip %s (Advanced)...", petType)
+                        wait(0.5)
+                    end
+                    
+                    wait(2)
+                    StatusLabel.Text = string.format("🚀 Leveling advanced ke Lv.%d...", advancedTargetLevel)
+                    
+                    -- EQUIP TARGET PETS
                     local availableSlots = MAX_PET_SLOTS - #advancedUUIDs
                     local toEquip = math.min(availableSlots, #allSelectedPets)
                     
                     local advancedEquippedPets = {}
                     for i = 1, toEquip do
-                        equipPet(allSelectedPets[i])
-                        table.insert(advancedEquippedPets, allSelectedPets[i])
+                        local petUUID = allSelectedPets[i]
+                        local petType = getPetType(petUUID)
+                        equipPet(petUUID)
+                        table.insert(advancedEquippedPets, petUUID)
+                        StatusLabel.Text = string.format("✅ Equip target %s...", petType)
                         wait(0.5)
                     end
                     
-                    -- Monitoring advanced leveling
+                    -- MONITORING ADVANCED LEVELING
                     while isLeveling do
                         local allAdvancedDone = true
                         for _, petUUID in ipairs(allSelectedPets) do
@@ -1394,12 +1438,10 @@ ToggleButton.MouseButton1Click:Connect(function()
                         wait(5)
                     end
                     
-                    -- Break dari main loop setelah advanced selesai
                     break
                 end
             else
-                -- Tidak ada advanced leveling
-                -- Cek apakah semua sudah mencapai targetLevel
+                -- Tidak ada advanced
                 local allDone = true
                 for _, petUUID in ipairs(allSelectedPets) do
                     if getPetLevel(petUUID) < targetLevel then
