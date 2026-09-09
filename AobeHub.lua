@@ -1,4 +1,4 @@
--- Auto Leveling System GUI (Rainbow Mode Fix)
+-- Auto Leveling System GUI (Fixed Target Level & Advanced Flow)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -172,9 +172,8 @@ AutoLevelGUI.ResetOnSpawn = false
 AutoLevelGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 380, 0, 600)
-MainFrame.Position = UDim2.new(1, -400, 0.5, -300)
+MainFrame.Size = UDim2.new(0, 380, 0, 620)
+MainFrame.Position = UDim2.new(1, -400, 0.5, -310)
 MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -255,7 +254,7 @@ MinimizeButton.MouseButton1Click:Connect(function()
         ContentFrame.Visible = false
         MinimizeButton.Text = "+"
     else
-        MainFrame.Size = UDim2.new(0, 380, 0, 600)
+        MainFrame.Size = UDim2.new(0, 380, 0, 620)
         ContentFrame.Visible = true
         MinimizeButton.Text = "—"
     end
@@ -307,7 +306,7 @@ ScrollFrame.BackgroundTransparency = 1
 ScrollFrame.BorderSizePixel = 0
 ScrollFrame.ScrollBarThickness = 4
 ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1000)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1050)
 ScrollFrame.Parent = ContentFrame
 
 local ContentLayout = Instance.new("UIListLayout")
@@ -321,18 +320,18 @@ local selectedWeightPreset = nil
 local selectedAdvancedPreset = nil
 local selectedPetTypes = {}
 local queuedPets = {}
+local allSelectedPets = {} -- Semua pet yang dipilih (untuk tracking)
 local equippedTargetPets = {}
 local targetLevel = TARGET_LEVEL_DEFAULT
 local advancedTargetLevel = 150
 local isLeveling = false
 local isAutoWeight = false
 local isAdvancedLeveling = false
-local rainbowMode = false -- MODE rainbow (bukan filter pet)
+local rainbowMode = false
 local targetSearchText = ""
 local petSearchText = ""
 local tempPresetPets = {}
 
--- Helper untuk mendapatkan target berdasarkan mode
 local function getWeightTarget()
     return rainbowMode and BASE_WEIGHT_RAINBOW or BASE_WEIGHT_NORMAL
 end
@@ -489,9 +488,39 @@ local UICornerSave = Instance.new("UICorner")
 UICornerSave.CornerRadius = UDim.new(0, 4)
 UICornerSave.Parent = SavePresetButton
 
--- ============ TARGET SECTION ============
+-- ============ TARGET LEVEL SECTION ============
+local LevelSection = createSection(ScrollFrame, "🎯 Target Level")
+LevelSection.LayoutOrder = 3
+LevelSection.Size = UDim2.new(1, -10, 0, 70)
+
+local LevelInput = Instance.new("TextBox")
+LevelInput.Size = UDim2.new(1, -20, 0, 25)
+LevelInput.Position = UDim2.new(0, 10, 0, 28)
+LevelInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+LevelInput.BorderSizePixel = 0
+LevelInput.Font = Enum.Font.Gotham
+LevelInput.PlaceholderText = "Target Level (untuk non-weight)"
+LevelInput.Text = tostring(TARGET_LEVEL_DEFAULT)
+LevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+LevelInput.TextSize = 10
+LevelInput.Parent = LevelSection
+
+local UICornerLevelInput = Instance.new("UICorner")
+UICornerLevelInput.CornerRadius = UDim.new(0, 4)
+UICornerLevelInput.Parent = LevelInput
+
+LevelInput.FocusLost:Connect(function()
+    local newLevel = tonumber(LevelInput.Text)
+    if newLevel and newLevel > 0 then
+        targetLevel = newLevel
+    else
+        LevelInput.Text = tostring(targetLevel)
+    end
+end)
+
+-- ============ PET TARGET SECTION ============
 local TargetSection = createSection(ScrollFrame, "🎯 Pet Target")
-TargetSection.LayoutOrder = 3
+TargetSection.LayoutOrder = 4
 TargetSection.Size = UDim2.new(1, -10, 0, 160)
 
 local TargetSearchBox = Instance.new("TextBox")
@@ -541,7 +570,7 @@ UICornerScan.Parent = ScanButton
 
 -- ============ AUTO WEIGHT SECTION ============
 local WeightSection = createSection(ScrollFrame, "⚖️ Auto Weight")
-WeightSection.LayoutOrder = 4
+WeightSection.LayoutOrder = 5
 WeightSection.Size = UDim2.new(1, -10, 0, 160)
 
 local WeightToggleButton = Instance.new("TextButton")
@@ -559,7 +588,6 @@ local UICornerWeightToggle = Instance.new("UICorner")
 UICornerWeightToggle.CornerRadius = UDim.new(0, 5)
 UICornerWeightToggle.Parent = WeightToggleButton
 
--- Rainbow MODE Checkbox
 local RainbowModeButton = Instance.new("TextButton")
 RainbowModeButton.Size = UDim2.new(1, -20, 0, 25)
 RainbowModeButton.Position = UDim2.new(0, 10, 0, 60)
@@ -575,7 +603,6 @@ local UICornerRainbow = Instance.new("UICorner")
 UICornerRainbow.CornerRadius = UDim.new(0, 4)
 UICornerRainbow.Parent = RainbowModeButton
 
--- Weight Preset Dropdown
 local WeightPresetDropdown = Instance.new("Frame")
 WeightPresetDropdown.Size = UDim2.new(1, -20, 0, 28)
 WeightPresetDropdown.Position = UDim2.new(0, 10, 0, 90)
@@ -613,7 +640,7 @@ WeightPresetLayout.Parent = WeightPresetListFrame
 
 -- ============ ADVANCED LEVELING SECTION ============
 local AdvancedSection = createSection(ScrollFrame, "🚀 Advanced Leveling (Opsional)")
-AdvancedSection.LayoutOrder = 5
+AdvancedSection.LayoutOrder = 6
 AdvancedSection.Size = UDim2.new(1, -10, 0, 120)
 
 local AdvancedToggleButton = Instance.new("TextButton")
@@ -693,7 +720,7 @@ AdvancedPresetLayout.Parent = AdvancedPresetListFrame
 
 -- ============ BUTTON SECTION ============
 local ButtonSection = createSection(ScrollFrame, "⚙️ Kontrol")
-ButtonSection.LayoutOrder = 6
+ButtonSection.LayoutOrder = 7
 ButtonSection.Size = UDim2.new(1, -10, 0, 80)
 
 local ToggleButton = Instance.new("TextButton")
@@ -747,7 +774,7 @@ local function updateStatus()
     )
 end
 
--- Populate Preset Dropdown (generic)
+-- Populate Preset Dropdown
 local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
     clearDropdown(listFrame)
     
@@ -843,7 +870,7 @@ local function populatePetList()
     end
 end
 
--- Scan target pets (menggunakan mode)
+-- Scan target pets
 local function scanTargetPets()
     local petsData = getPlayerPetData()
     if not petsData then return {} end
@@ -860,6 +887,7 @@ local function scanTargetPets()
     
     local weightTarget = getWeightTarget()
     local levelTargetForWeight = getLevelTargetForWeight()
+    local effectiveTargetLevel = isAutoWeight and levelTargetForWeight or targetLevel
     
     local petTypes = {}
     
@@ -869,8 +897,8 @@ local function scanTargetPets()
             local petLevel = getPetLevel(petUUID)
             local petWeight = getPetWeight(petUUID)
             
-            local needsLeveling = petLevel < levelTargetForWeight
-            local needsWeight = petWeight < weightTarget
+            local needsLeveling = petLevel < effectiveTargetLevel
+            local needsWeight = isAutoWeight and (petWeight < weightTarget)
             
             if needsLeveling or needsWeight then
                 if not petTypes[petType] then
@@ -937,11 +965,19 @@ local function populateTargetDropdown()
                         table.remove(queuedPets, j)
                     end
                 end
+                for j = #allSelectedPets, 1, -1 do
+                    if getPetType(allSelectedPets[j]) == petInfo.PetType then
+                        table.remove(allSelectedPets, j)
+                    end
+                end
             else
                 table.insert(selectedPetTypes, petInfo.PetType)
                 for _, petInstance in ipairs(petInfo.Instances) do
                     if not table.find(queuedPets, petInstance.UUID) then
                         table.insert(queuedPets, petInstance.UUID)
+                    end
+                    if not table.find(allSelectedPets, petInstance.UUID) then
+                        table.insert(allSelectedPets, petInstance.UUID)
                     end
                 end
             end
@@ -1019,7 +1055,6 @@ AdvancedToggleButton.MouseButton1Click:Connect(function()
     updateStatus()
 end)
 
--- Rainbow MODE toggle
 RainbowModeButton.MouseButton1Click:Connect(function()
     rainbowMode = not rainbowMode
     if rainbowMode then
@@ -1064,7 +1099,7 @@ ToggleButton.MouseButton1Click:Connect(function()
         return
     end
     
-    if #queuedPets == 0 then
+    if #allSelectedPets == 0 then
         StatusLabel.Text = "⚠️ Pilih pet target dulu!"
         return
     end
@@ -1093,7 +1128,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                 StatusLabel.Text = string.format("⚖️ Scan weight (Target: %.1f)...", weightTarget)
                 
                 local weightPets = {}
-                for _, petUUID in ipairs(queuedPets) do
+                for _, petUUID in ipairs(allSelectedPets) do
                     local petWeight = getPetWeight(petUUID)
                     if petWeight < weightTarget then
                         table.insert(weightPets, petUUID)
@@ -1146,7 +1181,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                     for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
                     for _, uuid in ipairs(weightUUIDs) do equipPet(uuid) wait(0.5) end
                     
-                    -- Equip pet yang siap weight
                     local readyForWeight = {}
                     for _, petUUID in ipairs(weightPets) do
                         if getPetLevel(petUUID) >= levelTargetForWeight then
@@ -1161,11 +1195,9 @@ ToggleButton.MouseButton1Click:Connect(function()
                         wait(0.5)
                     end
                     
-                    -- Tunggu proses weight
                     StatusLabel.Text = "⚖️ Proses weight..."
                     wait(10)
                     
-                    -- Cek weight
                     local stillNeedWeight = false
                     for _, petUUID in ipairs(weightPets) do
                         if getPetWeight(petUUID) < weightTarget then
@@ -1191,15 +1223,73 @@ ToggleButton.MouseButton1Click:Connect(function()
             end
             
             -- ============ LEVELING LOOP ============
-            local finalTargetLevel = isAdvancedLeveling and advancedTargetLevel or (isAutoWeight and levelTargetForWeight or targetLevel)
+            local finalTargetLevel = isAdvancedLeveling and advancedTargetLevel or targetLevel
             
             StatusLabel.Text = string.format("📈 Leveling ke Lv.%d...", finalTargetLevel)
             
+            -- Refresh queuedPets dari allSelectedPets yang belum mencapai target
+            queuedPets = {}
+            for _, petUUID in ipairs(allSelectedPets) do
+                if getPetLevel(petUUID) < finalTargetLevel then
+                    table.insert(queuedPets, petUUID)
+                end
+            end
+            
+            if #queuedPets == 0 then
+                -- Semua sudah mencapai target level
+                if isAdvancedLeveling then
+                    StatusLabel.Text = string.format("✅ Semua Lv.%d tercapai!", targetLevel)
+                    
+                    -- Ganti ke tim advanced
+                    StatusLabel.Text = "🚀 Ganti ke tim advanced..."
+                    local advancedUUIDs = getPresetUUIDs(selectedAdvancedPreset)
+                    local currentEquipped = getEquippedPets()
+                    for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
+                    for _, uuid in ipairs(advancedUUIDs) do equipPet(uuid) wait(0.5) end
+                    
+                    -- Equip semua pet untuk advanced leveling
+                    local availableSlots = MAX_PET_SLOTS - #advancedUUIDs
+                    local toEquip = math.min(availableSlots, #allSelectedPets)
+                    for i = 1, toEquip do
+                        equipPet(allSelectedPets[i])
+                        wait(0.5)
+                    end
+                    
+                    -- Monitoring advanced leveling
+                    while isLeveling do
+                        local allDone = true
+                        for _, petUUID in ipairs(allSelectedPets) do
+                            if getPetLevel(petUUID) < advancedTargetLevel then
+                                allDone = false
+                                break
+                            end
+                        end
+                        if allDone then break end
+                        updateStatus()
+                        wait(5)
+                    end
+                    
+                    StatusLabel.Text = "🎉 Semua selesai (Advanced)!"
+                    isLeveling = false
+                    ToggleButton.Text = "▶️ Mulai"
+                    ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+                    break
+                else
+                    StatusLabel.Text = "🎉 Semua selesai!"
+                    isLeveling = false
+                    ToggleButton.Text = "▶️ Mulai"
+                    ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+                    break
+                end
+            end
+            
+            -- Equip tim leveling
             local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
             local currentEquipped = getEquippedPets()
             for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
             for _, uuid in ipairs(teamUUIDs) do equipPet(uuid) wait(0.5) end
             
+            -- Equip target
             local availableSlots = MAX_PET_SLOTS - #teamUUIDs
             local toEquip = math.min(availableSlots, #queuedPets)
             
@@ -1238,15 +1328,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                 wait(5)
             end
             
-            -- Cek selesai
-            if #queuedPets == 0 and #equippedTargetPets == 0 then
-                StatusLabel.Text = "🎉 Semua selesai!"
-                isLeveling = false
-                ToggleButton.Text = "▶️ Mulai"
-                ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
-                break
-            end
-            
             wait(5)
         end
     end)
@@ -1258,4 +1339,4 @@ updateStatus()
 
 AutoLevelGUI.Parent = playerGui
 
-print("✅ Auto Leveling + Weight System loaded!")
+print("✅ Auto Leveling + Weight + Advanced System loaded!")
