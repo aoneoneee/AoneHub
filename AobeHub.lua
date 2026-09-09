@@ -1,4 +1,4 @@
--- Auto Leveling System GUI (Fixed Target Level & Advanced Flow)
+-- Auto Leveling System GUI (dengan Mutasi di List Pet)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -60,6 +60,56 @@ local function getPetLevel(petUUID)
     return 0
 end
 
+-- Fungsi untuk mendapatkan nama mutasi pet
+local function getPetMutationName(petUUID)
+    local petsData = getPlayerPetData()
+    if not petsData then return nil end
+    
+    local petData = petsData.PetInventory.Data[petUUID]
+    if not petData then return nil end
+    
+    local mutationType = nil
+    
+    -- Cek di berbagai lokasi yang mungkin
+    if petData.PetData then
+        mutationType = petData.PetData.MutationType
+    end
+    if not mutationType then
+        mutationType = petData.MutationType
+    end
+    
+    if mutationType and mutationType ~= "None" and mutationType ~= "Normal" and mutationType ~= "m" then
+        -- Coba convert EnumId ke nama
+        local success, registry = pcall(function()
+            return require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
+        end)
+        
+        if success and registry and registry.EnumToPetMutation then
+            local mutationName = registry.EnumToPetMutation[mutationType]
+            if mutationName then
+                return mutationName
+            end
+        end
+        
+        -- Jika tidak bisa convert, return as is
+        return mutationType
+    end
+    
+    return nil
+end
+
+-- Fungsi untuk mendapatkan display name lengkap
+local function getPetDisplayName(petUUID)
+    local petType = getPetType(petUUID)
+    local mutation = getPetMutationName(petUUID)
+    
+    if mutation then
+        return string.format("%s %s", mutation, petType)
+    end
+    
+    return petType
+end
+
 local function getPetWeight(petUUID)
     local petsData = getPlayerPetData()
     if not petsData then return 0 end
@@ -110,9 +160,11 @@ local function saveTeamPreset(presetName, petList)
     
     local petsWithInfo = {}
     for _, petUUID in ipairs(petList) do
+        local mutation = getPetMutationName(petUUID)
         table.insert(petsWithInfo, {
             UUID = petUUID,
             PetType = getPetType(petUUID),
+            Mutation = mutation,
             Level = getPetLevel(petUUID)
         })
     end
@@ -320,7 +372,7 @@ local selectedWeightPreset = nil
 local selectedAdvancedPreset = nil
 local selectedPetTypes = {}
 local queuedPets = {}
-local allSelectedPets = {} -- Semua pet yang dipilih (untuk tracking)
+local allSelectedPets = {}
 local equippedTargetPets = {}
 local targetLevel = TARGET_LEVEL_DEFAULT
 local advancedTargetLevel = 150
@@ -790,6 +842,13 @@ local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
     for i, presetName in ipairs(presetNames) do
         local preset = presets[presetName]
         
+        -- Buat ringkasan dengan mutasi
+        local typeSummary = {}
+        for _, petInfo in ipairs(preset.pets) do
+            local displayName = petInfo.Mutation and string.format("%s %s", petInfo.Mutation, petInfo.PetType) or petInfo.PetType
+            table.insert(typeSummary, displayName)
+        end
+        
         local PresetButton = Instance.new("TextButton")
         PresetButton.Size = UDim2.new(1, 0, 0, 22)
         PresetButton.BackgroundColor3 = selectedPreset == presetName and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(70, 70, 85)
@@ -813,7 +872,7 @@ local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
     end
 end
 
--- Populate Pet List
+-- Populate Pet List (dengan Mutasi)
 local function populatePetList()
     clearDropdown(PetListFrame)
     
@@ -826,16 +885,23 @@ local function populatePetList()
     for petUUID, _ in pairs(inventory) do
         local petType = getPetType(petUUID)
         local petLevel = getPetLevel(petUUID)
+        local petMutation = getPetMutationName(petUUID)
+        local displayName = petMutation and string.format("%s %s", petMutation, petType) or petType
         local isSelected = table.find(tempPresetPets, petUUID) ~= nil
         
-        if petSearchText == "" or petType:lower():find(petSearchText:lower()) then
-            table.insert(allPets, {UUID = petUUID, PetType = petType, Level = petLevel, IsSelected = isSelected})
+        if petSearchText == "" or displayName:lower():find(petSearchText:lower()) then
+            table.insert(allPets, {
+                UUID = petUUID,
+                DisplayName = displayName,
+                Level = petLevel,
+                IsSelected = isSelected
+            })
         end
     end
     
     table.sort(allPets, function(a, b)
         if a.IsSelected ~= b.IsSelected then return a.IsSelected
-        else return a.PetType < b.PetType end
+        else return a.DisplayName < b.DisplayName end
     end)
     
     PetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPets * 22, 50))
@@ -846,7 +912,7 @@ local function populatePetList()
         PetButton.BackgroundColor3 = petInfo.IsSelected and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(70, 70, 85)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
-        PetButton.Text = petInfo.IsSelected and string.format("✓ %s (Lv.%d)", petInfo.PetType, petInfo.Level) or string.format("%s (Lv.%d)", petInfo.PetType, petInfo.Level)
+        PetButton.Text = petInfo.IsSelected and string.format("✓ %s (Lv.%d)", petInfo.DisplayName, petInfo.Level) or string.format("%s (Lv.%d)", petInfo.DisplayName, petInfo.Level)
         PetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
         PetButton.TextSize = 9
         PetButton.Parent = PetListFrame
@@ -1123,7 +1189,7 @@ ToggleButton.MouseButton1Click:Connect(function()
             local weightTarget = getWeightTarget()
             local levelTargetForWeight = getLevelTargetForWeight()
             
-            -- ============ AUTO WEIGHT LOOP ============
+            -- AUTO WEIGHT LOOP
             if isAutoWeight then
                 StatusLabel.Text = string.format("⚖️ Scan weight (Target: %.1f)...", weightTarget)
                 
@@ -1138,7 +1204,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                 if #weightPets > 0 then
                     StatusLabel.Text = string.format("⚖️ %d pet butuh weight", #weightPets)
                     
-                    -- Leveling ke target level untuk weight
                     local levelTargets = {}
                     for _, petUUID in ipairs(weightPets) do
                         if getPetLevel(petUUID) < levelTargetForWeight then
@@ -1174,7 +1239,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                         end
                     end
                     
-                    -- Ganti ke tim weight
                     StatusLabel.Text = "⚖️ Ganti ke tim weight..."
                     local weightUUIDs = getPresetUUIDs(selectedWeightPreset)
                     local currentEquipped = getEquippedPets()
@@ -1222,12 +1286,11 @@ ToggleButton.MouseButton1Click:Connect(function()
                 end
             end
             
-            -- ============ LEVELING LOOP ============
+            -- LEVELING LOOP
             local finalTargetLevel = isAdvancedLeveling and advancedTargetLevel or targetLevel
             
             StatusLabel.Text = string.format("📈 Leveling ke Lv.%d...", finalTargetLevel)
             
-            -- Refresh queuedPets dari allSelectedPets yang belum mencapai target
             queuedPets = {}
             for _, petUUID in ipairs(allSelectedPets) do
                 if getPetLevel(petUUID) < finalTargetLevel then
@@ -1236,18 +1299,15 @@ ToggleButton.MouseButton1Click:Connect(function()
             end
             
             if #queuedPets == 0 then
-                -- Semua sudah mencapai target level
                 if isAdvancedLeveling then
                     StatusLabel.Text = string.format("✅ Semua Lv.%d tercapai!", targetLevel)
                     
-                    -- Ganti ke tim advanced
                     StatusLabel.Text = "🚀 Ganti ke tim advanced..."
                     local advancedUUIDs = getPresetUUIDs(selectedAdvancedPreset)
                     local currentEquipped = getEquippedPets()
                     for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
                     for _, uuid in ipairs(advancedUUIDs) do equipPet(uuid) wait(0.5) end
                     
-                    -- Equip semua pet untuk advanced leveling
                     local availableSlots = MAX_PET_SLOTS - #advancedUUIDs
                     local toEquip = math.min(availableSlots, #allSelectedPets)
                     for i = 1, toEquip do
@@ -1255,7 +1315,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                         wait(0.5)
                     end
                     
-                    -- Monitoring advanced leveling
                     while isLeveling do
                         local allDone = true
                         for _, petUUID in ipairs(allSelectedPets) do
@@ -1283,13 +1342,11 @@ ToggleButton.MouseButton1Click:Connect(function()
                 end
             end
             
-            -- Equip tim leveling
             local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
             local currentEquipped = getEquippedPets()
             for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
             for _, uuid in ipairs(teamUUIDs) do equipPet(uuid) wait(0.5) end
             
-            -- Equip target
             local availableSlots = MAX_PET_SLOTS - #teamUUIDs
             local toEquip = math.min(availableSlots, #queuedPets)
             
@@ -1304,7 +1361,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                 end
             end
             
-            -- Monitoring
             while isLeveling and #equippedTargetPets > 0 do
                 for i = #equippedTargetPets, 1, -1 do
                     local petUUID = equippedTargetPets[i]
