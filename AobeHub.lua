@@ -1,4 +1,4 @@
--- Auto Leveling System GUI (dengan Mutasi di List Pet)
+-- Auto Leveling System GUI (Fixed Scrolling)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -60,7 +60,6 @@ local function getPetLevel(petUUID)
     return 0
 end
 
--- Fungsi untuk mendapatkan nama mutasi pet
 local function getPetMutationName(petUUID)
     local petsData = getPlayerPetData()
     if not petsData then return nil end
@@ -70,7 +69,6 @@ local function getPetMutationName(petUUID)
     
     local mutationType = nil
     
-    -- Cek di berbagai lokasi yang mungkin
     if petData.PetData then
         mutationType = petData.PetData.MutationType
     end
@@ -79,7 +77,6 @@ local function getPetMutationName(petUUID)
     end
     
     if mutationType and mutationType ~= "None" and mutationType ~= "Normal" and mutationType ~= "m" then
-        -- Coba convert EnumId ke nama
         local success, registry = pcall(function()
             return require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
         end)
@@ -91,14 +88,12 @@ local function getPetMutationName(petUUID)
             end
         end
         
-        -- Jika tidak bisa convert, return as is
         return mutationType
     end
     
     return nil
 end
 
--- Fungsi untuk mendapatkan display name lengkap
 local function getPetDisplayName(petUUID)
     local petType = getPetType(petUUID)
     local mutation = getPetMutationName(petUUID)
@@ -690,8 +685,8 @@ local WeightPresetLayout = Instance.new("UIListLayout")
 WeightPresetLayout.Padding = UDim.new(0, 2)
 WeightPresetLayout.Parent = WeightPresetListFrame
 
--- ============ ADVANCED LEVELING SECTION ============
-local AdvancedSection = createSection(ScrollFrame, "🚀 Advanced Leveling (Opsional)")
+-- ============ ADVANCED SECTION ============
+local AdvancedSection = createSection(ScrollFrame, "🚀 Advanced (Opsional)")
 AdvancedSection.LayoutOrder = 6
 AdvancedSection.Size = UDim2.new(1, -10, 0, 120)
 
@@ -810,6 +805,18 @@ local function clearDropdown(listFrame)
     end
 end
 
+-- Update canvas size dinamis
+local function updateCanvasSize(scrollingFrame, itemHeight, padding)
+    local count = 0
+    for _, child in pairs(scrollingFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            count = count + 1
+        end
+    end
+    local totalHeight = count * (itemHeight + padding)
+    scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(totalHeight, 50))
+end
+
 local function updateStatus()
     local teamCount = selectedTeamPreset and #getPresetUUIDs(selectedTeamPreset) or 0
     local modeText = rainbowMode and "🌈" or "📊"
@@ -826,7 +833,7 @@ local function updateStatus()
     )
 end
 
--- Populate Preset Dropdown
+-- Populate Preset Dropdown (dengan scrolling fix)
 local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
     clearDropdown(listFrame)
     
@@ -837,17 +844,8 @@ local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
     end
     table.sort(presetNames)
     
-    listFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#presetNames * 25, 50))
-    
     for i, presetName in ipairs(presetNames) do
         local preset = presets[presetName]
-        
-        -- Buat ringkasan dengan mutasi
-        local typeSummary = {}
-        for _, petInfo in ipairs(preset.pets) do
-            local displayName = petInfo.Mutation and string.format("%s %s", petInfo.Mutation, petInfo.PetType) or petInfo.PetType
-            table.insert(typeSummary, displayName)
-        end
         
         local PresetButton = Instance.new("TextButton")
         PresetButton.Size = UDim2.new(1, 0, 0, 22)
@@ -870,9 +868,12 @@ local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
             updateStatus()
         end)
     end
+    
+    -- Update canvas size
+    updateCanvasSize(listFrame, 22, 3)
 end
 
--- Populate Pet List (dengan Mutasi)
+-- Populate Pet List (dengan scrolling fix)
 local function populatePetList()
     clearDropdown(PetListFrame)
     
@@ -883,10 +884,8 @@ local function populatePetList()
     local allPets = {}
     
     for petUUID, _ in pairs(inventory) do
-        local petType = getPetType(petUUID)
+        local displayName = getPetDisplayName(petUUID)
         local petLevel = getPetLevel(petUUID)
-        local petMutation = getPetMutationName(petUUID)
-        local displayName = petMutation and string.format("%s %s", petMutation, petType) or petType
         local isSelected = table.find(tempPresetPets, petUUID) ~= nil
         
         if petSearchText == "" or displayName:lower():find(petSearchText:lower()) then
@@ -903,8 +902,6 @@ local function populatePetList()
         if a.IsSelected ~= b.IsSelected then return a.IsSelected
         else return a.DisplayName < b.DisplayName end
     end)
-    
-    PetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPets * 22, 50))
     
     for i, petInfo in ipairs(allPets) do
         local PetButton = Instance.new("TextButton")
@@ -934,6 +931,8 @@ local function populatePetList()
             populatePetList()
         end)
     end
+    
+    updateCanvasSize(PetListFrame, 20, 2)
 end
 
 -- Scan target pets
@@ -984,7 +983,7 @@ local function scanTargetPets()
     return petTypes
 end
 
--- Populate Target Dropdown
+-- Populate Target Dropdown (dengan scrolling fix)
 local function populateTargetDropdown()
     clearDropdown(TargetListFrame)
     
@@ -1002,8 +1001,6 @@ local function populateTargetDropdown()
         if a.IsSelected ~= b.IsSelected then return a.IsSelected
         else return a.PetType < b.PetType end
     end)
-    
-    TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(#allPetTypes * 22, 50))
     
     for i, petInfo in ipairs(allPetTypes) do
         local PetButton = Instance.new("TextButton")
@@ -1052,6 +1049,8 @@ local function populateTargetDropdown()
             updateStatus()
         end)
     end
+    
+    updateCanvasSize(TargetListFrame, 20, 2)
 end
 
 -- Event Handlers
@@ -1301,8 +1300,8 @@ ToggleButton.MouseButton1Click:Connect(function()
             if #queuedPets == 0 then
                 if isAdvancedLeveling then
                     StatusLabel.Text = string.format("✅ Semua Lv.%d tercapai!", targetLevel)
-                    
                     StatusLabel.Text = "🚀 Ganti ke tim advanced..."
+                    
                     local advancedUUIDs = getPresetUUIDs(selectedAdvancedPreset)
                     local currentEquipped = getEquippedPets()
                     for _, uuid in ipairs(currentEquipped) do unequipPet(uuid) wait(0.3) end
@@ -1395,4 +1394,4 @@ updateStatus()
 
 AutoLevelGUI.Parent = playerGui
 
-print("✅ Auto Leveling + Weight + Advanced System loaded!")
+print("✅ Auto Leveling System loaded!")
