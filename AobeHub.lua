@@ -1136,7 +1136,7 @@ ScanButton.MouseButton1Click:Connect(function()
     updateStatus()
 end)
 
--- MAIN LOGIC (Fixed Auto Weight Rotation)
+-- MAIN LOGIC (Fixed Leveling Rotation)
 ToggleButton.MouseButton1Click:Connect(function()
     if isLeveling then
         isLeveling = false
@@ -1220,6 +1220,7 @@ ToggleButton.MouseButton1Click:Connect(function()
             if isAutoWeight then
                 StatusLabel.Text = string.format("⚖️ Scan weight (Target: %.1f)...", weightTarget)
                 
+                -- Scan pet yang butuh weight
                 local weightPets = {}
                 for _, petUUID in ipairs(allSelectedPets) do
                     local petWeight = getPetWeight(petUUID)
@@ -1231,7 +1232,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                 if #weightPets > 0 then
                     StatusLabel.Text = string.format("⚖️ %d pet butuh weight", #weightPets)
                     
-                    -- Leveling pet yang level di bawah syarat
+                    -- ============ LANGKAH 2: LEVELING KE 40/50 DENGAN ROTASI ============
                     local levelTargets = {}
                     for _, petUUID in ipairs(weightPets) do
                         if getPetLevel(petUUID) < levelTargetForWeight then
@@ -1247,15 +1248,63 @@ ToggleButton.MouseButton1Click:Connect(function()
                         
                         local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
                         equipPetList(teamUUIDs, "Tim:")
+                        wait(1)
                         
+                        -- Equip target yang perlu leveling dengan rotasi
                         local availableSlots = MAX_PET_SLOTS - #teamUUIDs
                         local toEquip = math.min(availableSlots, #levelTargets)
-                        for i = 1, toEquip do
-                            equipPet(levelTargets[i])
-                            wait(0.3)
+                        
+                        local levelingEquippedPets = {}
+                        local pendingLevelTargets = {}
+                        
+                        for _, petUUID in ipairs(levelTargets) do
+                            table.insert(pendingLevelTargets, petUUID)
                         end
                         
-                        while isLeveling do
+                        -- Equip batch pertama
+                        for i = 1, toEquip do
+                            if #pendingLevelTargets > 0 then
+                                local petUUID = pendingLevelTargets[1]
+                                table.remove(pendingLevelTargets, 1)
+                                equipPet(petUUID)
+                                table.insert(levelingEquippedPets, petUUID)
+                                wait(0.3)
+                            end
+                        end
+                        
+                        -- Monitoring dengan rotasi
+                        while isLeveling and #levelingEquippedPets > 0 do
+                            for i = #levelingEquippedPets, 1, -1 do
+                                local petUUID = levelingEquippedPets[i]
+                                local petLevel = getPetLevel(petUUID)
+                                local petType = getPetType(petUUID)
+                                
+                                -- Jika sudah mencapai level 40/50
+                                if petLevel >= levelTargetForWeight then
+                                    StatusLabel.Text = string.format("✅ %s Lv.%d tercapai!", petType, petLevel)
+                                    unequipPet(petUUID)
+                                    table.remove(levelingEquippedPets, i)
+                                    
+                                    -- Ganti dengan pet lain yang belum level 40/50
+                                    if #pendingLevelTargets > 0 then
+                                        local nextPet = pendingLevelTargets[1]
+                                        table.remove(pendingLevelTargets, 1)
+                                        
+                                        local nextPetLevel = getPetLevel(nextPet)
+                                        if nextPetLevel < levelTargetForWeight then
+                                            equipPet(nextPet)
+                                            table.insert(levelingEquippedPets, nextPet)
+                                            StatusLabel.Text = string.format("🔄 Ganti dengan %s (Lv.%d)...", getPetType(nextPet), nextPetLevel)
+                                        else
+                                            StatusLabel.Text = string.format("⏭️ %s sudah Lv.%d, skip", getPetType(nextPet), nextPetLevel)
+                                        end
+                                        
+                                        wait(0.3)
+                                    end
+                                end
+                            end
+                            
+                            -- Cek jika semua sudah mencapai level
                             local allLeveled = true
                             for _, petUUID in ipairs(levelTargets) do
                                 if getPetLevel(petUUID) < levelTargetForWeight then
@@ -1263,13 +1312,24 @@ ToggleButton.MouseButton1Click:Connect(function()
                                     break
                                 end
                             end
-                            if allLeveled then break end
+                            
+                            if allLeveled then
+                                StatusLabel.Text = string.format("✅ Semua pet Lv.%d tercapai!", levelTargetForWeight)
+                                break
+                            end
+                            
+                            -- Jika tidak ada lagi yang di-equip dan tidak ada pending
+                            if #levelingEquippedPets == 0 and #pendingLevelTargets == 0 then
+                                StatusLabel.Text = "🔄 Tidak ada pet tersisa untuk leveling"
+                                break
+                            end
+                            
                             updateStatus()
                             wait(5)
                         end
                     end
                     
-                    -- ============ PROSES WEIGHT DENGAN ROTASI ============
+                    -- ============ LANGKAH 3: PROSES WEIGHT ============
                     StatusLabel.Text = "🔄 Ganti ke tim weight..."
                     
                     unequipAllPets()
@@ -1279,7 +1339,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                     equipPetList(weightUUIDs, "Weight:")
                     wait(2)
                     
-                    -- Kumpulkan pet yang siap weight
+                    -- Kumpulkan pet yang siap weight (level >= 40/50)
                     local readyForWeight = {}
                     for _, petUUID in ipairs(weightPets) do
                         if getPetLevel(petUUID) >= levelTargetForWeight then
@@ -1291,10 +1351,17 @@ ToggleButton.MouseButton1Click:Connect(function()
                     local toEquip = math.min(availableSlots, #readyForWeight)
                     
                     local weightEquippedPets = {}
+                    local pendingWeightPets = {}
+                    
+                    for _, petUUID in ipairs(readyForWeight) do
+                        table.insert(pendingWeightPets, petUUID)
+                    end
+                    
+                    -- Equip batch pertama
                     for i = 1, toEquip do
-                        if #readyForWeight > 0 then
-                            local petUUID = readyForWeight[1]
-                            table.remove(readyForWeight, 1)
+                        if #pendingWeightPets > 0 then
+                            local petUUID = pendingWeightPets[1]
+                            table.remove(pendingWeightPets, 1)
                             equipPet(petUUID)
                             table.insert(weightEquippedPets, petUUID)
                             wait(0.3)
@@ -1303,7 +1370,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                     
                     StatusLabel.Text = "⚖️ Proses weight..."
                     
-                    -- Monitoring dengan rotasi
+                    -- Monitoring weight dengan rotasi
                     while isLeveling and #weightEquippedPets > 0 do
                         for i = #weightEquippedPets, 1, -1 do
                             local petUUID = weightEquippedPets[i]
@@ -1311,16 +1378,16 @@ ToggleButton.MouseButton1Click:Connect(function()
                             local petLevel = getPetLevel(petUUID)
                             local petType = getPetType(petUUID)
                             
-                            -- Cek jika weight sudah tercapai
+                            -- Weight tercapai atau level turun
                             if petWeight >= weightTarget then
                                 StatusLabel.Text = string.format("✅ %s weight %.1f tercapai!", petType, petWeight)
                                 unequipPet(petUUID)
                                 table.remove(weightEquippedPets, i)
                                 
-                                -- Ganti dengan pet siap lainnya
-                                if #readyForWeight > 0 then
-                                    local nextPet = readyForWeight[1]
-                                    table.remove(readyForWeight, 1)
+                                -- Ganti dengan pet siap lain
+                                if #pendingWeightPets > 0 then
+                                    local nextPet = pendingWeightPets[1]
+                                    table.remove(pendingWeightPets, 1)
                                     
                                     if getPetLevel(nextPet) >= levelTargetForWeight then
                                         equipPet(nextPet)
@@ -1335,9 +1402,9 @@ ToggleButton.MouseButton1Click:Connect(function()
                                 unequipPet(petUUID)
                                 table.remove(weightEquippedPets, i)
                                 
-                                if #readyForWeight > 0 then
-                                    local nextPet = readyForWeight[1]
-                                    table.remove(readyForWeight, 1)
+                                if #pendingWeightPets > 0 then
+                                    local nextPet = pendingWeightPets[1]
+                                    table.remove(pendingWeightPets, 1)
                                     
                                     if getPetLevel(nextPet) >= levelTargetForWeight then
                                         equipPet(nextPet)
@@ -1366,8 +1433,8 @@ ToggleButton.MouseButton1Click:Connect(function()
                             break
                         end
                         
-                        -- Jika tidak ada lagi yang siap weight, keluar untuk leveling lagi
-                        if #weightEquippedPets == 0 and #readyForWeight == 0 then
+                        -- Jika tidak ada lagi yang siap, keluar untuk leveling lagi
+                        if #weightEquippedPets == 0 and #pendingWeightPets == 0 then
                             StatusLabel.Text = "🔄 Tidak ada pet siap weight, ulangi leveling..."
                             break
                         end
