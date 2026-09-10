@@ -1585,9 +1585,15 @@ ToggleButton.MouseButton1Click:Connect(function()
     ToggleButton.Text = "⏹️ Stop"
     ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
     
-    local function unequipAllPets()
+    -- Flag untuk menandai apakah perlu unequip semua
+-- unequipAllPets() hanya dipanggil saat:
+-- 1. Awal mulai
+-- 2. Ganti tim preset
+-- 3. Selesai satu tahap, lanjut tahap berikutnya
+
+local function unequipAllPets()
     StatusLabel.Text = "🔄 Membersihkan semua slot..."
-    local maxAttempts = 3
+    local maxAttempts = 4
     local attempt = 0
     
     while attempt < maxAttempts and isLeveling do
@@ -1598,20 +1604,19 @@ ToggleButton.MouseButton1Click:Connect(function()
             return true
         end
         
-        -- Unequip satu per satu dengan delay
         for _, petUUID in ipairs(equippedPets) do
             pcall(function()
                 unequipPet(petUUID)
             end)
-            wait(0.5) -- Delay lebih lama untuk menghindari race condition
+            wait(0.5)
         end
         
         attempt = attempt + 1
-        wait(2) -- Tunggu 2 detik sebelum cek lagi
+        wait(1)
     end
     
     return #getEquippedPets() == 0
-end
+        end
     
     local function equipPetList(petList, label)
         for _, petUUID in ipairs(petList) do
@@ -1823,212 +1828,159 @@ end
         end
         
         -- ==========================================
-        -- PRIORITAS 2: AUTO MUTATION (jika aktif)
-        -- ==========================================
-        if isAutoMutation and isLeveling then
-            local mutationLoopActive = true
-            
-            while isLeveling and mutationLoopActive do
-                StatusLabel.Text = "🧬 Scan status mutasi pet target..."
-                
-                local needMutation = {}
-                local needCleansing = {}
-                local alreadyGood = {}
-                
-                for _, petUUID in ipairs(allSelectedPets) do
-                    local status, mutationName = getMutationStatus(petUUID)
-                    
-                    if status == "none" then
-                        table.insert(needMutation, petUUID)
-                    elseif status == "unwanted" then
-                        table.insert(needCleansing, {UUID = petUUID, Mutation = mutationName})
-                    else
-                        table.insert(alreadyGood, petUUID)
-                    end
-                end
-                
-                if #needMutation == 0 and #needCleansing == 0 then
-                    StatusLabel.Text = "🎉 Semua pet target sudah bermutasi diinginkan!"
-                    isAutoMutation = false
-                    MutationToggleButton.Text = "🧬 Auto Mutation: OFF"
-                    MutationToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
-                    mutationLoopActive = false
-                    break
-                end
-                
-                StatusLabel.Text = string.format(
-                    "🧬 Tanpa: %d | Cleansing: %d | OK: %d",
-                    #needMutation,
-                    #needCleansing,
-                    #alreadyGood
-                )
-                
-                -- LANGKAH 1: CLEANSING MUTASI TIDAK DIINGINKAN
-if #needCleansing > 0 then
-    unequipAllPets()
-    wait(2)
+-- AUTO MUTATION LOOP (Fixed Alur)
+-- ==========================================
+if isAutoMutation then
+    local mutationLoopActive = true
     
-    local mutationTeamUUIDs = getPresetUUIDs(selectedMutationPreset)
-    equipPetList(mutationTeamUUIDs, "Mutation Team:")
-    wait(3) -- Delay lebih lama setelah equip tim
-    
-    local availableSlots = MAX_PET_SLOTS - #mutationTeamUUIDs
-    local toProcess = math.min(availableSlots, #needCleansing)
-    
-    for i = 1, toProcess do
-        local petInfo = needCleansing[i]
-        local petUUID = petInfo.UUID
-        local petType = getPetType(petUUID)
+    while isLeveling and mutationLoopActive do
+        StatusLabel.Text = "🧬 Scan status mutasi pet target..."
         
-        -- Equip pet satu per satu dengan delay
-        local equipSuccess = equipPet(petUUID)
-        if not equipSuccess then
-            StatusLabel.Text = string.format("⚠️ Gagal equip %s", petType)
-            continue
-        end
+        -- Kategorikan pet
+        local needMutation = {}   -- Tanpa mutasi (perlu tunggu mutasi)
+        local alreadyGood = {}    -- Sudah mutasi desired (skip)
         
-        wait(2) -- Tunggu pet benar-benar muncul di workspace
-        
-        StatusLabel.Text = string.format("🧬 Cleansing %s (%s)...", petType, petInfo.Mutation)
-        
-        -- Verifikasi pet model ada sebelum cleansing
-        local petModel = findPetModelByUUID(petUUID)
-        if not petModel then
-            StatusLabel.Text = string.format("⚠️ Model %s tidak ditemukan", petType)
-            wait(1)
-            continue
-        end
-        
-        -- Gunakan cleansing shard dengan pcall
-        local success = false
-        local ok, err = pcall(function()
-            success = useCleansingShard(petUUID)
-        end)
-        
-        if not ok then
-            warn("Cleansing error:", err)
-            StatusLabel.Text = string.format("⚠️ Error cleansing %s", petType)
-        elseif success then
-            StatusLabel.Text = string.format("✅ %s di-cleansing!", petType)
-        else
-            StatusLabel.Text = string.format("⚠️ Gagal cleansing %s", petType)
-        end
-        
-        -- Delay sebelum proses pet berikutnya
-        wait(3)
-    end
-    
-    wait(3)
-                        end
-                
-                -- LANGKAH 2: EQUIP PET TANPA MUTASI + TUNGGU MUTASI
-if #needMutation > 0 then
-    unequipAllPets()
-    wait(2)
-    
-    local mutationTeamUUIDs = getPresetUUIDs(selectedMutationPreset)
-    equipPetList(mutationTeamUUIDs, "Mutation Team:")
-    wait(3)
-    
-    local availableSlots = MAX_PET_SLOTS - #mutationTeamUUIDs
-    local toEquip = math.min(availableSlots, #needMutation)
-    
-    local equippedForMutation = {}
-    local pendingMutationList = {}
-    
-    for _, petUUID in ipairs(needMutation) do
-        table.insert(pendingMutationList, petUUID)
-    end
-    
-    -- Equip satu per satu dengan delay
-    for i = 1, toEquip do
-        if #pendingMutationList > 0 then
-            local petUUID = pendingMutationList[1]
-            table.remove(pendingMutationList, 1)
-            
-            local equipSuccess = equipPet(petUUID)
-            if equipSuccess then
-                table.insert(equippedForMutation, petUUID)
-                wait(1) -- Delay antar equip
-            end
-        end
-    end
-    
-    wait(2) -- Tunggu semua pet muncul di workspace
-    
-    StatusLabel.Text = string.format("🧬 Menunggu %d pet mendapat mutasi...", #equippedForMutation)
-    
-    while isLeveling and #equippedForMutation > 0 do
-        for i = #equippedForMutation, 1, -1 do
-            local petUUID = equippedForMutation[i]
-            local petType = getPetType(petUUID)
+        for _, petUUID in ipairs(allSelectedPets) do
             local status, mutationName = getMutationStatus(petUUID)
             
             if status == "desired" then
-                StatusLabel.Text = string.format("✅ %s mendapat %s!", petType, mutationName)
-                
-                -- Unequip dengan pcall
-                pcall(function()
-                    unequipPet(petUUID)
-                end)
-                
-                table.remove(equippedForMutation, i)
-                wait(1)
-                
-                if #pendingMutationList > 0 then
-                    local nextPet = pendingMutationList[1]
-                    table.remove(pendingMutationList, 1)
-                    
-                    local equipSuccess = equipPet(nextPet)
-                    if equipSuccess then
-                        table.insert(equippedForMutation, nextPet)
-                        StatusLabel.Text = string.format("🔄 Ganti dengan %s...", getPetType(nextPet))
-                    end
-                    wait(1)
-                end
-            elseif status == "unwanted" then
-                StatusLabel.Text = string.format("⚠️ %s dapat %s, cleansing...", petType, mutationName)
-                
-                -- Pastikan pet model ada
-                local petModel = findPetModelByUUID(petUUID)
-                if petModel then
-                    local ok, err = pcall(function()
-                        useCleansingShard(petUUID)
-                    end)
-                    
-                    if not ok then
-                        warn("Cleansing error:", err)
-                        StatusLabel.Text = string.format("⚠️ Error cleansing %s", petType)
-                    else
-                        StatusLabel.Text = string.format("✅ %s di-cleansing, tunggu lagi...", petType)
-                    end
-                else
-                    StatusLabel.Text = string.format("⚠️ Model %s hilang, re-equip...", petType)
-                    -- Re-equip pet
-                    pcall(function()
-                        unequipPet(petUUID)
-                    end)
-                    wait(1)
-                    equipPet(petUUID)
-                    wait(1)
-                end
-                
-                wait(3)
+                -- Sudah OK, skip
+                table.insert(alreadyGood, petUUID)
+            else
+                -- Baik "none" maupun "unwanted" → perlu di-equip
+                table.insert(needMutation, {
+                    UUID = petUUID,
+                    Status = status,
+                    Mutation = mutationName
+                })
             end
         end
         
-        if #equippedForMutation == 0 and #pendingMutationList == 0 then
+        -- Cek apakah semua selesai
+        if #needMutation == 0 then
+            StatusLabel.Text = "🎉 Semua pet target sudah bermutasi diinginkan!"
+            isAutoMutation = false
+            MutationToggleButton.Text = "🧬 Auto Mutation: OFF"
+            MutationToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+            mutationLoopActive = false
             break
         end
         
-        updateStatus()
-        wait(5)
-    end
-                        end
+        StatusLabel.Text = string.format(
+            "🧬 Perlu diproses: %d | OK: %d",
+            #needMutation,
+            #alreadyGood
+        )
+        
+        -- Equip tim mutation
+        unequipAllPets()
+        wait(2)
+        
+        local mutationTeamUUIDs = getPresetUUIDs(selectedMutationPreset)
+        equipPetList(mutationTeamUUIDs, "Mutation Team:")
+        wait(3)
+        
+        -- Equip pet yang perlu diproses (batch pertama)
+        local availableSlots = MAX_PET_SLOTS - #mutationTeamUUIDs
+        local toEquip = math.min(availableSlots, #needMutation)
+        
+        local equippedForMutation = {}
+        local pendingMutationList = {}
+        
+        for _, petInfo in ipairs(needMutation) do
+            table.insert(pendingMutationList, petInfo)
+        end
+        
+        -- Equip batch pertama
+        for i = 1, toEquip do
+            if #pendingMutationList > 0 then
+                local petInfo = pendingMutationList[1]
+                table.remove(pendingMutationList, 1)
                 
-                wait(3)
+                -- Equip pet
+                local equipSuccess = equipPet(petInfo.UUID)
+                if equipSuccess then
+                    table.insert(equippedForMutation, petInfo)
+                    wait(1)
+                end
             end
         end
+        
+        wait(2)
+        
+        StatusLabel.Text = string.format("🧬 Memproses %d pet...", #equippedForMutation)
+        
+        -- Monitoring dengan ROTASI
+        while isLeveling and #equippedForMutation > 0 do
+            for i = #equippedForMutation, 1, -1 do
+                local petInfo = equippedForMutation[i]
+                local petUUID = petInfo.UUID
+                local petType = getPetType(petUUID)
+                local status, mutationName = getMutationStatus(petUUID)
+                
+                if status == "desired" then
+                    -- ✅ Mendapat mutasi desired → Selesai untuk pet ini
+                    StatusLabel.Text = string.format("✅ %s dapat %s!", petType, mutationName)
+                    
+                    pcall(function() unequipPet(petUUID) end)
+                    table.remove(equippedForMutation, i)
+                    wait(1)
+                    
+                    -- Ganti dengan pet berikutnya
+                    if #pendingMutationList > 0 then
+                        local nextPet = pendingMutationList[1]
+                        table.remove(pendingMutationList, 1)
+                        
+                        local equipSuccess = equipPet(nextPet.UUID)
+                        if equipSuccess then
+                            table.insert(equippedForMutation, nextPet)
+                            StatusLabel.Text = string.format("🔄 Ganti %s...", getPetType(nextPet.UUID))
+                        end
+                        wait(1)
+                    end
+                    
+                elseif status == "unwanted" then
+                    -- ⚠️ Dapat mutasi unwanted → Cleansing
+                    StatusLabel.Text = string.format("⚠️ %s dapat %s, cleansing...", petType, mutationName)
+                    
+                    local petModel = findPetModelByUUID(petUUID)
+                    if petModel then
+                        local success, errMsg = false, nil
+                        local ok, err = pcall(function()
+                            success, errMsg = useCleansingShard(petUUID)
+                        end)
+                        
+                        if not ok then
+                            StatusLabel.Text = string.format("❌ %s: %s", petType, tostring(err):sub(1, 30))
+                        elseif not success then
+                            StatusLabel.Text = string.format("⚠️ %s: %s", petType, errMsg or "Unknown")
+                        else
+                            StatusLabel.Text = string.format("✅ %s di-cleansing, tunggu mutasi...", petType)
+                        end
+                    end
+                    
+                    -- PENTING: Pet TETAP DI SLOT, tunggu mutasi baru
+                    wait(3)
+                    
+                elseif status == "none" then
+                    -- Pet masih tanpa mutasi → tetap tunggu
+                    -- Tidak ada aksi, biarkan di slot
+                end
+            end
+            
+            -- Cek apakah semua selesai
+            if #equippedForMutation == 0 and #pendingMutationList == 0 then
+                break
+            end
+            
+            updateStatus()
+            wait(5)
+        end
+        
+        -- Kembali ke scan untuk cek apakah semua sudah OK
+        wait(3)
+    end
+                end
         
         -- ==========================================
         -- PRIORITAS 3: LEVELING NORMAL
