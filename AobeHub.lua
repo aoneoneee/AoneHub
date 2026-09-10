@@ -176,6 +176,61 @@ local function unequipPet(petUUID)
     return success
 end
 
+-- Fungsi untuk cek apakah tool adalah Cleansing Shard
+local function isCleansingShard(tool)
+    if not tool:IsA("Tool") then return false end
+    
+    -- Cek attribute "u"
+    local shardType = tool:GetAttribute("u")
+    if shardType then
+        return tostring(shardType) == "Cleansing Pet Shard"
+    end
+    
+    -- Fallback: cek nama tool
+    local nameLower = string.lower(tool.Name)
+    return string.find(nameLower, "cleansing") ~= nil
+end
+
+-- Fungsi untuk cek apakah tool adalah Pet Shard (untuk mutasi)
+local function isPetShard(tool)
+    if not tool:IsA("Tool") then return false end
+    
+    local shardType = tool:GetAttribute("u")
+    if shardType then
+        return tostring(shardType) == "Pet Shard"
+    end
+    
+    return false
+end
+
+-- Fungsi untuk get mutation name dari Pet Shard
+local function getPetShardMutation(tool)
+    if not tool:IsA("Tool") then return nil end
+    return tool:GetAttribute("v")
+end
+
+-- Fungsi untuk get uses (jumlah shard)
+local function getShardUses(tool)
+    if not tool:IsA("Tool") then return 0 end
+    
+    -- Coba beberapa kemungkinan attribute
+    local uses = tool:GetAttribute("Uses") 
+              or tool:GetAttribute("u_uses")
+              or tool:GetAttribute("w")
+    
+    if uses then
+        return tonumber(uses) or 0
+    end
+    
+    -- Fallback: extract dari nama "x15029"
+    local match = string.match(tool.Name, "x(%d+)$")
+    if match then
+        return tonumber(match)
+    end
+    
+    return 1
+end
+
 -- Cek status mutasi pet
 local function getMutationStatus(petUUID)
     local petsData = getPlayerPetData()
@@ -243,16 +298,26 @@ end
 -- Gunakan Cleansing Shard
 local function useCleansingShard(petUUID)
     local backpack = player:FindFirstChild("Backpack")
-    if not backpack then return false end
+    if not backpack then 
+        return false, "Backpack tidak ditemukan"
+    end
     
-    -- Cari Cleansing Shard
+    -- Cari Cleansing Shard berdasarkan attribute "u"
     local cleansingTool = nil
     for _, tool in ipairs(backpack:GetChildren()) do
         if tool:IsA("Tool") then
-            local shardType = tool:GetAttribute("ShardType")
-            local uses = tool:GetAttribute("Uses") or 0
-            
-            if shardType == "Cleansing Pet Shard" and uses > 0 then
+            local shardType = tool:GetAttribute("u")
+            if shardType and tostring(shardType) == "Cleansing Pet Shard" then
+                cleansingTool = tool
+                break
+            end
+        end
+    end
+    
+    -- Fallback: cari berdasarkan nama
+    if not cleansingTool then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") and string.find(string.lower(tool.Name), "cleansing") then
                 cleansingTool = tool
                 break
             end
@@ -260,59 +325,62 @@ local function useCleansingShard(petUUID)
     end
     
     if not cleansingTool then
-        StatusLabel.Text = "⚠️ Tidak ada Cleansing Pet Shard!"
-        return false
+        return false, "Tidak ada Cleansing Shard"
     end
     
-    -- Cari pet model (di PetMover)
-    local petModel = findPetModelByUUID(petUUID)
+    print("✅ Found cleansing tool:", cleansingTool.Name)
     
-    -- Jika belum ada, tunggu sampai muncul (max 5 detik)
+    -- Cari pet model
+    local petModel = findPetModelByUUID(petUUID)
     if not petModel then
-        StatusLabel.Text = "⏳ Menunggu pet model muncul..."
         for i = 1, 10 do
             wait(0.5)
             petModel = findPetModelByUUID(petUUID)
             if petModel then break end
         end
-    end
-    
-    if not petModel then
-        StatusLabel.Text = "⚠️ Pet model tidak ditemukan setelah menunggu"
-        return false
+        
+        if not petModel then
+            return false, "Pet model tidak ditemukan"
+        end
     end
     
     -- Equip tool
     local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        pcall(function()
-            humanoid:EquipTool(cleansingTool)
-        end)
-        wait(0.5)
+    if not humanoid then
+        return false, "Humanoid tidak ditemukan"
     end
     
+    local equipOk = pcall(function()
+        humanoid:EquipTool(cleansingTool)
+    end)
+    
+    if not equipOk then
+        return false, "Gagal equip tool"
+    end
+    
+    wait(0.5)
+    
     -- FireServer
-    local success = pcall(function()
+    local PetShardService_RE = ReplicatedStorage:WaitForChild("GameEvents"):WaitForChild("PetShardService_RE")
+    
+    local fireOk, fireErr = pcall(function()
         PetShardService_RE:FireServer("ApplyShard", petModel)
     end)
     
-    if not success then
-        StatusLabel.Text = "⚠️ Gagal kirim request"
-        return false
+    if not fireOk then
+        return false, "FireServer error: " .. tostring(fireErr)
     end
     
     wait(2)
     
     -- Unequip tool
-    if humanoid then
-        pcall(function()
-            humanoid:UnequipTools()
-        end)
-    end
+    pcall(function()
+        humanoid:UnequipTools()
+    end)
     
     wait(0.5)
     
-    return true
+    return true, nil
 end
 
 -- Save/Load System
