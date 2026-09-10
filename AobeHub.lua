@@ -22,6 +22,31 @@ if playerGui:FindFirstChild("AutoLevelGUI_Standalone") then
 end
 
 -- ==========================================
+-- VARIABLES
+-- ==========================================
+local selectedTeamPreset = nil
+local selectedWeightPreset = nil
+local selectedAdvancedPreset = nil
+local selectedMutationPreset = nil
+local selectedPetTypes = {}
+local queuedPets = {}
+local allSelectedPets = {}
+local equippedTargetPets = {}
+local targetLevel = TARGET_LEVEL_DEFAULT
+local advancedTargetLevel = 150
+local isLeveling = false
+local isAutoWeight = false
+local isAdvancedLeveling = false
+local isAutoMutation = false
+local rainbowMode = false
+local targetSearchText = ""
+local petSearchText = ""
+local mutationSearchText = ""
+local tempPresetPets = {}
+local unwantedMutations = {}
+local availableMutations = {}
+
+-- ==========================================
 -- FUNCTIONS
 -- ==========================================
 local function getPlayerPetData()
@@ -446,31 +471,6 @@ local ContentLayout = Instance.new("UIListLayout")
 ContentLayout.Padding = UDim.new(0, 8)
 ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ContentLayout.Parent = ScrollFrame
-
--- ==========================================
--- VARIABLES
--- ==========================================
-local selectedTeamPreset = nil
-local selectedWeightPreset = nil
-local selectedAdvancedPreset = nil
-local selectedMutationPreset = nil
-local selectedPetTypes = {}
-local queuedPets = {}
-local allSelectedPets = {}
-local equippedTargetPets = {}
-local targetLevel = TARGET_LEVEL_DEFAULT
-local advancedTargetLevel = 150
-local isLeveling = false
-local isAutoWeight = false
-local isAdvancedLeveling = false
-local isAutoMutation = false
-local rainbowMode = false
-local targetSearchText = ""
-local petSearchText = ""
-local mutationSearchText = ""
-local tempPresetPets = {}
-local unwantedMutations = {}
-local availableMutations = {}
 
 local function getWeightTarget()
     return rainbowMode and BASE_WEIGHT_RAINBOW or BASE_WEIGHT_NORMAL
