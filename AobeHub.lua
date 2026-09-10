@@ -155,10 +155,18 @@ local function getEquippedPets()
 end
 
 local function equipPet(petUUID)
-    local success = pcall(function()
+    local success, err = pcall(function()
         PetsService:EquipPet(petUUID, CFrame.new(0, 10, 0))
     end)
-    return success
+    
+    if not success then
+        warn("Equip error:", err)
+        return false
+    end
+    
+    -- Tunggu pet benar-benar ter-equip
+    wait(0.5)
+    return true
 end
 
 local function unequipPet(petUUID)
@@ -1527,20 +1535,12 @@ ToggleButton.MouseButton1Click:Connect(function()
     return #getEquippedPets() == 0
 end
     
-    local function equipPet(petUUID)
-    local success, err = pcall(function()
-        PetsService:EquipPet(petUUID, CFrame.new(0, 10, 0))
-    end)
-    
-    if not success then
-        warn("Equip error:", err)
-        return false
-    end
-    
-    -- Tunggu pet benar-benar ter-equip
-    wait(0.5)
-    return true
+    local function equipPetList(petList, label)
+        for _, petUUID in ipairs(petList) do
+            equipPet(petUUID)
+            wait(0.3)
         end
+    end
     
     spawn(function()
         -- UNEQUIP SEMUA DI AWAL
