@@ -219,26 +219,33 @@ local function findPetModelByUUID(petUUID)
     local petsPhysical = workspace:FindFirstChild("PetsPhysical")
     if not petsPhysical then return nil end
     
-    for _, model in ipairs(petsPhysical:GetChildren()) do
-        if model:IsA("Model") then
-            local uuid = model:GetAttribute("UUID")
-            if uuid == petUUID then
-                return model
+    -- Loop semua PetMover di PetsPhysical
+    for _, child in ipairs(petsPhysical:GetChildren()) do
+        if child.Name == "PetMover" then
+            -- Cek apakah PetMover ini punya child dengan UUID yang dicari
+            local petModel = child:FindFirstChild(petUUID)
+            if petModel then
+                return petModel
             end
         end
     end
+    
+    -- Fallback: cari di semua descendants
+    for _, descendant in ipairs(petsPhysical:GetDescendants()) do
+        if descendant:IsA("Model") and descendant.Name == petUUID then
+            return descendant
+        end
+    end
+    
     return nil
 end
 
 -- Gunakan Cleansing Shard
 local function useCleansingShard(petUUID)
-    -- Cari Cleansing Shard di backpack
     local backpack = player:FindFirstChild("Backpack")
-    if not backpack then 
-        StatusLabel.Text = "⚠️ Backpack tidak ditemukan"
-        return false 
-    end
+    if not backpack then return false end
     
+    -- Cari Cleansing Shard
     local cleansingTool = nil
     for _, tool in ipairs(backpack:GetChildren()) do
         if tool:IsA("Tool") then
@@ -257,48 +264,51 @@ local function useCleansingShard(petUUID)
         return false
     end
     
-    -- Pastikan pet model ada di workspace
+    -- Cari pet model (di PetMover)
     local petModel = findPetModelByUUID(petUUID)
+    
+    -- Jika belum ada, tunggu sampai muncul (max 5 detik)
     if not petModel then
-        StatusLabel.Text = "⚠️ Pet model tidak ditemukan!"
-        return false
+        StatusLabel.Text = "⏳ Menunggu pet model muncul..."
+        for i = 1, 10 do
+            wait(0.5)
+            petModel = findPetModelByUUID(petUUID)
+            if petModel then break end
+        end
     end
     
-    -- Pastikan humanoid ada
-    local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then
-        StatusLabel.Text = "⚠️ Karakter tidak ditemukan!"
+    if not petModel then
+        StatusLabel.Text = "⚠️ Pet model tidak ditemukan setelah menunggu"
         return false
     end
     
     -- Equip tool
+    local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        pcall(function()
+            humanoid:EquipTool(cleansingTool)
+        end)
+        wait(0.5)
+    end
+    
+    -- FireServer
     local success = pcall(function()
-        humanoid:EquipTool(cleansingTool)
+        PetShardService_RE:FireServer("ApplyShard", petModel)
     end)
     
     if not success then
-        StatusLabel.Text = "⚠️ Gagal equip shard"
+        StatusLabel.Text = "⚠️ Gagal kirim request"
         return false
     end
     
-    wait(1) -- Tunggu tool ter-equip
-    
-    -- Activate tool dengan pcall untuk handle error
-    local activateSuccess = pcall(function()
-        cleansingTool:Activate()
-    end)
-    
-    if not activateSuccess then
-        StatusLabel.Text = "⚠️ Gagal menggunakan shard"
-        return false
-    end
-    
-    wait(2) -- Tunggu proses cleansing
+    wait(2)
     
     -- Unequip tool
-    pcall(function()
-        humanoid:UnequipTools()
-    end)
+    if humanoid then
+        pcall(function()
+            humanoid:UnequipTools()
+        end)
+    end
     
     wait(0.5)
     
