@@ -1,4 +1,4 @@
--- Auto Leveling System - Standalone Script (Fixed)
+-- Auto Leveling System - Full Featured with Auto Mutation
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -21,7 +21,9 @@ if playerGui:FindFirstChild("AutoLevelGUI_Standalone") then
     playerGui:FindFirstChild("AutoLevelGUI_Standalone"):Destroy()
 end
 
--- Functions
+-- ==========================================
+-- FUNCTIONS
+-- ==========================================
 local function getPlayerPetData()
     local playerData = DataService:GetData()
     if playerData and playerData.PetsData then
@@ -141,6 +143,94 @@ local function unequipPet(petUUID)
     return success
 end
 
+-- Cek status mutasi pet
+local function getMutationStatus(petUUID)
+    local petsData = getPlayerPetData()
+    if not petsData then return "none" end
+    
+    local petData = petsData.PetInventory.Data[petUUID]
+    if not petData then return "none" end
+    
+    local mutationType = nil
+    if petData.PetData then
+        mutationType = petData.PetData.MutationType
+    end
+    if not mutationType then
+        mutationType = petData.MutationType
+    end
+    
+    if not mutationType or mutationType == "None" or mutationType == "Normal" or mutationType == "m" then
+        return "none"
+    end
+    
+    local mutationName = mutationType
+    local success, registry = pcall(function()
+        return require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
+    end)
+    
+    if success and registry and registry.EnumToPetMutation then
+        mutationName = registry.EnumToPetMutation[mutationType] or mutationType
+    end
+    
+    for _, unwanted in ipairs(unwantedMutations) do
+        if unwanted == mutationName then
+            return "unwanted", mutationName
+        end
+    end
+    
+    return "desired", mutationName
+end
+
+-- Cari pet model di workspace
+local function findPetModelByUUID(petUUID)
+    local petsPhysical = workspace:FindFirstChild("PetsPhysical")
+    if not petsPhysical then return nil end
+    
+    for _, model in ipairs(petsPhysical:GetChildren()) do
+        if model:IsA("Model") then
+            local uuid = model:GetAttribute("UUID")
+            if uuid == petUUID then
+                return model
+            end
+        end
+    end
+    return nil
+end
+
+-- Gunakan Cleansing Shard
+local function useCleansingShard(petUUID)
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return false end
+    
+    local cleansingTool = nil
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            local shardType = tool:GetAttribute("ShardType")
+            local uses = tool:GetAttribute("Uses") or 0
+            
+            if shardType == "Cleansing Pet Shard" and uses > 0 then
+                cleansingTool = tool
+                break
+            end
+        end
+    end
+    
+    if not cleansingTool then
+        return false
+    end
+    
+    local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid:EquipTool(cleansingTool)
+        wait(0.5)
+        cleansingTool:Activate()
+        wait(1)
+        return true
+    end
+    
+    return false
+end
+
 -- Save/Load System
 local function saveTeamPreset(presetName, petList)
     local saveFolder = workspace:FindFirstChild("AutoLevel_Presets_Standalone")
@@ -209,15 +299,17 @@ local function getPresetUUIDs(presetName)
     return {}
 end
 
--- Main GUI
+-- ==========================================
+-- MAIN GUI
+-- ==========================================
 local AutoLevelGUI = Instance.new("ScreenGui")
 AutoLevelGUI.Name = "AutoLevelGUI_Standalone"
 AutoLevelGUI.ResetOnSpawn = false
 AutoLevelGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 380, 0, 620)
-MainFrame.Position = UDim2.new(1, -400, 0.5, -310)
+MainFrame.Size = UDim2.new(0, 380, 0, 700)
+MainFrame.Position = UDim2.new(1, -400, 0.5, -350)
 MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 MainFrame.BorderSizePixel = 0
 MainFrame.ClipsDescendants = true
@@ -227,7 +319,6 @@ local UICornerMain = Instance.new("UICorner")
 UICornerMain.CornerRadius = UDim.new(0, 10)
 UICornerMain.Parent = MainFrame
 
--- Title Bar
 local TitleBar = Instance.new("Frame")
 TitleBar.Size = UDim2.new(1, 0, 0, 40)
 TitleBar.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
@@ -243,7 +334,7 @@ TitleText.Size = UDim2.new(0.6, 0, 1, 0)
 TitleText.Position = UDim2.new(0, 10, 0, 0)
 TitleText.BackgroundTransparency = 1
 TitleText.Font = Enum.Font.GothamBold
-TitleText.Text = "🐾 Auto Leveling v2"
+TitleText.Text = "🐾 Auto Leveling v3"
 TitleText.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleText.TextSize = 14
 TitleText.TextXAlignment = Enum.TextXAlignment.Left
@@ -298,13 +389,12 @@ MinimizeButton.MouseButton1Click:Connect(function()
         ContentFrame.Visible = false
         MinimizeButton.Text = "+"
     else
-        MainFrame.Size = UDim2.new(0, 380, 0, 620)
+        MainFrame.Size = UDim2.new(0, 380, 0, 700)
         ContentFrame.Visible = true
         MinimizeButton.Text = "—"
     end
 end)
 
--- Draggable
 local dragging = false
 local dragInput = nil
 local dragStart = nil
@@ -342,7 +432,6 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- Scroll Frame
 local ScrollFrame = Instance.new("ScrollingFrame")
 ScrollFrame.Size = UDim2.new(1, -20, 1, -10)
 ScrollFrame.Position = UDim2.new(0, 10, 0, 5)
@@ -350,7 +439,7 @@ ScrollFrame.BackgroundTransparency = 1
 ScrollFrame.BorderSizePixel = 0
 ScrollFrame.ScrollBarThickness = 4
 ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1050)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1500)
 ScrollFrame.Parent = ContentFrame
 
 local ContentLayout = Instance.new("UIListLayout")
@@ -358,10 +447,13 @@ ContentLayout.Padding = UDim.new(0, 8)
 ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ContentLayout.Parent = ScrollFrame
 
--- Variables
+-- ==========================================
+-- VARIABLES
+-- ==========================================
 local selectedTeamPreset = nil
 local selectedWeightPreset = nil
 local selectedAdvancedPreset = nil
+local selectedMutationPreset = nil
 local selectedPetTypes = {}
 local queuedPets = {}
 local allSelectedPets = {}
@@ -371,10 +463,14 @@ local advancedTargetLevel = 150
 local isLeveling = false
 local isAutoWeight = false
 local isAdvancedLeveling = false
+local isAutoMutation = false
 local rainbowMode = false
 local targetSearchText = ""
 local petSearchText = ""
+local mutationSearchText = ""
 local tempPresetPets = {}
+local unwantedMutations = {}
+local availableMutations = {}
 
 local function getWeightTarget()
     return rainbowMode and BASE_WEIGHT_RAINBOW or BASE_WEIGHT_NORMAL
@@ -384,7 +480,30 @@ local function getLevelTargetForWeight()
     return rainbowMode and LEVEL_TARGET_RAINBOW or LEVEL_TARGET_NORMAL
 end
 
--- Create Section
+-- Load semua mutasi yang tersedia
+local function loadAvailableMutations()
+    local mutations = {}
+    local success, registry = pcall(function()
+        return require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
+    end)
+    
+    if success and registry and registry.PetMutationRegistry then
+        for mutationName, _ in pairs(registry.PetMutationRegistry) do
+            if mutationName ~= "Normal" and mutationName ~= "Rideable" then
+                table.insert(mutations, mutationName)
+            end
+        end
+    end
+    
+    table.sort(mutations)
+    return mutations
+end
+
+availableMutations = loadAvailableMutations()
+
+-- ==========================================
+-- UI HELPERS
+-- ==========================================
 local function createSection(parent, title)
     local SectionFrame = Instance.new("Frame")
     SectionFrame.Size = UDim2.new(1, -10, 0, 200)
@@ -410,7 +529,6 @@ local function createSection(parent, title)
     return SectionFrame, SectionTitle
 end
 
--- Fungsi untuk membuat dropdown yang bisa di-scroll
 local function createScrollableDropdown(parent, position, size, placeholder)
     local DropdownFrame = Instance.new("Frame")
     DropdownFrame.Size = size
@@ -435,7 +553,9 @@ local function createScrollableDropdown(parent, position, size, placeholder)
     return DropdownFrame, DropdownButton
 end
 
--- ============ PILIH TIM SECTION ============
+-- ==========================================
+-- SECTION: PILIH TIM
+-- ==========================================
 local TeamSelectSection = createSection(ScrollFrame, "👥 Pilih Tim Leveling")
 TeamSelectSection.LayoutOrder = 1
 TeamSelectSection.Size = UDim2.new(1, -10, 0, 120)
@@ -478,7 +598,9 @@ local PresetListLayout = Instance.new("UIListLayout")
 PresetListLayout.Padding = UDim.new(0, 3)
 PresetListLayout.Parent = PresetListFrame
 
--- ============ BUAT PRESET SECTION ============
+-- ==========================================
+-- SECTION: BUAT PRESET
+-- ==========================================
 local CreatePresetSection = createSection(ScrollFrame, "💾 Buat Preset Tim")
 CreatePresetSection.LayoutOrder = 2
 CreatePresetSection.Size = UDim2.new(1, -10, 0, 160)
@@ -544,7 +666,9 @@ local UICornerSave = Instance.new("UICorner")
 UICornerSave.CornerRadius = UDim.new(0, 4)
 UICornerSave.Parent = SavePresetButton
 
--- ============ TARGET LEVEL SECTION ============
+-- ==========================================
+-- SECTION: TARGET LEVEL
+-- ==========================================
 local LevelSection = createSection(ScrollFrame, "🎯 Target Level")
 LevelSection.LayoutOrder = 3
 LevelSection.Size = UDim2.new(1, -10, 0, 70)
@@ -555,7 +679,7 @@ LevelInput.Position = UDim2.new(0, 10, 0, 28)
 LevelInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
 LevelInput.BorderSizePixel = 0
 LevelInput.Font = Enum.Font.Gotham
-LevelInput.PlaceholderText = "Target Level (untuk non-weight)"
+LevelInput.PlaceholderText = "Target Level"
 LevelInput.Text = tostring(TARGET_LEVEL_DEFAULT)
 LevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
 LevelInput.TextSize = 10
@@ -574,7 +698,9 @@ LevelInput.FocusLost:Connect(function()
     end
 end)
 
--- ============ PET TARGET SECTION ============
+-- ==========================================
+-- SECTION: PET TARGET
+-- ==========================================
 local TargetSection = createSection(ScrollFrame, "🎯 Pet Target")
 TargetSection.LayoutOrder = 4
 TargetSection.Size = UDim2.new(1, -10, 0, 160)
@@ -624,7 +750,9 @@ local UICornerScan = Instance.new("UICorner")
 UICornerScan.CornerRadius = UDim.new(0, 4)
 UICornerScan.Parent = ScanButton
 
--- ============ AUTO WEIGHT SECTION ============
+-- ==========================================
+-- SECTION: AUTO WEIGHT
+-- ==========================================
 local WeightSection = createSection(ScrollFrame, "⚖️ Auto Weight")
 WeightSection.LayoutOrder = 5
 WeightSection.Size = UDim2.new(1, -10, 0, 160)
@@ -681,9 +809,96 @@ local WeightPresetLayout = Instance.new("UIListLayout")
 WeightPresetLayout.Padding = UDim.new(0, 2)
 WeightPresetLayout.Parent = WeightPresetListFrame
 
--- ============ ADVANCED SECTION ============
+-- ==========================================
+-- SECTION: AUTO MUTATION
+-- ==========================================
+local MutationSection = createSection(ScrollFrame, "🧬 Auto Mutation")
+MutationSection.LayoutOrder = 6
+MutationSection.Size = UDim2.new(1, -10, 0, 320)
+
+local MutationToggleButton = Instance.new("TextButton")
+MutationToggleButton.Size = UDim2.new(1, -20, 0, 28)
+MutationToggleButton.Position = UDim2.new(0, 10, 0, 28)
+MutationToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+MutationToggleButton.BorderSizePixel = 0
+MutationToggleButton.Font = Enum.Font.GothamBold
+MutationToggleButton.Text = "🧬 Auto Mutation: OFF"
+MutationToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+MutationToggleButton.TextSize = 11
+MutationToggleButton.Parent = MutationSection
+
+local UICornerMutationToggle = Instance.new("UICorner")
+UICornerMutationToggle.CornerRadius = UDim.new(0, 5)
+UICornerMutationToggle.Parent = MutationToggleButton
+
+local MutationPresetDropdown, MutationPresetButton = createScrollableDropdown(
+    MutationSection,
+    UDim2.new(0, 10, 0, 62),
+    UDim2.new(1, -20, 0, 28),
+    "📂 Pilih Preset Tim Mutation"
+)
+
+local MutationPresetListFrame = Instance.new("ScrollingFrame")
+MutationPresetListFrame.Size = UDim2.new(1, -20, 0, 60)
+MutationPresetListFrame.Position = UDim2.new(0, 10, 0, 95)
+MutationPresetListFrame.BackgroundTransparency = 1
+MutationPresetListFrame.BorderSizePixel = 0
+MutationPresetListFrame.ScrollBarThickness = 3
+MutationPresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+MutationPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 60)
+MutationPresetListFrame.Visible = false
+MutationPresetListFrame.Parent = MutationSection
+
+local MutationPresetLayout = Instance.new("UIListLayout")
+MutationPresetLayout.Padding = UDim.new(0, 2)
+MutationPresetLayout.Parent = MutationPresetListFrame
+
+local MutationSearchBox = Instance.new("TextBox")
+MutationSearchBox.Size = UDim2.new(1, -20, 0, 22)
+MutationSearchBox.Position = UDim2.new(0, 10, 0, 128)
+MutationSearchBox.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+MutationSearchBox.BorderSizePixel = 0
+MutationSearchBox.Font = Enum.Font.Gotham
+MutationSearchBox.PlaceholderText = "🔍 Cari mutasi..."
+MutationSearchBox.Text = ""
+MutationSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+MutationSearchBox.TextSize = 10
+MutationSearchBox.Parent = MutationSection
+
+local UICornerMutationSearch = Instance.new("UICorner")
+UICornerMutationSearch.CornerRadius = UDim.new(0, 4)
+UICornerMutationSearch.Parent = MutationSearchBox
+
+local MutationListLabel = Instance.new("TextLabel")
+MutationListLabel.Size = UDim2.new(1, -20, 0, 18)
+MutationListLabel.Position = UDim2.new(0, 10, 0, 152)
+MutationListLabel.BackgroundTransparency = 1
+MutationListLabel.Font = Enum.Font.GothamBold
+MutationListLabel.Text = "❌ Mutasi tidak diinginkan (klik untuk pilih):"
+MutationListLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+MutationListLabel.TextSize = 9
+MutationListLabel.TextXAlignment = Enum.TextXAlignment.Left
+MutationListLabel.Parent = MutationSection
+
+local MutationListFrame = Instance.new("ScrollingFrame")
+MutationListFrame.Size = UDim2.new(1, -20, 0, 140)
+MutationListFrame.Position = UDim2.new(0, 10, 0, 172)
+MutationListFrame.BackgroundTransparency = 1
+MutationListFrame.BorderSizePixel = 0
+MutationListFrame.ScrollBarThickness = 3
+MutationListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+MutationListFrame.CanvasSize = UDim2.new(0, 0, 0, 140)
+MutationListFrame.Parent = MutationSection
+
+local MutationListLayout = Instance.new("UIListLayout")
+MutationListLayout.Padding = UDim.new(0, 2)
+MutationListLayout.Parent = MutationListFrame
+
+-- ==========================================
+-- SECTION: ADVANCED
+-- ==========================================
 local AdvancedSection = createSection(ScrollFrame, "🚀 Advanced (Opsional)")
-AdvancedSection.LayoutOrder = 6
+AdvancedSection.LayoutOrder = 7
 AdvancedSection.Size = UDim2.new(1, -10, 0, 120)
 
 local AdvancedToggleButton = Instance.new("TextButton")
@@ -748,9 +963,11 @@ local AdvancedPresetLayout = Instance.new("UIListLayout")
 AdvancedPresetLayout.Padding = UDim.new(0, 2)
 AdvancedPresetLayout.Parent = AdvancedPresetListFrame
 
--- ============ BUTTON SECTION ============
+-- ==========================================
+-- SECTION: KONTROL
+-- ==========================================
 local ButtonSection = createSection(ScrollFrame, "⚙️ Kontrol")
-ButtonSection.LayoutOrder = 7
+ButtonSection.LayoutOrder = 8
 ButtonSection.Size = UDim2.new(1, -10, 0, 80)
 
 local ToggleButton = Instance.new("TextButton")
@@ -779,7 +996,9 @@ StatusLabel.TextSize = 9
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.Parent = ButtonSection
 
--- Helper Functions
+-- ==========================================
+-- HELPER FUNCTIONS
+-- ==========================================
 local function clearDropdown(listFrame)
     for _, child in pairs(listFrame:GetChildren()) do
         if child:IsA("TextButton") then
@@ -788,7 +1007,6 @@ local function clearDropdown(listFrame)
     end
 end
 
--- Update canvas size dengan mempertimbangkan UIListLayout
 local function updateCanvasSize(scrollingFrame, itemHeight, padding)
     local totalItems = 0
     for _, child in pairs(scrollingFrame:GetChildren()) do
@@ -806,18 +1024,17 @@ local function updateStatus()
     local modeText = rainbowMode and "🌈" or "📊"
     
     StatusLabel.Text = string.format(
-        "%s Mode: %s | Tim: %d | Target: %d | Antrian: %d | Weight: %s | Adv: %s",
+        "%s T:%d | Q:%d | W:%s A:%s M:%s",
         modeText,
-        rainbowMode and "Rainbow" or "Normal",
         teamCount,
-        #equippedTargetPets,
         #queuedPets,
-        isAutoWeight and "ON" or "OFF",
-        isAdvancedLeveling and "ON" or "OFF"
+        isAutoWeight and "✓" or "✗",
+        isAdvancedLeveling and "✓" or "✗",
+        isAutoMutation and "✓" or "✗"
     )
 end
 
--- Populate Preset Dropdown dengan scrolling yang benar
+-- Populate Preset Dropdown
 local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
     clearDropdown(listFrame)
     
@@ -852,8 +1069,44 @@ local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
         end)
     end
     
-    -- Update canvas size
     updateCanvasSize(listFrame, 25, 3)
+end
+
+-- Populate Mutation List
+local function populateMutationList()
+    clearDropdown(MutationListFrame)
+    
+    for _, mutationName in ipairs(availableMutations) do
+        if mutationSearchText == "" or mutationName:lower():find(mutationSearchText:lower()) then
+            local isSelected = table.find(unwantedMutations, mutationName) ~= nil
+            
+            local MutationButton = Instance.new("TextButton")
+            MutationButton.Size = UDim2.new(1, 0, 0, 22)
+            MutationButton.BackgroundColor3 = isSelected and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(70, 70, 85)
+            MutationButton.BorderSizePixel = 0
+            MutationButton.Font = Enum.Font.Gotham
+            MutationButton.Text = isSelected and string.format("❌ %s", mutationName) or string.format("☐ %s", mutationName)
+            MutationButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            MutationButton.TextSize = 9
+            MutationButton.Parent = MutationListFrame
+            
+            local UICorner = Instance.new("UICorner")
+            UICorner.CornerRadius = UDim.new(0, 3)
+            UICorner.Parent = MutationButton
+            
+            MutationButton.MouseButton1Click:Connect(function()
+                local idx = table.find(unwantedMutations, mutationName)
+                if idx then
+                    table.remove(unwantedMutations, idx)
+                else
+                    table.insert(unwantedMutations, mutationName)
+                end
+                populateMutationList()
+            end)
+        end
+    end
+    
+    updateCanvasSize(MutationListFrame, 22, 2)
 end
 
 -- Populate Pet List
@@ -1034,7 +1287,9 @@ local function populateTargetDropdown()
     updateCanvasSize(TargetListFrame, 25, 3)
 end
 
--- Event Handlers
+-- ==========================================
+-- EVENT HANDLERS
+-- ==========================================
 SavePresetButton.MouseButton1Click:Connect(function()
     local presetName = PresetNameInput.Text
     if presetName == "" then StatusLabel.Text = "⚠️ Masukkan nama preset!" return end
@@ -1063,6 +1318,16 @@ WeightPresetButton.MouseButton1Click:Connect(function()
         populatePresetDropdown(WeightPresetListFrame, selectedWeightPreset, function(name)
             selectedWeightPreset = name
             WeightPresetButton.Text = string.format("📂 %s", name)
+        end)
+    end
+end)
+
+MutationPresetButton.MouseButton1Click:Connect(function()
+    MutationPresetListFrame.Visible = not MutationPresetListFrame.Visible
+    if MutationPresetListFrame.Visible then
+        populatePresetDropdown(MutationPresetListFrame, selectedMutationPreset, function(name)
+            selectedMutationPreset = name
+            MutationPresetButton.Text = string.format("📂 %s", name)
         end)
     end
 end)
@@ -1101,6 +1366,18 @@ AdvancedToggleButton.MouseButton1Click:Connect(function()
     updateStatus()
 end)
 
+MutationToggleButton.MouseButton1Click:Connect(function()
+    isAutoMutation = not isAutoMutation
+    if isAutoMutation then
+        MutationToggleButton.Text = "🧬 Auto Mutation: ON"
+        MutationToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+    else
+        MutationToggleButton.Text = "🧬 Auto Mutation: OFF"
+        MutationToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+    end
+    updateStatus()
+end)
+
 RainbowModeButton.MouseButton1Click:Connect(function()
     rainbowMode = not rainbowMode
     if rainbowMode then
@@ -1123,6 +1400,11 @@ TargetSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
     populateTargetDropdown()
 end)
 
+MutationSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    mutationSearchText = MutationSearchBox.Text
+    populateMutationList()
+end)
+
 ScanButton.MouseButton1Click:Connect(function()
     StatusLabel.Text = "Scanning..."
     wait(0.1)
@@ -1130,7 +1412,9 @@ ScanButton.MouseButton1Click:Connect(function()
     updateStatus()
 end)
 
--- MAIN LOGIC (Full Fixed dengan Semua Rotasi)
+-- ==========================================
+-- MAIN LOGIC
+-- ==========================================
 ToggleButton.MouseButton1Click:Connect(function()
     if isLeveling then
         isLeveling = false
@@ -1160,6 +1444,16 @@ ToggleButton.MouseButton1Click:Connect(function()
         return
     end
     
+    if isAutoMutation and not selectedMutationPreset then
+        StatusLabel.Text = "⚠️ Pilih preset mutation!"
+        return
+    end
+    
+    if isAutoMutation and #unwantedMutations == 0 then
+        StatusLabel.Text = "⚠️ Pilih minimal 1 mutasi tidak diinginkan!"
+        return
+    end
+    
     isLeveling = true
     ToggleButton.Text = "⏹️ Stop"
     ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
@@ -1173,14 +1467,11 @@ ToggleButton.MouseButton1Click:Connect(function()
             local equippedPets = getEquippedPets()
             
             if #equippedPets == 0 then
-                StatusLabel.Text = "✅ Semua slot bersih!"
                 return true
             end
             
             for _, petUUID in ipairs(equippedPets) do
-                local petType = getPetType(petUUID)
                 unequipPet(petUUID)
-                StatusLabel.Text = string.format("❌ Unequip %s...", petType)
                 wait(0.3)
             end
             
@@ -1193,272 +1484,374 @@ ToggleButton.MouseButton1Click:Connect(function()
     
     local function equipPetList(petList, label)
         for _, petUUID in ipairs(petList) do
-            local petType = getPetType(petUUID)
             equipPet(petUUID)
-            StatusLabel.Text = string.format("✅ %s %s...", label, petType)
             wait(0.3)
         end
     end
     
     spawn(function()
-        -- ==========================================
-        -- LANGKAH 0: UNEQUIP SEMUA DI AWAL
-        -- ==========================================
+        -- UNEQUIP SEMUA DI AWAL
         unequipAllPets()
         wait(2)
         
         -- ==========================================
-        -- MAIN LOOP
+        -- PRIORITAS 1: AUTO WEIGHT (jika aktif)
         -- ==========================================
-        while isLeveling do
-            local weightTarget = getWeightTarget()
-            local levelTargetForWeight = getLevelTargetForWeight()
+        if isAutoWeight then
+            local weightLoopActive = true
             
-            -- ==========================================
-            -- AUTO WEIGHT LOOP (TERPISAH)
-            -- ==========================================
-            if isAutoWeight then
-                local weightLoopActive = true
+            while isLeveling and weightLoopActive do
+                local weightTarget = getWeightTarget()
+                local levelTargetForWeight = getLevelTargetForWeight()
                 
-                while isLeveling and weightLoopActive do
-                    StatusLabel.Text = string.format("⚖️ Scan weight (Target: %.1f)...", weightTarget)
-                    
-                    -- Scan pet yang butuh weight
-                    local weightPets = {}
-                    for _, petUUID in ipairs(allSelectedPets) do
-                        local petWeight = getPetWeight(petUUID)
-                        if petWeight < weightTarget then
-                            table.insert(weightPets, petUUID)
-                        end
+                StatusLabel.Text = string.format("⚖️ Scan weight (Target: %.1f)...", weightTarget)
+                
+                local weightPets = {}
+                for _, petUUID in ipairs(allSelectedPets) do
+                    if getPetWeight(petUUID) < weightTarget then
+                        table.insert(weightPets, petUUID)
                     end
-                    
-                    if #weightPets == 0 then
-                        StatusLabel.Text = "✅ Semua base weight tercapai!"
-                        isAutoWeight = false
-                        WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
-                        WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
-                        weightLoopActive = false
-                        break
+                end
+                
+                if #weightPets == 0 then
+                    StatusLabel.Text = "✅ Semua base weight tercapai!"
+                    isAutoWeight = false
+                    WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
+                    WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+                    weightLoopActive = false
+                    break
+                end
+                
+                -- Leveling ke 40/50
+                local levelTargets = {}
+                for _, petUUID in ipairs(weightPets) do
+                    if getPetLevel(petUUID) < levelTargetForWeight then
+                        table.insert(levelTargets, petUUID)
                     end
-                    
-                    StatusLabel.Text = string.format("⚖️ %d pet butuh weight", #weightPets)
-                    
-                    -- ==========================================
-                    -- LANGKAH 2: LEVELING KE 40/50 (DENGAN ROTASI)
-                    -- ==========================================
-                    local levelTargets = {}
-                    for _, petUUID in ipairs(weightPets) do
-                        if getPetLevel(petUUID) < levelTargetForWeight then
-                            table.insert(levelTargets, petUUID)
-                        end
-                    end
-                    
-                    if #levelTargets > 0 then
-                        StatusLabel.Text = string.format("📈 Leveling %d pet ke Lv.%d...", #levelTargets, levelTargetForWeight)
-                        
-                        unequipAllPets()
-                        wait(1)
-                        
-                        local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
-                        equipPetList(teamUUIDs, "Tim:")
-                        wait(1)
-                        
-                        local availableSlots = MAX_PET_SLOTS - #teamUUIDs
-                        local toEquip = math.min(availableSlots, #levelTargets)
-                        
-                        local levelingEquippedPets = {}
-                        local pendingLevelTargets = {}
-                        
-                        for _, petUUID in ipairs(levelTargets) do
-                            table.insert(pendingLevelTargets, petUUID)
-                        end
-                        
-                        -- Equip batch pertama
-                        for i = 1, toEquip do
-                            if #pendingLevelTargets > 0 then
-                                local petUUID = pendingLevelTargets[1]
-                                table.remove(pendingLevelTargets, 1)
-                                equipPet(petUUID)
-                                table.insert(levelingEquippedPets, petUUID)
-                                wait(0.3)
-                            end
-                        end
-                        
-                        -- Monitoring leveling dengan rotasi
-                        while isLeveling and #levelingEquippedPets > 0 do
-                            for i = #levelingEquippedPets, 1, -1 do
-                                local petUUID = levelingEquippedPets[i]
-                                local petLevel = getPetLevel(petUUID)
-                                local petType = getPetType(petUUID)
-                                
-                                if petLevel >= levelTargetForWeight then
-                                    StatusLabel.Text = string.format("✅ %s Lv.%d!", petType, petLevel)
-                                    unequipPet(petUUID)
-                                    table.remove(levelingEquippedPets, i)
-                                    
-                                    -- Ganti dengan pet lain yang belum level
-                                    if #pendingLevelTargets > 0 then
-                                        local nextPet = pendingLevelTargets[1]
-                                        table.remove(pendingLevelTargets, 1)
-                                        
-                                        if getPetLevel(nextPet) < levelTargetForWeight then
-                                            equipPet(nextPet)
-                                            table.insert(levelingEquippedPets, nextPet)
-                                            StatusLabel.Text = string.format("🔄 Ganti %s...", getPetType(nextPet))
-                                            wait(0.3)
-                                        end
-                                    end
-                                end
-                            end
-                            
-                            -- Cek semua sudah level
-                            local allLeveled = true
-                            for _, petUUID in ipairs(levelTargets) do
-                                if getPetLevel(petUUID) < levelTargetForWeight then
-                                    allLeveled = false
-                                    break
-                                end
-                            end
-                            
-                            if allLeveled then break end
-                            if #levelingEquippedPets == 0 and #pendingLevelTargets == 0 then break end
-                            
-                            updateStatus()
-                            wait(5)
-                        end
-                    end
-                    
-                    -- ==========================================
-                    -- LANGKAH 3: PROSES WEIGHT (DENGAN ROTASI)
-                    -- ==========================================
-                    StatusLabel.Text = "🔄 Ganti ke tim weight..."
-                    
+                end
+                
+                if #levelTargets > 0 then
                     unequipAllPets()
                     wait(1)
                     
-                    local weightUUIDs = getPresetUUIDs(selectedWeightPreset)
-                    equipPetList(weightUUIDs, "Weight:")
-                    wait(2)
+                    local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
+                    equipPetList(teamUUIDs, "Tim:")
+                    wait(1)
                     
-                    -- Kumpulkan pet yang siap weight
-                    local readyForWeight = {}
-                    for _, petUUID in ipairs(weightPets) do
-                        if getPetLevel(petUUID) >= levelTargetForWeight then
-                            table.insert(readyForWeight, petUUID)
+                    local availableSlots = MAX_PET_SLOTS - #teamUUIDs
+                    local toEquip = math.min(availableSlots, #levelTargets)
+                    
+                    local levelingEquippedPets = {}
+                    local pendingLevelTargets = {}
+                    
+                    for _, petUUID in ipairs(levelTargets) do
+                        table.insert(pendingLevelTargets, petUUID)
+                    end
+                    
+                    for i = 1, toEquip do
+                        if #pendingLevelTargets > 0 then
+                            local petUUID = pendingLevelTargets[1]
+                            table.remove(pendingLevelTargets, 1)
+                            equipPet(petUUID)
+                            table.insert(levelingEquippedPets, petUUID)
+                            wait(0.3)
                         end
                     end
                     
-                    if #readyForWeight > 0 then
-                        local availableSlots = MAX_PET_SLOTS - #weightUUIDs
-                        local toEquip = math.min(availableSlots, #readyForWeight)
-                        
-                        local weightEquippedPets = {}
-                        local pendingWeightPets = {}
-                        
-                        for _, petUUID in ipairs(readyForWeight) do
-                            table.insert(pendingWeightPets, petUUID)
-                        end
-                        
-                        -- Equip batch pertama
-                        for i = 1, toEquip do
-                            if #pendingWeightPets > 0 then
-                                local petUUID = pendingWeightPets[1]
-                                table.remove(pendingWeightPets, 1)
-                                equipPet(petUUID)
-                                table.insert(weightEquippedPets, petUUID)
-                                wait(0.3)
-                            end
-                        end
-                        
-                        StatusLabel.Text = "⚖️ Proses weight..."
-                        
-                        -- Monitoring weight dengan rotasi
-                        while isLeveling and #weightEquippedPets > 0 do
-                            for i = #weightEquippedPets, 1, -1 do
-                                local petUUID = weightEquippedPets[i]
-                                local petWeight = getPetWeight(petUUID)
-                                local petLevel = getPetLevel(petUUID)
-                                local petType = getPetType(petUUID)
+                    while isLeveling and #levelingEquippedPets > 0 do
+                        for i = #levelingEquippedPets, 1, -1 do
+                            local petUUID = levelingEquippedPets[i]
+                            if getPetLevel(petUUID) >= levelTargetForWeight then
+                                unequipPet(petUUID)
+                                table.remove(levelingEquippedPets, i)
                                 
-                                if petWeight >= weightTarget then
-                                    -- Weight tercapai
-                                    StatusLabel.Text = string.format("✅ %s weight %.1f!", petType, petWeight)
-                                    unequipPet(petUUID)
-                                    table.remove(weightEquippedPets, i)
-                                    
-                                    if #pendingWeightPets > 0 then
-                                        local nextPet = pendingWeightPets[1]
-                                        table.remove(pendingWeightPets, 1)
-                                        
-                                        if getPetLevel(nextPet) >= levelTargetForWeight then
-                                            equipPet(nextPet)
-                                            table.insert(weightEquippedPets, nextPet)
-                                            StatusLabel.Text = string.format("🔄 Ganti %s...", getPetType(nextPet))
-                                            wait(0.3)
-                                        end
-                                    end
-                                elseif petLevel < levelTargetForWeight then
-                                    -- Level turun di bawah syarat
-                                    StatusLabel.Text = string.format("⚠️ %s level turun, ganti...", petType)
-                                    unequipPet(petUUID)
-                                    table.remove(weightEquippedPets, i)
-                                    
-                                    if #pendingWeightPets > 0 then
-                                        local nextPet = pendingWeightPets[1]
-                                        table.remove(pendingWeightPets, 1)
-                                        
-                                        if getPetLevel(nextPet) >= levelTargetForWeight then
-                                            equipPet(nextPet)
-                                            table.insert(weightEquippedPets, nextPet)
-                                            StatusLabel.Text = string.format("🔄 Ganti %s...", getPetType(nextPet))
-                                            wait(0.3)
-                                        end
+                                if #pendingLevelTargets > 0 then
+                                    local nextPet = pendingLevelTargets[1]
+                                    table.remove(pendingLevelTargets, 1)
+                                    if getPetLevel(nextPet) < levelTargetForWeight then
+                                        equipPet(nextPet)
+                                        table.insert(levelingEquippedPets, nextPet)
+                                        wait(0.3)
                                     end
                                 end
                             end
-                            
-                            -- Cek semua weight tercapai
-                            local allWeightDone = true
-                            for _, petUUID in ipairs(allSelectedPets) do
-                                if getPetWeight(petUUID) < weightTarget then
-                                    allWeightDone = false
-                                    break
-                                end
-                            end
-                            
-                            if allWeightDone then
-                                StatusLabel.Text = "✅ Semua base weight tercapai!"
-                                isAutoWeight = false
-                                WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
-                                WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
-                                weightLoopActive = false
-                                break
-                            end
-                            
-                            -- Kembali ke scan weight jika tidak ada siap
-                            if #weightEquippedPets == 0 and #pendingWeightPets == 0 then
-                                StatusLabel.Text = "🔄 Kembali ke scan weight..."
-                                break
-                            end
-                            
-                            updateStatus()
-                            wait(5)
                         end
+                        
+                        local allLeveled = true
+                        for _, petUUID in ipairs(levelTargets) do
+                            if getPetLevel(petUUID) < levelTargetForWeight then
+                                allLeveled = false
+                                break
+                            end
+                        end
+                        
+                        if allLeveled then break end
+                        if #levelingEquippedPets == 0 and #pendingLevelTargets == 0 then break end
+                        
+                        updateStatus()
+                        wait(5)
+                    end
+                end
+                
+                -- Proses weight
+                unequipAllPets()
+                wait(1)
+                
+                local weightUUIDs = getPresetUUIDs(selectedWeightPreset)
+                equipPetList(weightUUIDs, "Weight:")
+                wait(2)
+                
+                local readyForWeight = {}
+                for _, petUUID in ipairs(weightPets) do
+                    if getPetLevel(petUUID) >= levelTargetForWeight then
+                        table.insert(readyForWeight, petUUID)
+                    end
+                end
+                
+                if #readyForWeight > 0 then
+                    local availableSlots = MAX_PET_SLOTS - #weightUUIDs
+                    local toEquip = math.min(availableSlots, #readyForWeight)
+                    
+                    local weightEquippedPets = {}
+                    local pendingWeightPets = {}
+                    
+                    for _, petUUID in ipairs(readyForWeight) do
+                        table.insert(pendingWeightPets, petUUID)
+                    end
+                    
+                    for i = 1, toEquip do
+                        if #pendingWeightPets > 0 then
+                            local petUUID = pendingWeightPets[1]
+                            table.remove(pendingWeightPets, 1)
+                            equipPet(petUUID)
+                            table.insert(weightEquippedPets, petUUID)
+                            wait(0.3)
+                        end
+                    end
+                    
+                    while isLeveling and #weightEquippedPets > 0 do
+                        for i = #weightEquippedPets, 1, -1 do
+                            local petUUID = weightEquippedPets[i]
+                            if getPetWeight(petUUID) >= weightTarget then
+                                unequipPet(petUUID)
+                                table.remove(weightEquippedPets, i)
+                                
+                                if #pendingWeightPets > 0 then
+                                    local nextPet = pendingWeightPets[1]
+                                    table.remove(pendingWeightPets, 1)
+                                    if getPetLevel(nextPet) >= levelTargetForWeight then
+                                        equipPet(nextPet)
+                                        table.insert(weightEquippedPets, nextPet)
+                                        wait(0.3)
+                                    end
+                                end
+                            elseif getPetLevel(petUUID) < levelTargetForWeight then
+                                unequipPet(petUUID)
+                                table.remove(weightEquippedPets, i)
+                                
+                                if #pendingWeightPets > 0 then
+                                    local nextPet = pendingWeightPets[1]
+                                    table.remove(pendingWeightPets, 1)
+                                    if getPetLevel(nextPet) >= levelTargetForWeight then
+                                        equipPet(nextPet)
+                                        table.insert(weightEquippedPets, nextPet)
+                                        wait(0.3)
+                                    end
+                                end
+                            end
+                        end
+                        
+                        local allWeightDone = true
+                        for _, petUUID in ipairs(allSelectedPets) do
+                            if getPetWeight(petUUID) < weightTarget then
+                                allWeightDone = false
+                                break
+                            end
+                        end
+                        
+                        if allWeightDone then
+                            StatusLabel.Text = "✅ Semua base weight tercapai!"
+                            isAutoWeight = false
+                            WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
+                            WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+                            weightLoopActive = false
+                            break
+                        end
+                        
+                        if #weightEquippedPets == 0 and #pendingWeightPets == 0 then
+                            break
+                        end
+                        
+                        updateStatus()
+                        wait(5)
+                    end
+                end
+                
+                wait(3)
+            end
+        end
+        
+        -- ==========================================
+        -- PRIORITAS 2: AUTO MUTATION (jika aktif)
+        -- ==========================================
+        if isAutoMutation and isLeveling then
+            local mutationLoopActive = true
+            
+            while isLeveling and mutationLoopActive do
+                StatusLabel.Text = "🧬 Scan status mutasi pet target..."
+                
+                local needMutation = {}
+                local needCleansing = {}
+                local alreadyGood = {}
+                
+                for _, petUUID in ipairs(allSelectedPets) do
+                    local status, mutationName = getMutationStatus(petUUID)
+                    
+                    if status == "none" then
+                        table.insert(needMutation, petUUID)
+                    elseif status == "unwanted" then
+                        table.insert(needCleansing, {UUID = petUUID, Mutation = mutationName})
                     else
-                        StatusLabel.Text = "🔄 Tidak ada pet siap weight, kembali ke scan..."
+                        table.insert(alreadyGood, petUUID)
+                    end
+                end
+                
+                if #needMutation == 0 and #needCleansing == 0 then
+                    StatusLabel.Text = "🎉 Semua pet target sudah bermutasi diinginkan!"
+                    isAutoMutation = false
+                    MutationToggleButton.Text = "🧬 Auto Mutation: OFF"
+                    MutationToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+                    mutationLoopActive = false
+                    break
+                end
+                
+                StatusLabel.Text = string.format(
+                    "🧬 Tanpa: %d | Cleansing: %d | OK: %d",
+                    #needMutation,
+                    #needCleansing,
+                    #alreadyGood
+                )
+                
+                -- LANGKAH 1: CLEANSING MUTASI TIDAK DIINGINKAN
+                if #needCleansing > 0 then
+                    unequipAllPets()
+                    wait(1)
+                    
+                    local mutationTeamUUIDs = getPresetUUIDs(selectedMutationPreset)
+                    equipPetList(mutationTeamUUIDs, "Mutation Team:")
+                    wait(2)
+                    
+                    local availableSlots = MAX_PET_SLOTS - #mutationTeamUUIDs
+                    local toProcess = math.min(availableSlots, #needCleansing)
+                    
+                    for i = 1, toProcess do
+                        local petInfo = needCleansing[i]
+                        local petUUID = petInfo.UUID
+                        local petType = getPetType(petUUID)
+                        
+                        equipPet(petUUID)
+                        wait(1.5)
+                        
+                        StatusLabel.Text = string.format("🧬 Cleansing %s (%s)...", petType, petInfo.Mutation)
+                        
+                        local success = useCleansingShard(petUUID)
+                        
+                        if success then
+                            StatusLabel.Text = string.format("✅ %s di-cleansing!", petType)
+                        else
+                            StatusLabel.Text = string.format("⚠️ Gagal cleansing %s", petType)
+                        end
+                        
+                        wait(2)
                     end
                     
                     wait(3)
-                    -- Loop kembali ke scan weight
                 end
+                
+                -- LANGKAH 2: EQUIP PET TANPA MUTASI + TUNGGU MUTASI
+                if #needMutation > 0 then
+                    unequipAllPets()
+                    wait(1)
+                    
+                    local mutationTeamUUIDs = getPresetUUIDs(selectedMutationPreset)
+                    equipPetList(mutationTeamUUIDs, "Mutation Team:")
+                    wait(2)
+                    
+                    local availableSlots = MAX_PET_SLOTS - #mutationTeamUUIDs
+                    local toEquip = math.min(availableSlots, #needMutation)
+                    
+                    local equippedForMutation = {}
+                    local pendingMutationList = {}
+                    
+                    for _, petUUID in ipairs(needMutation) do
+                        table.insert(pendingMutationList, petUUID)
+                    end
+                    
+                    for i = 1, toEquip do
+                        if #pendingMutationList > 0 then
+                            local petUUID = pendingMutationList[1]
+                            table.remove(pendingMutationList, 1)
+                            equipPet(petUUID)
+                            table.insert(equippedForMutation, petUUID)
+                            wait(0.5)
+                        end
+                    end
+                    
+                    StatusLabel.Text = string.format("🧬 Menunggu %d pet mendapat mutasi...", #equippedForMutation)
+                    
+                    while isLeveling and #equippedForMutation > 0 do
+                        for i = #equippedForMutation, 1, -1 do
+                            local petUUID = equippedForMutation[i]
+                            local petType = getPetType(petUUID)
+                            local status, mutationName = getMutationStatus(petUUID)
+                            
+                            if status == "desired" then
+                                StatusLabel.Text = string.format("✅ %s mendapat %s!", petType, mutationName)
+                                unequipPet(petUUID)
+                                table.remove(equippedForMutation, i)
+                                
+                                if #pendingMutationList > 0 then
+                                    local nextPet = pendingMutationList[1]
+                                    table.remove(pendingMutationList, 1)
+                                    equipPet(nextPet)
+                                    table.insert(equippedForMutation, nextPet)
+                                    StatusLabel.Text = string.format("🔄 Ganti dengan %s...", getPetType(nextPet))
+                                    wait(0.5)
+                                end
+                            elseif status == "unwanted" then
+                                StatusLabel.Text = string.format("⚠️ %s dapat %s, cleansing...", petType, mutationName)
+                                
+                                local success = useCleansingShard(petUUID)
+                                
+                                if success then
+                                    StatusLabel.Text = string.format("✅ %s di-cleansing, tunggu lagi...", petType)
+                                else
+                                    StatusLabel.Text = string.format("⚠️ Gagal cleansing %s", petType)
+                                end
+                                
+                                wait(2)
+                            end
+                        end
+                        
+                        if #equippedForMutation == 0 and #pendingMutationList == 0 then
+                            break
+                        end
+                        
+                        updateStatus()
+                        wait(5)
+                    end
+                end
+                
+                wait(3)
             end
-            
-            -- ==========================================
-            -- LEVELING NORMAL (DENGAN ROTASI)
-            -- ==========================================
+        end
+        
+        -- ==========================================
+        -- PRIORITAS 3: LEVELING NORMAL
+        -- ==========================================
+        if isLeveling then
             StatusLabel.Text = string.format("📈 Leveling normal ke Lv.%d...", targetLevel)
             
-            -- Kumpulkan pet yang belum mencapai targetLevel
             local pendingNormalPets = {}
             for _, petUUID in ipairs(allSelectedPets) do
                 if getPetLevel(petUUID) < targetLevel then
@@ -1484,7 +1877,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                     table.insert(pendingNormalList, petUUID)
                 end
                 
-                -- Equip batch pertama
                 for i = 1, toEquip do
                     if #pendingNormalList > 0 then
                         local petUUID = pendingNormalList[1]
@@ -1495,34 +1887,25 @@ ToggleButton.MouseButton1Click:Connect(function()
                     end
                 end
                 
-                -- Monitoring leveling normal dengan rotasi
                 while isLeveling and #normalEquippedPets > 0 do
                     for i = #normalEquippedPets, 1, -1 do
                         local petUUID = normalEquippedPets[i]
-                        local petLevel = getPetLevel(petUUID)
-                        local petType = getPetType(petUUID)
-                        
-                        if petLevel >= targetLevel then
-                            StatusLabel.Text = string.format("✅ %s Lv.%d!", petType, petLevel)
+                        if getPetLevel(petUUID) >= targetLevel then
                             unequipPet(petUUID)
                             table.remove(normalEquippedPets, i)
                             
-                            -- Ganti dengan pet lain
                             if #pendingNormalList > 0 then
                                 local nextPet = pendingNormalList[1]
                                 table.remove(pendingNormalList, 1)
-                                
                                 if getPetLevel(nextPet) < targetLevel then
                                     equipPet(nextPet)
                                     table.insert(normalEquippedPets, nextPet)
-                                    StatusLabel.Text = string.format("🔄 Ganti %s...", getPetType(nextPet))
                                     wait(0.3)
                                 end
                             end
                         end
                     end
                     
-                    -- Cek semua sudah mencapai targetLevel
                     local allNormalDone = true
                     for _, petUUID in ipairs(allSelectedPets) do
                         if getPetLevel(petUUID) < targetLevel then
@@ -1538,181 +1921,134 @@ ToggleButton.MouseButton1Click:Connect(function()
                     wait(5)
                 end
             end
-            
-            -- ==========================================
-            -- CEK ADVANCED LEVELING (DENGAN ROTASI)
-            -- ==========================================
-            if isAdvancedLeveling then
-                local allReachedNormalTarget = true
-                for _, petUUID in ipairs(allSelectedPets) do
-                    if getPetLevel(petUUID) < targetLevel then
-                        allReachedNormalTarget = false
-                        break
-                    end
-                end
-                
-                if allReachedNormalTarget then
-                    StatusLabel.Text = string.format("✅ Semua Lv.%d tercapai!", targetLevel)
-                    wait(1)
-                    
-                    unequipAllPets()
-                    wait(1)
-                    
-                    StatusLabel.Text = "🚀 Equip tim advanced..."
-                    
-                    local advancedUUIDs = getPresetUUIDs(selectedAdvancedPreset)
-                    equipPetList(advancedUUIDs, "Advanced:")
-                    wait(2)
-                    
-                    -- Kumpulkan pet yang belum mencapai advancedTargetLevel
-                    local pendingAdvancedList = {}
-                    for _, petUUID in ipairs(allSelectedPets) do
-                        if getPetLevel(petUUID) < advancedTargetLevel then
-                            table.insert(pendingAdvancedList, petUUID)
-                        end
-                    end
-                    
-                    if #pendingAdvancedList > 0 then
-                        StatusLabel.Text = string.format("🚀 Leveling advanced ke Lv.%d...", advancedTargetLevel)
-                        
-                        local availableSlots = MAX_PET_SLOTS - #advancedUUIDs
-                        local toEquip = math.min(availableSlots, #pendingAdvancedList)
-                        
-                        local advancedEquippedPets = {}
-                        
-                        -- Equip batch pertama
-                        for i = 1, toEquip do
-                            if #pendingAdvancedList > 0 then
-                                local petUUID = pendingAdvancedList[1]
-                                table.remove(pendingAdvancedList, 1)
-                                equipPet(petUUID)
-                                table.insert(advancedEquippedPets, petUUID)
-                                wait(0.3)
-                            end
-                        end
-                        
-                        -- Monitoring advanced dengan rotasi
-                        while isLeveling and #advancedEquippedPets > 0 do
-                            for i = #advancedEquippedPets, 1, -1 do
-                                local petUUID = advancedEquippedPets[i]
-                                local petLevel = getPetLevel(petUUID)
-                                local petType = getPetType(petUUID)
-                                
-                                if petLevel >= advancedTargetLevel then
-                                    StatusLabel.Text = string.format("✅ %s Lv.%d!", petType, petLevel)
-                                    unequipPet(petUUID)
-                                    table.remove(advancedEquippedPets, i)
-                                    
-                                    -- Ganti dengan pet lain yang belum mencapai target
-                                    if #pendingAdvancedList > 0 then
-                                        local nextPet = pendingAdvancedList[1]
-                                        table.remove(pendingAdvancedList, 1)
-                                        
-                                        if getPetLevel(nextPet) < advancedTargetLevel then
-                                            equipPet(nextPet)
-                                            table.insert(advancedEquippedPets, nextPet)
-                                            StatusLabel.Text = string.format("🔄 Ganti %s...", getPetType(nextPet))
-                                            wait(0.3)
-                                        end
-                                    end
-                                end
-                            end
-                            
-                            -- Cek semua sudah mencapai advancedTargetLevel
-                            local allAdvancedDone = true
-                            for _, petUUID in ipairs(allSelectedPets) do
-                                if getPetLevel(petUUID) < advancedTargetLevel then
-                                    allAdvancedDone = false
-                                    break
-                                end
-                            end
-                            
-                            if allAdvancedDone then
-                                StatusLabel.Text = string.format("🎉 Semua Lv.%d (Advanced)!", advancedTargetLevel)
-                                isLeveling = false
-                                ToggleButton.Text = "▶️ Mulai"
-                                ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
-                                updateStatus()
-                                break
-                            end
-                            
-                            -- Jika tidak ada yang di-equip dan tidak ada pending, re-equip
-                            if #advancedEquippedPets == 0 and #pendingAdvancedList == 0 then
-                                local stillNeed = false
-                                for _, petUUID in ipairs(allSelectedPets) do
-                                    if getPetLevel(petUUID) < advancedTargetLevel then
-                                        stillNeed = true
-                                        break
-                                    end
-                                end
-                                
-                                if stillNeed then
-                                    StatusLabel.Text = "🔄 Re-equip pet yang belum selesai..."
-                                    wait(2)
-                                    
-                                    for _, petUUID in ipairs(allSelectedPets) do
-                                        if getPetLevel(petUUID) < advancedTargetLevel then
-                                            table.insert(pendingAdvancedList, petUUID)
-                                        end
-                                    end
-                                    
-                                    local reEquip = math.min(availableSlots, #pendingAdvancedList)
-                                    for i = 1, reEquip do
-                                        if #pendingAdvancedList > 0 then
-                                            local petUUID = pendingAdvancedList[1]
-                                            table.remove(pendingAdvancedList, 1)
-                                            equipPet(petUUID)
-                                            table.insert(advancedEquippedPets, petUUID)
-                                            wait(0.3)
-                                        end
-                                    end
-                                else
-                                    break
-                                end
-                            end
-                            
-                            updateStatus()
-                            wait(5)
-                        end
-                    else
-                        StatusLabel.Text = string.format("🎉 Semua sudah Lv.%d (Advanced)!", advancedTargetLevel)
-                        isLeveling = false
-                        ToggleButton.Text = "▶️ Mulai"
-                        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
-                        updateStatus()
-                    end
-                    
-                    break
-                end
-            else
-                -- Tidak ada advanced
-                local allDone = true
-                for _, petUUID in ipairs(allSelectedPets) do
-                    if getPetLevel(petUUID) < targetLevel then
-                        allDone = false
-                        break
-                    end
-                end
-                
-                if allDone then
-                    StatusLabel.Text = string.format("🎉 Semua selesai Lv.%d!", targetLevel)
-                    isLeveling = false
-                    ToggleButton.Text = "▶️ Mulai"
-                    ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
-                    updateStatus()
+        end
+        
+        -- ==========================================
+        -- PRIORITAS 4: ADVANCED LEVELING
+        -- ==========================================
+        if isAdvancedLeveling and isLeveling then
+            local allReachedNormalTarget = true
+            for _, petUUID in ipairs(allSelectedPets) do
+                if getPetLevel(petUUID) < targetLevel then
+                    allReachedNormalTarget = false
                     break
                 end
             end
             
-            wait(5)
+            if allReachedNormalTarget then
+                unequipAllPets()
+                wait(1)
+                
+                local advancedUUIDs = getPresetUUIDs(selectedAdvancedPreset)
+                equipPetList(advancedUUIDs, "Advanced:")
+                wait(2)
+                
+                local pendingAdvancedList = {}
+                for _, petUUID in ipairs(allSelectedPets) do
+                    if getPetLevel(petUUID) < advancedTargetLevel then
+                        table.insert(pendingAdvancedList, petUUID)
+                    end
+                end
+                
+                if #pendingAdvancedList > 0 then
+                    local availableSlots = MAX_PET_SLOTS - #advancedUUIDs
+                    local toEquip = math.min(availableSlots, #pendingAdvancedList)
+                    
+                    local advancedEquippedPets = {}
+                    
+                    for i = 1, toEquip do
+                        if #pendingAdvancedList > 0 then
+                            local petUUID = pendingAdvancedList[1]
+                            table.remove(pendingAdvancedList, 1)
+                            equipPet(petUUID)
+                            table.insert(advancedEquippedPets, petUUID)
+                            wait(0.3)
+                        end
+                    end
+                    
+                    while isLeveling and #advancedEquippedPets > 0 do
+                        for i = #advancedEquippedPets, 1, -1 do
+                            local petUUID = advancedEquippedPets[i]
+                            if getPetLevel(petUUID) >= advancedTargetLevel then
+                                unequipPet(petUUID)
+                                table.remove(advancedEquippedPets, i)
+                                
+                                if #pendingAdvancedList > 0 then
+                                    local nextPet = pendingAdvancedList[1]
+                                    table.remove(pendingAdvancedList, 1)
+                                    if getPetLevel(nextPet) < advancedTargetLevel then
+                                        equipPet(nextPet)
+                                        table.insert(advancedEquippedPets, nextPet)
+                                        wait(0.3)
+                                    end
+                                end
+                            end
+                        end
+                        
+                        local allAdvancedDone = true
+                        for _, petUUID in ipairs(allSelectedPets) do
+                            if getPetLevel(petUUID) < advancedTargetLevel then
+                                allAdvancedDone = false
+                                break
+                            end
+                        end
+                        
+                        if allAdvancedDone then break end
+                        
+                        if #advancedEquippedPets == 0 and #pendingAdvancedList == 0 then
+                            local stillNeed = false
+                            for _, petUUID in ipairs(allSelectedPets) do
+                                if getPetLevel(petUUID) < advancedTargetLevel then
+                                    stillNeed = true
+                                    break
+                                end
+                            end
+                            
+                            if stillNeed then
+                                for _, petUUID in ipairs(allSelectedPets) do
+                                    if getPetLevel(petUUID) < advancedTargetLevel then
+                                        table.insert(pendingAdvancedList, petUUID)
+                                    end
+                                end
+                                
+                                local reEquip = math.min(availableSlots, #pendingAdvancedList)
+                                for i = 1, reEquip do
+                                    if #pendingAdvancedList > 0 then
+                                        local petUUID = pendingAdvancedList[1]
+                                        table.remove(pendingAdvancedList, 1)
+                                        equipPet(petUUID)
+                                        table.insert(advancedEquippedPets, petUUID)
+                                        wait(0.3)
+                                    end
+                                end
+                            else
+                                break
+                            end
+                        end
+                        
+                        updateStatus()
+                        wait(5)
+                    end
+                end
+            end
         end
+        
+        -- ==========================================
+        -- SELESAI
+        -- ==========================================
+        StatusLabel.Text = "🎉 Semua proses selesai!"
+        isLeveling = false
+        ToggleButton.Text = "▶️ Mulai"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+        updateStatus()
     end)
 end)
 
 -- Initial setup
 populatePetList()
+populateMutationList()
 updateStatus()
 
 AutoLevelGUI.Parent = playerGui
 
-print("✅ Auto Leveling v2 loaded!")                                                
+print("✅ Auto Leveling v3 dengan Auto Mutation loaded!")
