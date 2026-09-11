@@ -33,6 +33,16 @@ local C = {
     warning = Color3.fromRGB(255, 200, 0),
 }
 
+-- Sumber warna
+local UIStroke = player.PlayerGui
+    .Seed_Shop
+    .Frame
+    .Scrolling_Frame
+    ["Elder Strawberry"]
+    .Main_Frame
+    .Rarity_Text
+    .UIStroke
+
 -- ==================================================================
 -- CONFIG
 -- ==================================================================
@@ -137,7 +147,26 @@ local editingPresetName = nil
 -- Forward declarations
 local StatusLabel
 local updateStatus
+local rainbowTask = nil
 
+local A = {
+    warning = UIStroke.Color,
+    danger = Color3.fromRGB(255, 60, 60),
+}
+
+local function startRainbowUpdate()
+    if rainbowTask then return end
+
+    rainbowTask = task.spawn(function()
+        while rainbowMode do
+            A.warning = UIStroke.Color
+            task.wait(1)
+        end
+
+        rainbowTask = nil
+    end)
+end
+    
 -- ==================================================================
 -- PET DATA FUNCTIONS
 -- ==================================================================
@@ -1291,7 +1320,7 @@ UICornerWeightToggle.Parent = WeightToggleButton
 local RainbowModeButton = Instance.new("TextButton")
 RainbowModeButton.Size = UDim2.new(1, -20, 0, 25)
 RainbowModeButton.Position = UDim2.new(0, 10, 0, 61)
-RainbowModeButton.BackgroundColor3 = rainbowMode and C.warning or Color3.fromRGB(60, 60, 75)
+RainbowModeButton.BackgroundColor3 = rainbowMode and A.warning or Color3.fromRGB(60, 60, 75)
 RainbowModeButton.BorderSizePixel = 0
 RainbowModeButton.Font = Enum.Font.Gotham
 RainbowModeButton.Text = rainbowMode and "☑ Rainbow Elephant" or "☐ Rainbow Elephant"
@@ -2075,10 +2104,11 @@ RainbowModeButton.MouseButton1Click:Connect(function()
     saveConfig()
     
     if rainbowMode then
-        RainbowModeButton.Text = "☑ Rainbow Mode (BW: 5.5, Lv: 40)"
-        RainbowModeButton.BackgroundColor3 = C.warning
+        RainbowModeButton.Text = "☑ Rainbow Elephant"
+        RainbowModeButton.BackgroundColor3 = A.warning
+        startRainbowUpdate()
     else
-        RainbowModeButton.Text = "☐ Rainbow Mode (BW: 5.5, Lv: 40)"
+        RainbowModeButton.Text = "☐ Rainbow Elephant"
         RainbowModeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
     end
     updateStatus()
