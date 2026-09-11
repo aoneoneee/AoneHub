@@ -1676,7 +1676,7 @@ local function populatePetList()
     PetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22, 50))
 end
 
--- Populate edit preset dropdown - DIPERBAIKI
+-- Populate edit preset dropdown - DENGAN TOGGLE UN-SELECT
 local function populateEditPresetDropdown()
     for _, child in pairs(EditPresetDropdown.ListScroll:GetChildren()) do
         if child:IsA("TextButton") then
@@ -1723,28 +1723,53 @@ local function populateEditPresetDropdown()
         Padding.Parent = PresetButton
         
         PresetButton.MouseButton1Click:Connect(function()
-            editingPresetName = presetName
-            PresetNameInput.Text = presetName
-            
-            -- ⭐ Load pet dari preset
-            tempPresetPets = {}
-            for _, petInfo in ipairs(preset.pets) do
-                if isPetValid(petInfo.UUID) then
-                    table.insert(tempPresetPets, petInfo.UUID)
+            -- ⭐ CEK: Jika preset yang sama diklik lagi → UNSELECT
+            if editingPresetName == presetName then
+                -- Unselect
+                editingPresetName = nil
+                tempPresetPets = {}
+                PresetNameInput.Text = ""
+                EditPresetDropdown.HeaderButton.Text = "📂 Pilih Preset untuk Diedit/Dihapus"
+                
+                -- Refresh pet list (hapus semua centang)
+                populatePetList()
+                
+                -- Update status
+                StatusLabel.Text = "✏️ Preset unselected"
+                
+                -- Update button appearance
+                PresetButton.BackgroundColor3 = Color3.fromRGB(65, 65, 80)
+                
+                -- Auto close dropdown
+                EditPresetDropdown.Close()
+            else
+                -- Select preset
+                editingPresetName = presetName
+                PresetNameInput.Text = presetName
+                
+                -- Load pets dari preset
+                tempPresetPets = {}
+                for _, petInfo in ipairs(preset.pets) do
+                    if isPetValid(petInfo.UUID) then
+                        table.insert(tempPresetPets, petInfo.UUID)
+                    end
                 end
+                
+                -- Refresh pet list dengan pet yang sudah dipilih
+                populatePetList()
+                
+                -- Update header text
+                EditPresetDropdown.HeaderButton.Text = string.format("📂 %s", presetName)
+                
+                -- Update status
+                StatusLabel.Text = string.format("✏️ Preset '%s' dimuat (%d pet)", presetName, #tempPresetPets)
+                
+                -- Update button appearance
+                PresetButton.BackgroundColor3 = C.success
+                
+                -- Auto close dropdown
+                EditPresetDropdown.Close()
             end
-            
-            -- ⭐ REFRESH pet list dengan pet yang sudah dipilih
-            populatePetList()
-            
-            -- ⭐ Update header text
-            EditPresetDropdown.HeaderButton.Text = string.format("📂 %s", presetName)
-            
-            -- ⭐ AUTO CLOSE dropdown
-            EditPresetDropdown.Close()
-            
-            -- ⭐ Update status
-            StatusLabel.Text = string.format("✏️ Preset '%s' dimuat (%d pet)", presetName, #tempPresetPets)
         end)
     end
     
