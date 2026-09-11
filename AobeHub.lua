@@ -134,7 +134,7 @@ local unwantedMutations = config.unwantedMutations or {}
 local availableMutations = {}
 local editingPresetName = nil
 
--- Forward declarations untuk UI references
+-- Forward declarations
 local StatusLabel
 local updateStatus
 
@@ -511,7 +511,6 @@ local function getLevelTargetForWeight()
     return rainbowMode and LEVEL_TARGET_RAINBOW or LEVEL_TARGET_NORMAL
 end
 
--- Filter functions
 local function getPetsForWeight()
     local weightTarget = getWeightTarget()
     local result = {}
@@ -809,7 +808,7 @@ for _, tab in ipairs(tabs) do
 end
 
 -- ==================================================================
--- WEIGHT TAB - AUTO LEVELING UI
+-- WEIGHT TAB
 -- ==================================================================
 local weightTab = tabFrames["Weight"]
 
@@ -820,7 +819,7 @@ weightScroll.BackgroundTransparency = 1
 weightScroll.BorderSizePixel = 0
 weightScroll.ScrollBarThickness = 4
 weightScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-weightScroll.CanvasSize = UDim2.new(0, 0, 0, 2500)
+weightScroll.CanvasSize = UDim2.new(0, 0, 0, 2000)
 weightScroll.Parent = weightTab
 
 local weightLayout = Instance.new("UIListLayout")
@@ -828,7 +827,9 @@ weightLayout.Padding = UDim.new(0, 6)
 weightLayout.SortOrder = Enum.SortOrder.LayoutOrder
 weightLayout.Parent = weightScroll
 
--- UI Helper Functions
+-- ==================================================================
+-- UI HELPERS
+-- ==================================================================
 local function createSection(parent, title)
     local SectionFrame = Instance.new("Frame")
     SectionFrame.Size = UDim2.new(1, -10, 0, 200)
@@ -854,64 +855,184 @@ local function createSection(parent, title)
     return SectionFrame, SectionTitle
 end
 
-local function createScrollableDropdown(parent, position, size, placeholder)
-    local DropdownFrame = Instance.new("Frame")
-    DropdownFrame.Size = size
-    DropdownFrame.Position = position
-    DropdownFrame.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-    DropdownFrame.BorderSizePixel = 0
-    DropdownFrame.Parent = parent
+-- ==================================================================
+-- DYNAMIC DROPDOWN
+-- ==================================================================
+local function createDynamicDropdown(parent, position, placeholder, parentSection, baseSectionHeight)
+    local width = 1
+    local offsetX = -20
+    local itemHeight = 22
+    local maxListHeight = 100
     
-    local UICornerDropdown = Instance.new("UICorner")
-    UICornerDropdown.CornerRadius = UDim.new(0, 4)
-    UICornerDropdown.Parent = DropdownFrame
+    local originalSectionHeight = baseSectionHeight or 120
     
-    local DropdownButton = Instance.new("TextButton")
-    DropdownButton.Size = UDim2.new(1, 0, 1, 0)
-    DropdownButton.BackgroundTransparency = 1
-    DropdownButton.Font = Enum.Font.Gotham
-    DropdownButton.Text = placeholder
-    DropdownButton.TextColor3 = Color3.fromRGB(200, 200, 200)
-    DropdownButton.TextSize = 9
-    DropdownButton.Parent = DropdownFrame
+    -- Container
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(width, offsetX, 0, 28)
+    Container.Position = position
+    Container.BackgroundTransparency = 1
+    Container.ClipsDescendants = true
+    Container.ZIndex = 10
+    Container.Parent = parent
     
-    return DropdownFrame, DropdownButton
-end
-
-local function clearDropdown(listFrame)
-    for _, child in pairs(listFrame:GetChildren()) do
-        if child:IsA("TextButton") then
-            child:Destroy()
+    -- Header
+    local HeaderFrame = Instance.new("Frame")
+    HeaderFrame.Size = UDim2.new(1, 0, 0, 28)
+    HeaderFrame.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    HeaderFrame.BorderSizePixel = 0
+    HeaderFrame.ZIndex = 10
+    HeaderFrame.Parent = Container
+    
+    local UICornerHeader = Instance.new("UICorner")
+    UICornerHeader.CornerRadius = UDim.new(0, 4)
+    UICornerHeader.Parent = HeaderFrame
+    
+    local HeaderButton = Instance.new("TextButton")
+    HeaderButton.Size = UDim2.new(1, -20, 1, 0)
+    HeaderButton.BackgroundTransparency = 1
+    HeaderButton.Font = Enum.Font.Gotham
+    HeaderButton.Text = placeholder
+    HeaderButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+    HeaderButton.TextSize = 9
+    HeaderButton.TextXAlignment = Enum.TextXAlignment.Left
+    HeaderButton.ZIndex = 11
+    HeaderButton.Parent = HeaderFrame
+    
+    local HeaderPadding = Instance.new("UIPadding")
+    HeaderPadding.PaddingLeft = UDim.new(0, 8)
+    HeaderPadding.Parent = HeaderButton
+    
+    local ArrowLabel = Instance.new("TextLabel")
+    ArrowLabel.Size = UDim2.new(0, 15, 0, 20)
+    ArrowLabel.Position = UDim2.new(1, -18, 0, 4)
+    ArrowLabel.BackgroundTransparency = 1
+    ArrowLabel.Font = Enum.Font.GothamBold
+    ArrowLabel.Text = "▼"
+    ArrowLabel.TextColor3 = Color3.fromRGB(150, 150, 170)
+    ArrowLabel.TextSize = 10
+    ArrowLabel.ZIndex = 11
+    ArrowLabel.Parent = HeaderFrame
+    
+    -- List Container
+    local ListContainer = Instance.new("Frame")
+    ListContainer.Size = UDim2.new(1, 0, 0, 0)
+    ListContainer.Position = UDim2.new(0, 0, 0, 30)
+    ListContainer.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+    ListContainer.BorderSizePixel = 0
+    ListContainer.Visible = false
+    ListContainer.ZIndex = 10
+    ListContainer.Parent = Container
+    
+    local UICornerList = Instance.new("UICorner")
+    UICornerList.CornerRadius = UDim.new(0, 4)
+    UICornerList.Parent = ListContainer
+    
+    -- List Scroll
+    local ListScroll = Instance.new("ScrollingFrame")
+    ListScroll.Size = UDim2.new(1, -4, 1, -4)
+    ListScroll.Position = UDim2.new(0, 2, 0, 2)
+    ListScroll.BackgroundTransparency = 1
+    ListScroll.BorderSizePixel = 0
+    ListScroll.ScrollBarThickness = 3
+    ListScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+    ListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    ListScroll.ZIndex = 11
+    ListScroll.Parent = ListContainer
+    
+    local ListLayout = Instance.new("UIListLayout")
+    ListLayout.Padding = UDim.new(0, 2)
+    ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    ListLayout.Parent = ListScroll
+    
+    local isOpen = false
+    
+    local function getItemCount()
+        local count = 0
+        for _, child in pairs(ListScroll:GetChildren()) do
+            if child:IsA("TextButton") then
+                count = count + 1
+            end
+        end
+        return count
+    end
+    
+    local function updateSize()
+        local itemCount = getItemCount()
+        local contentHeight = itemCount * (itemHeight + 2) + 2
+        local listHeight = math.min(contentHeight, maxListHeight)
+        
+        ListContainer.Size = UDim2.new(1, 0, 0, listHeight)
+        ListScroll.CanvasSize = UDim2.new(0, 0, 0, contentHeight)
+        
+        if isOpen then
+            Container.Size = UDim2.new(width, offsetX, 0, 30 + listHeight + 2)
+        else
+            Container.Size = UDim2.new(width, offsetX, 0, 28)
+        end
+        
+        if parentSection then
+            if isOpen then
+                parentSection.Size = UDim2.new(
+                    parentSection.Size.X.Scale,
+                    parentSection.Size.X.Offset,
+                    0,
+                    originalSectionHeight + listHeight + 2
+                )
+            else
+                parentSection.Size = UDim2.new(
+                    parentSection.Size.X.Scale,
+                    parentSection.Size.X.Offset,
+                    0,
+                    originalSectionHeight
+                )
+            end
         end
     end
-end
-
-local function updateCanvasSize(scrollingFrame, itemHeight, padding)
-    local totalItems = 0
-    for _, child in pairs(scrollingFrame:GetChildren()) do
-        if child:IsA("TextButton") then
-            totalItems = totalItems + 1
+    
+    local function close()
+        if isOpen then
+            isOpen = false
+            ListContainer.Visible = false
+            ArrowLabel.Text = "▼"
+            updateSize()
         end
     end
     
-    -- Total height = items + padding top/bottom + gaps
-    local totalHeight = (totalItems * itemHeight) + (totalItems - 1) * 2 + 8
-    
-    scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(totalHeight, 30))
-    
-    -- Auto-resize ScrollingFrame jika konten lebih kecil
-    if totalHeight < scrollingFrame.AbsoluteSize.Y then
-        -- Opsional: resize list ke ukuran konten
-        -- scrollingFrame.Size = UDim2.new(scrollingFrame.Size.X.Scale, scrollingFrame.Size.X.Offset, 0, math.max(totalHeight + 8, 30))
+    local function toggle()
+        isOpen = not isOpen
+        
+        if isOpen then
+            ListContainer.Visible = true
+            ArrowLabel.Text = "▲"
+        else
+            ListContainer.Visible = false
+            ArrowLabel.Text = "▼"
+        end
+        updateSize()
     end
+    
+    HeaderButton.MouseButton1Click:Connect(toggle)
+    
+    return {
+        Container = Container,
+        HeaderButton = HeaderButton,
+        ListContainer = ListContainer,
+        ListScroll = ListScroll,
+        ItemHeight = itemHeight,
+        UpdateSize = updateSize,
+        Close = close,
+        Toggle = toggle,
+        IsOpen = function() return isOpen end,
+        GetItemCount = getItemCount,
+    }
 end
 
--- ==========================================
--- SECTION: PILIH TIM
--- ==========================================
+-- ==================================================================
+-- SECTION: PILIH TIM (DROPDOWN DINAMIS)
+-- ==================================================================
 local TeamSelectSection = createSection(weightScroll, "👥 Pilih Tim Leveling")
 TeamSelectSection.LayoutOrder = 1
-TeamSelectSection.Size = UDim2.new(1, -10, 0, 250)
+TeamSelectSection.Size = UDim2.new(1, -10, 0, 120)
 
 local SelectedTeamLabel = Instance.new("TextLabel")
 SelectedTeamLabel.Size = UDim2.new(1, -20, 0, 35)
@@ -929,99 +1050,30 @@ local UICornerSelectedTeam = Instance.new("UICorner")
 UICornerSelectedTeam.CornerRadius = UDim.new(0, 4)
 UICornerSelectedTeam.Parent = SelectedTeamLabel
 
-local PresetDropdown, PresetDropdownButton = createScrollableDropdown(
+-- Dropdown Tim Leveling
+local TeamPresetDropdown = createDynamicDropdown(
     TeamSelectSection,
     UDim2.new(0, 10, 0, 68),
-    UDim2.new(1, -20, 0, 28),
-    selectedTeamPreset and string.format("📂 %s", selectedTeamPreset) or "📂 Pilih Preset Tim Leveling"
+    selectedTeamPreset and string.format("📂 %s", selectedTeamPreset) or "📂 Pilih Preset Tim Leveling",
+    TeamSelectSection,
+    120
 )
 
--- Preset List (di-parent ke Section, tampil sebagai kotak)
-local PresetListFrame = Instance.new("ScrollingFrame")
-PresetListFrame.Size = UDim2.new(1, -20, 0, 150)              -- Tinggi list
-PresetListFrame.Position = UDim2.new(0, 10, 0, 100)           -- Di bawah dropdown button
-PresetListFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 58) -- Background solid
-PresetListFrame.BackgroundTransparency = 0                    -- Tidak transparan
-PresetListFrame.BorderSizePixel = 0
-PresetListFrame.ScrollBarThickness = 3
-PresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-PresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)            -- Di-update dinamis
-PresetListFrame.Visible = false                                -- Awal tersembunyi
-PresetListFrame.ZIndex = 10                                    -- Di atas elemen lain
-PresetListFrame.ClipsDescendants = true
-PresetListFrame.Parent = TeamSelectSection
-
-local UICornerPresetList = Instance.new("UICorner")
-UICornerPresetList.CornerRadius = UDim.new(0, 4)
-UICornerPresetList.Parent = PresetListFrame
-
-local PresetListLayout = Instance.new("UIListLayout")
-PresetListLayout.Padding = UDim.new(0, 2)
-PresetListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-PresetListLayout.Parent = PresetListFrame
-
-local PresetListPadding = Instance.new("UIPadding")
-PresetListPadding.PaddingTop = UDim.new(0, 4)
-PresetListPadding.PaddingBottom = UDim.new(0, 4)
-PresetListPadding.PaddingLeft = UDim.new(0, 4)
-PresetListPadding.PaddingRight = UDim.new(0, 4)
-PresetListPadding.Parent = PresetListFrame
-
--- ==========================================
--- SECTION: BUAT/EDIT PRESET
--- ==========================================
+-- ==================================================================
+-- SECTION: BUAT/EDIT PRESET (DROPDOWN DINAMIS)
+-- ==================================================================
 local CreatePresetSection = createSection(weightScroll, "💾 Buat/Edit Preset")
 CreatePresetSection.LayoutOrder = 2
-CreatePresetSection.Size = UDim2.new(1, -10, 0, 350)
+CreatePresetSection.Size = UDim2.new(1, -10, 0, 250)
 
-local EditPresetDropdown, EditPresetButton = createScrollableDropdown(
+-- Dropdown untuk Edit Preset
+local EditPresetDropdown = createDynamicDropdown(
     CreatePresetSection,
     UDim2.new(0, 10, 0, 28),
-    UDim2.new(1, -20, 0, 28),
-    "📂 Pilih Preset untuk Diedit/Dihapus"
+    "📂 Pilih Preset untuk Diedit/Dihapus",
+    CreatePresetSection,
+    250
 )
-
--- Ganti EditPresetListFrame
-local EditPresetListFrame = Instance.new("ScrollingFrame")
-EditPresetListFrame.Size = UDim2.new(1, -20, 0, 100)
-EditPresetListFrame.Position = UDim2.new(0, 10, 0, 100)
-EditPresetListFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-EditPresetListFrame.BackgroundTransparency = 0
-EditPresetListFrame.BorderSizePixel = 0
-EditPresetListFrame.ScrollBarThickness = 3
-EditPresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-EditPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-EditPresetListFrame.Visible = false
-EditPresetListFrame.ZIndex = 10
-EditPresetListFrame.ClipsDescendants = true
-EditPresetListFrame.Parent = CreatePresetSection
-
-local UICornerEditList = Instance.new("UICorner")
-UICornerEditList.CornerRadius = UDim.new(0, 4)
-UICornerEditList.Parent = EditPresetListFrame
-
-local EditPresetLayout = Instance.new("UIListLayout")
-EditPresetLayout.Padding = UDim.new(0, 2)
-EditPresetLayout.Parent = EditPresetListFrame
-
-local EditListPadding = Instance.new("UIPadding")
-EditListPadding.PaddingTop = UDim.new(0, 4)
-EditListPadding.PaddingBottom = UDim.new(0, 4)
-EditListPadding.PaddingLeft = UDim.new(0, 4)
-EditListPadding.PaddingRight = UDim.new(0, 4)
-EditListPadding.Parent = EditPresetListFrame
-
--- Update handler
-EditPresetButton.MouseButton1Click:Connect(function()
-    EditPresetListFrame.Visible = not EditPresetListFrame.Visible
-    
-    if EditPresetListFrame.Visible then
-        EditPresetButton.Text = "▲ Pilih Preset untuk Diedit/Dihapus"
-        populateEditPresetDropdown()
-    else
-        EditPresetButton.Text = "▼ Pilih Preset untuk Diedit/Dihapus"
-    end
-end)
 
 local PresetNameInput = Instance.new("TextBox")
 PresetNameInput.Size = UDim2.new(1, -20, 0, 22)
@@ -1099,9 +1151,9 @@ local UICornerDelete = Instance.new("UICorner")
 UICornerDelete.CornerRadius = UDim.new(0, 4)
 UICornerDelete.Parent = DeletePresetButton
 
--- ==========================================
+-- ==================================================================
 -- SECTION: TARGET LEVEL
--- ==========================================
+-- ==================================================================
 local LevelSection = createSection(weightScroll, "🎯 Target Level")
 LevelSection.LayoutOrder = 3
 LevelSection.Size = UDim2.new(1, -10, 0, 60)
@@ -1133,9 +1185,9 @@ LevelInput.FocusLost:Connect(function()
     end
 end)
 
--- ==========================================
+-- ==================================================================
 -- SECTION: PET TARGET
--- ==========================================
+-- ==================================================================
 local TargetSection = createSection(weightScroll, "🎯 Pet Target")
 TargetSection.LayoutOrder = 4
 TargetSection.Size = UDim2.new(1, -10, 0, 150)
@@ -1185,12 +1237,12 @@ local UICornerScan = Instance.new("UICorner")
 UICornerScan.CornerRadius = UDim.new(0, 4)
 UICornerScan.Parent = ScanButton
 
--- ==========================================
--- SECTION: AUTO WEIGHT
--- ==========================================
+-- ==================================================================
+-- SECTION: AUTO WEIGHT (DROPDOWN DINAMIS)
+-- ==================================================================
 local WeightSection = createSection(weightScroll, "⚖️ Auto Weight")
 WeightSection.LayoutOrder = 5
-WeightSection.Size = UDim2.new(1, -10, 0, 280)
+WeightSection.Size = UDim2.new(1, -10, 0, 150)
 
 local WeightToggleButton = Instance.new("TextButton")
 WeightToggleButton.Size = UDim2.new(1, -20, 0, 28)
@@ -1222,65 +1274,21 @@ local UICornerRainbow = Instance.new("UICorner")
 UICornerRainbow.CornerRadius = UDim.new(0, 4)
 UICornerRainbow.Parent = RainbowModeButton
 
-local WeightPresetDropdown, WeightPresetButton = createScrollableDropdown(
+-- Dropdown Weight Preset
+local WeightPresetDropdown = createDynamicDropdown(
     WeightSection,
     UDim2.new(0, 10, 0, 90),
-    UDim2.new(1, -20, 0, 28),
-    selectedWeightPreset and string.format("📂 %s", selectedWeightPreset) or "📂 Pilih Preset Auto Weight"
+    selectedWeightPreset and string.format("📂 %s", selectedWeightPreset) or "📂 Pilih Preset Auto Weight",
+    WeightSection,
+    150
 )
 
-local WeightPresetListFrame = Instance.new("ScrollingFrame")
-WeightPresetListFrame.Size = UDim2.new(1, -20, 0, 120)
-WeightPresetListFrame.Position = UDim2.new(0, 10, 0, 120)
-WeightPresetListFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-WeightPresetListFrame.BackgroundTransparency = 0
-WeightPresetListFrame.BorderSizePixel = 0
-WeightPresetListFrame.ScrollBarThickness = 3
-WeightPresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-WeightPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-WeightPresetListFrame.Visible = false
-WeightPresetListFrame.ZIndex = 10
-WeightPresetListFrame.ClipsDescendants = true
-WeightPresetListFrame.Parent = WeightSection
-
-local UICornerWeightList = Instance.new("UICorner")
-UICornerWeightList.CornerRadius = UDim.new(0, 4)
-UICornerWeightList.Parent = WeightPresetListFrame
-
-local WeightPresetLayout = Instance.new("UIListLayout")
-WeightPresetLayout.Padding = UDim.new(0, 2)
-WeightPresetLayout.Parent = WeightPresetListFrame
-
-local WeightListPadding = Instance.new("UIPadding")
-WeightListPadding.PaddingTop = UDim.new(0, 4)
-WeightListPadding.PaddingBottom = UDim.new(0, 4)
-WeightListPadding.PaddingLeft = UDim.new(0, 4)
-WeightListPadding.PaddingRight = UDim.new(0, 4)
-WeightListPadding.Parent = WeightPresetListFrame
-
--- Handler
-WeightPresetButton.MouseButton1Click:Connect(function()
-    WeightPresetListFrame.Visible = not WeightPresetListFrame.Visible
-    
-    if WeightPresetListFrame.Visible then
-        WeightPresetButton.Text = "▲ Pilih Preset Auto Weight"
-        populatePresetDropdown(WeightPresetListFrame, selectedWeightPreset, function(name)
-            selectedWeightPreset = name
-            config.selectedWeightPreset = name
-            saveConfig()
-            WeightPresetButton.Text = "▼ " .. name
-            WeightPresetListFrame.Visible = false
-        end)
-    else
-        WeightPresetButton.Text = "▼ " .. (selectedWeightPreset or "Pilih Preset Auto Weight")
-    end
-end)
--- ==========================================
--- SECTION: AUTO MUTATION
--- ==========================================
+-- ==================================================================
+-- SECTION: AUTO MUTATION (DROPDOWN DINAMIS)
+-- ==================================================================
 local MutationSection = createSection(weightScroll, "🧬 Auto Mutation")
 MutationSection.LayoutOrder = 6
-MutationSection.Size = UDim2.new(1, -10, 0, 450)
+MutationSection.Size = UDim2.new(1, -10, 0, 300)
 
 local MutationToggleButton = Instance.new("TextButton")
 MutationToggleButton.Size = UDim2.new(1, -20, 0, 28)
@@ -1297,59 +1305,14 @@ local UICornerMutationToggle = Instance.new("UICorner")
 UICornerMutationToggle.CornerRadius = UDim.new(0, 5)
 UICornerMutationToggle.Parent = MutationToggleButton
 
-local MutationPresetDropdown, MutationPresetButton = createScrollableDropdown(
+-- Dropdown Mutation Preset
+local MutationPresetDropdown = createDynamicDropdown(
     MutationSection,
     UDim2.new(0, 10, 0, 62),
-    UDim2.new(1, -20, 0, 28),
-    selectedMutationPreset and string.format("📂 %s", selectedMutationPreset) or "📂 Pilih Preset Tim Mutation"
+    selectedMutationPreset and string.format("📂 %s", selectedMutationPreset) or "📂 Pilih Preset Tim Mutation",
+    MutationSection,
+    300
 )
-
-local MutationPresetListFrame = Instance.new("ScrollingFrame")
-MutationPresetListFrame.Size = UDim2.new(1, -20, 0, 120)
-MutationPresetListFrame.Position = UDim2.new(0, 10, 0, 95)
-MutationPresetListFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-MutationPresetListFrame.BackgroundTransparency = 0
-MutationPresetListFrame.BorderSizePixel = 0
-MutationPresetListFrame.ScrollBarThickness = 3
-MutationPresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-MutationPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-MutationPresetListFrame.Visible = false
-MutationPresetListFrame.ZIndex = 10
-MutationPresetListFrame.ClipsDescendants = true
-MutationPresetListFrame.Parent = MutationSection
-
-local UICornerMutationList = Instance.new("UICorner")
-UICornerMutationList.CornerRadius = UDim.new(0, 4)
-UICornerMutationList.Parent = MutationPresetListFrame
-
-local MutationPresetLayout = Instance.new("UIListLayout")
-MutationPresetLayout.Padding = UDim.new(0, 2)
-MutationPresetLayout.Parent = MutationPresetListFrame
-
-local MutationListPadding = Instance.new("UIPadding")
-MutationListPadding.PaddingTop = UDim.new(0, 4)
-MutationListPadding.PaddingBottom = UDim.new(0, 4)
-MutationListPadding.PaddingLeft = UDim.new(0, 4)
-MutationListPadding.PaddingRight = UDim.new(0, 4)
-MutationListPadding.Parent = MutationPresetListFrame
-
--- Handler
-MutationPresetButton.MouseButton1Click:Connect(function()
-    MutationPresetListFrame.Visible = not MutationPresetListFrame.Visible
-    
-    if MutationPresetListFrame.Visible then
-        MutationPresetButton.Text = "▲ Pilih Preset Tim Mutation"
-        populatePresetDropdown(MutationPresetListFrame, selectedMutationPreset, function(name)
-            selectedMutationPreset = name
-            config.selectedMutationPreset = name
-            saveConfig()
-            MutationPresetButton.Text = "▼ " .. name
-            MutationPresetListFrame.Visible = false
-        end)
-    else
-        MutationPresetButton.Text = "▼ " .. (selectedMutationPreset or "Pilih Preset Tim Mutation")
-    end
-end)
 
 local MutationSearchBox = Instance.new("TextBox")
 MutationSearchBox.Size = UDim2.new(1, -20, 0, 22)
@@ -1392,12 +1355,12 @@ local MutationListLayout = Instance.new("UIListLayout")
 MutationListLayout.Padding = UDim.new(0, 2)
 MutationListLayout.Parent = MutationListFrame
 
--- ==========================================
--- SECTION: ADVANCED
--- ==========================================
+-- ==================================================================
+-- SECTION: ADVANCED (DROPDOWN DINAMIS)
+-- ==================================================================
 local AdvancedSection = createSection(weightScroll, "🚀 Advanced")
 AdvancedSection.LayoutOrder = 7
-AdvancedSection.Size = UDim2.new(1, -10, 0, 230)
+AdvancedSection.Size = UDim2.new(1, -10, 0, 110)
 
 local AdvancedToggleButton = Instance.new("TextButton")
 AdvancedToggleButton.Size = UDim2.new(1, -20, 0, 25)
@@ -1441,63 +1404,18 @@ AdvancedLevelInput.FocusLost:Connect(function()
     end
 end)
 
-local AdvancedPresetDropdown, AdvancedPresetButton = createScrollableDropdown(
+-- Dropdown Advanced Preset
+local AdvancedPresetDropdown = createDynamicDropdown(
     AdvancedSection,
     UDim2.new(0, 10, 0, 82),
-    UDim2.new(1, -20, 0, 22),
-    selectedAdvancedPreset and string.format("📂 %s", selectedAdvancedPreset) or "📂 Pilih Preset Advanced"
+    selectedAdvancedPreset and string.format("📂 %s", selectedAdvancedPreset) or "📂 Pilih Preset Advanced",
+    AdvancedSection,
+    110
 )
 
-local AdvancedPresetListFrame = Instance.new("ScrollingFrame")
-AdvancedPresetListFrame.Size = UDim2.new(1, -20, 0, 100)
-AdvancedPresetListFrame.Position = UDim2.new(0, 10, 0, 105)
-AdvancedPresetListFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
-AdvancedPresetListFrame.BackgroundTransparency = 0
-AdvancedPresetListFrame.BorderSizePixel = 0
-AdvancedPresetListFrame.ScrollBarThickness = 3
-AdvancedPresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-AdvancedPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-AdvancedPresetListFrame.Visible = false
-AdvancedPresetListFrame.ZIndex = 10
-AdvancedPresetListFrame.ClipsDescendants = true
-AdvancedPresetListFrame.Parent = AdvancedSection
-
-local UICornerAdvList = Instance.new("UICorner")
-UICornerAdvList.CornerRadius = UDim.new(0, 4)
-UICornerAdvList.Parent = AdvancedPresetListFrame
-
-local AdvancedPresetLayout = Instance.new("UIListLayout")
-AdvancedPresetLayout.Padding = UDim.new(0, 2)
-AdvancedPresetLayout.Parent = AdvancedPresetListFrame
-
-local AdvListPadding = Instance.new("UIPadding")
-AdvListPadding.PaddingTop = UDim.new(0, 4)
-AdvListPadding.PaddingBottom = UDim.new(0, 4)
-AdvListPadding.PaddingLeft = UDim.new(0, 4)
-AdvListPadding.PaddingRight = UDim.new(0, 4)
-AdvListPadding.Parent = AdvancedPresetListFrame
-
--- Handler
-AdvancedPresetButton.MouseButton1Click:Connect(function()
-    AdvancedPresetListFrame.Visible = not AdvancedPresetListFrame.Visible
-    
-    if AdvancedPresetListFrame.Visible then
-        AdvancedPresetButton.Text = "▲ Pilih Preset Advanced"
-        populatePresetDropdown(AdvancedPresetListFrame, selectedAdvancedPreset, function(name)
-            selectedAdvancedPreset = name
-            config.selectedAdvancedPreset = name
-            saveConfig()
-            AdvancedPresetButton.Text = "▼ " .. name
-            AdvancedPresetListFrame.Visible = false
-        end)
-    else
-        AdvancedPresetButton.Text = "▼ " .. (selectedAdvancedPreset or "Pilih Preset Advanced")
-    end
-end)
-
--- ==========================================
+-- ==================================================================
 -- SECTION: KONTROL
--- ==========================================
+-- ==================================================================
 local ButtonSection = createSection(weightScroll, "⚙️ Kontrol")
 ButtonSection.LayoutOrder = 8
 ButtonSection.Size = UDim2.new(1, -10, 0, 75)
@@ -1546,8 +1464,14 @@ updateStatus = function()
     )
 end
 
-local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
-    clearDropdown(listFrame)
+-- Populate dropdown generic
+local function populateDynamicDropdown(dropdown, selectedPreset, onSelect)
+    -- Clear
+    for _, child in pairs(dropdown.ListScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
     
     local presets = loadTeamPresets()
     local presetNames = {}
@@ -1555,20 +1479,6 @@ local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
         table.insert(presetNames, name)
     end
     table.sort(presetNames)
-    
-    -- Jika tidak ada preset
-    if #presetNames == 0 then
-        local EmptyLabel = Instance.new("TextLabel")
-        EmptyLabel.Size = UDim2.new(1, 0, 0, 22)
-        EmptyLabel.BackgroundTransparency = 1
-        EmptyLabel.Font = Enum.Font.Gotham
-        EmptyLabel.Text = "Belum ada preset tersimpan"
-        EmptyLabel.TextColor3 = Color3.fromRGB(150, 150, 160)
-        EmptyLabel.TextSize = 9
-        EmptyLabel.Parent = listFrame
-        listFrame.CanvasSize = UDim2.new(0, 0, 0, 30)
-        return
-    end
     
     for i, presetName in ipairs(presetNames) do
         local preset = presets[presetName]
@@ -1581,7 +1491,7 @@ local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
         end
         
         local PresetButton = Instance.new("TextButton")
-        PresetButton.Size = UDim2.new(1, -8, 0, 22)  -- -8 untuk padding
+        PresetButton.Size = UDim2.new(1, -4, 0, dropdown.ItemHeight)
         PresetButton.BackgroundColor3 = selectedPreset == presetName and C.success or Color3.fromRGB(65, 65, 80)
         PresetButton.BorderSizePixel = 0
         PresetButton.Font = Enum.Font.Gotham
@@ -1590,40 +1500,75 @@ local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
         PresetButton.TextSize = 8
         PresetButton.TextXAlignment = Enum.TextXAlignment.Left
         PresetButton.LayoutOrder = i
-        PresetButton.Parent = listFrame
+        PresetButton.ZIndex = 12
+        PresetButton.Parent = dropdown.ListScroll
         
         local UICornerPreset = Instance.new("UICorner")
         UICornerPreset.CornerRadius = UDim.new(0, 3)
         UICornerPreset.Parent = PresetButton
         
-        local BtnPadding = Instance.new("UIPadding")
-        BtnPadding.PaddingLeft = UDim.new(0, 6)
-        BtnPadding.Parent = PresetButton
-        
-        -- Hover effect
-        PresetButton.MouseEnter:Connect(function()
-            if selectedPreset ~= presetName then
-                PresetButton.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
-            end
-        end)
-        
-        PresetButton.MouseLeave:Connect(function()
-            if selectedPreset ~= presetName then
-                PresetButton.BackgroundColor3 = Color3.fromRGB(65, 65, 80)
-            end
-        end)
+        local Padding = Instance.new("UIPadding")
+        Padding.PaddingLeft = UDim.new(0, 6)
+        Padding.Parent = PresetButton
         
         PresetButton.MouseButton1Click:Connect(function()
             onSelect(presetName)
+            dropdown.Close()
+            updateStatus()
         end)
     end
     
-    -- Update canvas size
-    updateCanvasSize(listFrame, 22, 4)
+    dropdown.UpdateSize()
 end
 
+-- Populate team preset dropdown
+local function populateTeamPresetDropdown()
+    populateDynamicDropdown(TeamPresetDropdown, selectedTeamPreset, function(name)
+        selectedTeamPreset = name
+        config.selectedTeamPreset = name
+        saveConfig()
+        SelectedTeamLabel.Text = string.format("Tim: %s", name)
+        TeamPresetDropdown.HeaderButton.Text = string.format("📂 %s", name)
+    end)
+end
+
+-- Populate weight preset dropdown
+local function populateWeightPresetDropdown()
+    populateDynamicDropdown(WeightPresetDropdown, selectedWeightPreset, function(name)
+        selectedWeightPreset = name
+        config.selectedWeightPreset = name
+        saveConfig()
+        WeightPresetDropdown.HeaderButton.Text = string.format("📂 %s", name)
+    end)
+end
+
+-- Populate mutation preset dropdown
+local function populateMutationPresetDropdown()
+    populateDynamicDropdown(MutationPresetDropdown, selectedMutationPreset, function(name)
+        selectedMutationPreset = name
+        config.selectedMutationPreset = name
+        saveConfig()
+        MutationPresetDropdown.HeaderButton.Text = string.format("📂 %s", name)
+    end)
+end
+
+-- Populate advanced preset dropdown
+local function populateAdvancedPresetDropdown()
+    populateDynamicDropdown(AdvancedPresetDropdown, selectedAdvancedPreset, function(name)
+        selectedAdvancedPreset = name
+        config.selectedAdvancedPreset = name
+        saveConfig()
+        AdvancedPresetDropdown.HeaderButton.Text = string.format("📂 %s", name)
+    end)
+end
+
+-- Populate edit preset dropdown
 local function populateEditPresetDropdown()
-    clearDropdown(EditPresetListFrame)
+    for _, child in pairs(EditPresetDropdown.ListScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
     
     local presets = loadTeamPresets()
     local presetNames = {}
@@ -1643,18 +1588,25 @@ local function populateEditPresetDropdown()
         end
         
         local PresetButton = Instance.new("TextButton")
-        PresetButton.Size = UDim2.new(1, 0, 0, 20)
+        PresetButton.Size = UDim2.new(1, -4, 0, EditPresetDropdown.ItemHeight)
         PresetButton.BackgroundColor3 = editingPresetName == presetName and C.success or Color3.fromRGB(65, 65, 80)
         PresetButton.BorderSizePixel = 0
         PresetButton.Font = Enum.Font.Gotham
         PresetButton.Text = string.format("📁 %s (%d pet)", presetName, validCount)
         PresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
         PresetButton.TextSize = 8
-        PresetButton.Parent = EditPresetListFrame
+        PresetButton.TextXAlignment = Enum.TextXAlignment.Left
+        PresetButton.LayoutOrder = i
+        PresetButton.ZIndex = 12
+        PresetButton.Parent = EditPresetDropdown.ListScroll
         
         local UICornerPreset = Instance.new("UICorner")
         UICornerPreset.CornerRadius = UDim.new(0, 3)
         UICornerPreset.Parent = PresetButton
+        
+        local Padding = Instance.new("UIPadding")
+        Padding.PaddingLeft = UDim.new(0, 6)
+        Padding.Parent = PresetButton
         
         PresetButton.MouseButton1Click:Connect(function()
             editingPresetName = presetName
@@ -1668,16 +1620,21 @@ local function populateEditPresetDropdown()
             end
             
             populatePetList()
-            EditPresetButton.Text = string.format("📂 %s", presetName)
-            EditPresetListFrame.Visible = false
+            EditPresetDropdown.HeaderButton.Text = string.format("📂 %s", presetName)
+            EditPresetDropdown.Close()
         end)
     end
     
-    updateCanvasSize(EditPresetListFrame, 20, 2)
+    EditPresetDropdown.UpdateSize()
 end
 
+-- Populate mutation list (unwanted)
 local function populateMutationList()
-    clearDropdown(MutationListFrame)
+    for _, child in pairs(MutationListFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
     
     for _, mutationName in ipairs(availableMutations) do
         if mutationSearchText == "" or mutationName:lower():find(mutationSearchText:lower()) then
@@ -1711,11 +1668,23 @@ local function populateMutationList()
         end
     end
     
-    updateCanvasSize(MutationListFrame, 20, 2)
+    -- Update canvas
+    local count = 0
+    for _, child in pairs(MutationListFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            count = count + 1
+        end
+    end
+    MutationListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22, 50))
 end
 
+-- Populate pet list (untuk preset editor)
 local function populatePetList()
-    clearDropdown(PetListFrame)
+    for _, child in pairs(PetListFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
     
     local petsData = getPlayerPetData()
     if not petsData then return end
@@ -1771,9 +1740,16 @@ local function populatePetList()
         end)
     end
     
-    updateCanvasSize(PetListFrame, 20, 2)
+    local count = 0
+    for _, child in pairs(PetListFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            count = count + 1
+        end
+    end
+    PetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22, 50))
 end
 
+-- Scan target pets
 local function scanTargetPets()
     local petsData = getPlayerPetData()
     if not petsData then return {} end
@@ -1799,8 +1775,13 @@ local function scanTargetPets()
     return petTypes
 end
 
+-- Populate target dropdown (pet target)
 local function populateTargetDropdown()
-    clearDropdown(TargetListFrame)
+    for _, child in pairs(TargetListFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
     
     local petTypes = scanTargetPets()
     local allPetTypes = {}
@@ -1859,8 +1840,53 @@ local function populateTargetDropdown()
         end)
     end
     
-    updateCanvasSize(TargetListFrame, 20, 2)
+    local count = 0
+    for _, child in pairs(TargetListFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            count = count + 1
+        end
+    end
+    TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22, 50))
 end
+
+-- ==================================================================
+-- HOOK DROPDOWN TOGGLE UNTUK POPULATE
+-- ==================================================================
+local teamDropdownOriginalToggle = TeamPresetDropdown.Toggle
+local function teamToggleWrapper()
+    if not TeamPresetDropdown.IsOpen() then
+        populateTeamPresetDropdown()
+    end
+end
+TeamPresetDropdown.HeaderButton.MouseButton1Click:Connect(teamToggleWrapper)
+
+local weightDropdownOriginalToggle = WeightPresetDropdown.Toggle
+WeightPresetDropdown.HeaderButton.MouseButton1Click:Connect(function()
+    if not WeightPresetDropdown.IsOpen() then
+        populateWeightPresetDropdown()
+    end
+end)
+
+local mutationDropdownToggle = MutationPresetDropdown.Toggle
+MutationPresetDropdown.HeaderButton.MouseButton1Click:Connect(function()
+    if not MutationPresetDropdown.IsOpen() then
+        populateMutationPresetDropdown()
+    end
+end)
+
+local advancedDropdownToggle = AdvancedPresetDropdown.Toggle
+AdvancedPresetDropdown.HeaderButton.MouseButton1Click:Connect(function()
+    if not AdvancedPresetDropdown.IsOpen() then
+        populateAdvancedPresetDropdown()
+    end
+end)
+
+local editDropdownToggle = EditPresetDropdown.Toggle
+EditPresetDropdown.HeaderButton.MouseButton1Click:Connect(function()
+    if not EditPresetDropdown.IsOpen() then
+        populateEditPresetDropdown()
+    end
+end)
 
 -- ==================================================================
 -- EVENT HANDLERS
@@ -1893,9 +1919,8 @@ SavePresetButton.MouseButton1Click:Connect(function()
     editingPresetName = nil
     PresetNameInput.Text = ""
     tempPresetPets = {}
-    EditPresetButton.Text = "📂 Pilih Preset untuk Diedit/Dihapus"
+    EditPresetDropdown.HeaderButton.Text = "📂 Pilih Preset untuk Diedit/Dihapus"
     populatePetList()
-    populateEditPresetDropdown()
 end)
 
 DeletePresetButton.MouseButton1Click:Connect(function()
@@ -1910,76 +1935,8 @@ DeletePresetButton.MouseButton1Click:Connect(function()
     editingPresetName = nil
     tempPresetPets = {}
     PresetNameInput.Text = ""
-    EditPresetButton.Text = "📂 Pilih Preset untuk Diedit/Dihapus"
+    EditPresetDropdown.HeaderButton.Text = "📂 Pilih Preset untuk Diedit/Dihapus"
     populatePetList()
-    populateEditPresetDropdown()
-end)
-
-EditPresetButton.MouseButton1Click:Connect(function()
-    EditPresetListFrame.Visible = not EditPresetListFrame.Visible
-    if EditPresetListFrame.Visible then
-        populateEditPresetDropdown()
-    end
-end)
-
-PresetDropdownButton.MouseButton1Click:Connect(function()
-    -- Toggle visibility
-    PresetListFrame.Visible = not PresetListFrame.Visible
-    
-    if PresetListFrame.Visible then
-        -- Buka: refresh list dan update arrow
-        PresetDropdownButton.Text = "▲ Pilih Preset Tim Leveling"
-        populatePresetDropdown(PresetListFrame, selectedTeamPreset, function(name)
-            -- Set preset yang dipilih
-            selectedTeamPreset = name
-            config.selectedTeamPreset = name
-            saveConfig()
-            SelectedTeamLabel.Text = string.format("Tim: %s", name)
-            PresetDropdownButton.Text = "▼ " .. name
-            
-            -- Auto-close setelah pilih
-            PresetListFrame.Visible = false
-        end)
-    else
-        -- Tutup: reset arrow
-        PresetDropdownButton.Text = "▼ " .. (selectedTeamPreset or "Pilih Preset Tim Leveling")
-    end
-end)
-
-WeightPresetButton.MouseButton1Click:Connect(function()
-    WeightPresetListFrame.Visible = not WeightPresetListFrame.Visible
-    if WeightPresetListFrame.Visible then
-        populatePresetDropdown(WeightPresetListFrame, selectedWeightPreset, function(name)
-            selectedWeightPreset = name
-            config.selectedWeightPreset = name
-            saveConfig()
-            WeightPresetButton.Text = string.format("📂 %s", name)
-        end)
-    end
-end)
-
-MutationPresetButton.MouseButton1Click:Connect(function()
-    MutationPresetListFrame.Visible = not MutationPresetListFrame.Visible
-    if MutationPresetListFrame.Visible then
-        populatePresetDropdown(MutationPresetListFrame, selectedMutationPreset, function(name)
-            selectedMutationPreset = name
-            config.selectedMutationPreset = name
-            saveConfig()
-            MutationPresetButton.Text = string.format("📂 %s", name)
-        end)
-    end
-end)
-
-AdvancedPresetButton.MouseButton1Click:Connect(function()
-    AdvancedPresetListFrame.Visible = not AdvancedPresetListFrame.Visible
-    if AdvancedPresetListFrame.Visible then
-        populatePresetDropdown(AdvancedPresetListFrame, selectedAdvancedPreset, function(name)
-            selectedAdvancedPreset = name
-            config.selectedAdvancedPreset = name
-            saveConfig()
-            AdvancedPresetButton.Text = string.format("📂 %s", name)
-        end)
-    end
 end)
 
 WeightToggleButton.MouseButton1Click:Connect(function()
@@ -2687,41 +2644,6 @@ ToggleButton.MouseButton1Click:Connect(function()
     end)
 end)
 
--- Auto-close saat klik di luar area list
-local UIS = game:GetService("UserInputService")
-
-local function setupAutoClose(listFrame, dropdownButton)
-    UIS.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            if listFrame.Visible then
-                local mousePos = input.Position
-                local listPos = listFrame.AbsolutePosition
-                local listSize = listFrame.AbsoluteSize
-                local btnPos = dropdownButton.AbsolutePosition
-                local btnSize = dropdownButton.AbsoluteSize
-                
-                -- Cek apakah klik di luar list DAN di luar dropdown button
-                local clickedList = mousePos.X >= listPos.X and mousePos.X <= listPos.X + listSize.X 
-                                and mousePos.Y >= listPos.Y and mousePos.Y <= listPos.Y + listSize.Y
-                
-                local clickedButton = mousePos.X >= btnPos.X and mousePos.X <= btnPos.X + btnSize.X 
-                                   and mousePos.Y >= btnPos.Y and mousePos.Y <= btnPos.Y + btnSize.Y
-                
-                if not clickedList and not clickedButton then
-                    listFrame.Visible = false
-                end
-            end
-        end
-    end)
-end
-
--- Panggil setelah dropdown dibuat
-setupAutoClose(PresetListFrame, PresetDropdownButton)
-setupAutoClose(EditPresetListFrame, EditPresetButton)
-setupAutoClose(WeightPresetListFrame, WeightPresetButton)
-setupAutoClose(MutationPresetListFrame, MutationPresetButton)
-setupAutoClose(AdvancedPresetListFrame, AdvancedPresetButton)
-
 -- ==================================================================
 -- TAB SWITCHING
 -- ==================================================================
@@ -2774,7 +2696,6 @@ availableMutations = loadAvailableMutations()
 populatePetList()
 populateMutationList()
 populateTargetDropdown()
-populateEditPresetDropdown()
 updateStatus()
 
 -- Auto-load selected pet types dari config
@@ -2797,4 +2718,4 @@ end
 -- Switch ke Weight tab default
 switchTab("Weight")
 
-print("✅ AoneHub Auto Leveling loaded! Config saved to:", SAVE_FILE)
+print("✅ AoneHub Auto Leveling loaded! Config:", SAVE_FILE)
