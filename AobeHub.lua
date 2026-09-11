@@ -1126,7 +1126,7 @@ SavePresetButton.Font = Enum.Font.GothamBold
 SavePresetButton.Text = "💾 Simpan Preset"
 SavePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 SavePresetButton.TextSize = 9
-SavePresetButton.Parent = CreatePresetSection
+SavePresetButton.Parent = CreatePresetButtonSection
 
 local UICornerSave = Instance.new("UICorner")
 UICornerSave.CornerRadius = UDim.new(0, 4)
@@ -1141,7 +1141,7 @@ DeletePresetButton.Font = Enum.Font.GothamBold
 DeletePresetButton.Text = "🗑️ Hapus Preset"
 DeletePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 DeletePresetButton.TextSize = 9
-DeletePresetButton.Parent = CreatePresetSection
+DeletePresetButton.Parent = CreatePresetButtonSection
 
 local UICornerDelete = Instance.new("UICorner")
 UICornerDelete.CornerRadius = UDim.new(0, 4)
@@ -1294,7 +1294,7 @@ RainbowModeButton.Position = UDim2.new(0, 10, 0, 61)
 RainbowModeButton.BackgroundColor3 = rainbowMode and C.warning or Color3.fromRGB(60, 60, 75)
 RainbowModeButton.BorderSizePixel = 0
 RainbowModeButton.Font = Enum.Font.Gotham
-RainbowModeButton.Text = rainbowMode and "☑ Rainbow Mode (BW: 5.5, Lv: 40)" or "☐ Rainbow Mode (BW: 5.5, Lv: 40)"
+RainbowModeButton.Text = rainbowMode and "☑ Rainbow Elephant" or "☐ Rainbow Elephant"
 RainbowModeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 RainbowModeButton.TextSize = 9
 RainbowModeButton.Parent = WeightSection
@@ -1359,7 +1359,7 @@ MutationSearchBox.PlaceholderText = "🔍 Cari mutasi..."
 MutationSearchBox.Text = ""
 MutationSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 MutationSearchBox.TextSize = 9
-MutationSearchBox.Parent = MutationSection
+MutationSearchBox.Parent = MutationListSection
 
 local UICornerMutationSearch = Instance.new("UICorner")
 UICornerMutationSearch.CornerRadius = UDim.new(0, 4)
@@ -1373,7 +1373,7 @@ MutationListFrame.BorderSizePixel = 0
 MutationListFrame.ScrollBarThickness = 3
 MutationListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
 MutationListFrame.CanvasSize = UDim2.new(0, 0, 0, 120)
-MutationListFrame.Parent = MutationSection
+MutationListFrame.Parent = MutationListSection
 
 local MutationListLayout = Instance.new("UIListLayout")
 MutationListLayout.Padding = UDim.new(0, 2)
@@ -1475,17 +1475,35 @@ StatusLabel.Parent = ButtonSection
 -- POPULATE FUNCTIONS
 -- ==================================================================
 updateStatus = function()
-    local teamCount = selectedTeamPreset and #getPresetUUIDs(selectedTeamPreset) or 0
+    -- Hitung equipped pets (slot yang terpakai)
+    local equippedPets = getEquippedPets()
+    local equippedCount = #equippedPets
+    
+    -- Hitung total pet target yang masih perlu diproses
+    local totalPending = 0
+    if isAutoWeight then
+        totalPending = #getPetsForWeight()
+    elseif isAutoMutation then
+        totalPending = #getPetsForMutation()
+    elseif isAdvancedLeveling then
+        totalPending = #getPetsForAdvanced()
+    else
+        totalPending = #getPetsForNormalLeveling()
+    end
+    
+    -- Mode text
     local modeText = rainbowMode and "🌈" or "📊"
     
+    -- Format status baru
     StatusLabel.Text = string.format(
-        "%s Tim:%d | Total:%d | Weight:%s Advanced:%s Mutation:%s",
+        "%s Slot: %d/%d | Antrian: %d | Weight:%s Advanced:%s Mutation:%s",
         modeText,
-        teamCount,
-        #allSelectedPets,
-        isAutoWeight and "✓" or "X",
-        isAdvancedLeveling and "✓" or "X",
-        isAutoMutation and "✓" or "X"
+        equippedCount,
+        MAX_PET_SLOTS,
+        totalPending,
+        isAutoWeight and "✓" or "x",
+        isAdvancedLeveling and "✓" or "x",
+        isAutoMutation and "✓" or "x"
     )
 end
 
