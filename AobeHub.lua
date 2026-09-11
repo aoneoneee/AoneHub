@@ -1,4 +1,6 @@
--- Auto Leveling System - Full Featured with Pet Validation
+-- ==================================================================
+-- SERVICES & REQUIREMENTS
+-- ==================================================================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -7,53 +9,138 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+-- Services untuk Auto Leveling
 local DataService = require(ReplicatedStorage.Modules.DataService)
 local PetsService = require(ReplicatedStorage.Modules.PetServices.PetsService)
-
--- Remote Event untuk Shard
 local PetShardService_RE = ReplicatedStorage:WaitForChild("GameEvents"):WaitForChild("PetShardService_RE")
 
 -- Constants
 local MAX_PET_SLOTS = 8
-local TARGET_LEVEL_DEFAULT = 100
 local BASE_WEIGHT_NORMAL = 3.5
 local BASE_WEIGHT_RAINBOW = 5.5
 local LEVEL_TARGET_NORMAL = 50
 local LEVEL_TARGET_RAINBOW = 40
 
--- Check if GUI already exists
-if playerGui:FindFirstChild("AutoLevelGUI_Standalone") then
-    playerGui:FindFirstChild("AutoLevelGUI_Standalone"):Destroy()
+-- Colors
+local C = {
+    bg = Color3.fromRGB(28, 28, 35),
+    sidebar = Color3.fromRGB(22, 22, 28),
+    accent = Color3.fromRGB(80, 120, 200),
+    text = Color3.fromRGB(240, 240, 240),
+    textDim = Color3.fromRGB(150, 150, 160),
+    success = Color3.fromRGB(50, 180, 50),
+    danger = Color3.fromRGB(200, 50, 50),
+    warning = Color3.fromRGB(255, 200, 0),
+}
+
+-- ==================================================================
+-- CONFIG
+-- ==================================================================
+local function getConfigPath()
+    local basePath = "AoneHub"
+    pcall(function() makefolder(basePath) end)
+    return basePath .. "/AoneHub_AutoLeveling.json"
 end
 
--- ==========================================
--- VARIABLES
--- ==========================================
-local selectedTeamPreset = nil
-local selectedWeightPreset = nil
-local selectedAdvancedPreset = nil
-local selectedMutationPreset = nil
-local selectedPetTypes = {}
+local SAVE_FILE = getConfigPath()
+
+local config = {
+    teamPresets = {},
+    weightPresets = {},
+    mutationPresets = {},
+    advancedPresets = {},
+    targetLevel = 50,
+    advancedTargetLevel = 500,
+    rainbowMode = false,
+    unwantedMutations = {},
+    selectedTeamPreset = nil,
+    selectedWeightPreset = nil,
+    selectedMutationPreset = nil,
+    selectedAdvancedPreset = nil,
+    isAutoWeight = false,
+    isAutoMutation = false,
+    isAdvancedLeveling = false,
+    selectedPetTypes = {},
+}
+
+local function loadConfig()
+    local s, d = pcall(readfile, SAVE_FILE)
+    if s and d then
+        local s2, loaded = pcall(HttpService.JSONDecode, HttpService, d)
+        if s2 and loaded then
+            for k, v in pairs(loaded) do 
+                config[k] = v 
+            end
+            
+            if config.teamPresets == nil then config.teamPresets = {} end
+            if config.weightPresets == nil then config.weightPresets = {} end
+            if config.mutationPresets == nil then config.mutationPresets = {} end
+            if config.advancedPresets == nil then config.advancedPresets = {} end
+            if config.targetLevel == nil then config.targetLevel = 50 end
+            if config.advancedTargetLevel == nil then config.advancedTargetLevel = 500 end
+            if config.rainbowMode == nil then config.rainbowMode = false end
+            if config.unwantedMutations == nil then config.unwantedMutations = {} end
+            if config.isAutoWeight == nil then config.isAutoWeight = false end
+            if config.isAutoMutation == nil then config.isAutoMutation = false end
+            if config.isAdvancedLeveling == nil then config.isAdvancedLeveling = false end
+            if config.selectedPetTypes == nil then config.selectedPetTypes = {} end
+            
+            return true
+        end
+    end
+    return false
+end
+
+local function saveConfig()
+    local s, json = pcall(HttpService.JSONEncode, HttpService, config)
+    if s then 
+        pcall(writefile, SAVE_FILE, json) 
+    end
+end
+
+loadConfig()
+
+local function safeRequire(path)
+    local s, r = pcall(function() 
+        return require(path) 
+    end)
+    if s then return r end
+    return nil
+end
+
+-- ==================================================================
+-- AUTO LEVELING STATE
+-- ==================================================================
+local selectedTeamPreset = config.selectedTeamPreset
+local selectedWeightPreset = config.selectedWeightPreset
+local selectedAdvancedPreset = config.selectedAdvancedPreset
+local selectedMutationPreset = config.selectedMutationPreset
+local selectedPetTypes = config.selectedPetTypes or {}
 local queuedPets = {}
 local allSelectedPets = {}
 local equippedTargetPets = {}
-local targetLevel = TARGET_LEVEL_DEFAULT
-local advancedTargetLevel = 150
+local targetLevel = config.targetLevel or 50
+local advancedTargetLevel = config.advancedTargetLevel or 500
 local isLeveling = false
-local isAutoWeight = false
-local isAdvancedLeveling = false
-local isAutoMutation = false
-local rainbowMode = false
+local isAutoWeight = config.isAutoWeight or false
+local isAdvancedLeveling = config.isAdvancedLeveling or false
+local isAutoMutation = config.isAutoMutation or false
+local rainbowMode = config.rainbowMode or false
 local targetSearchText = ""
 local petSearchText = ""
 local mutationSearchText = ""
 local tempPresetPets = {}
-local unwantedMutations = {}
+local unwantedMutations = config.unwantedMutations or {}
 local availableMutations = {}
+local editingPresetName = nil
 
--- ==========================================
--- FUNCTIONS
--- ==========================================
+-- Forward declarations untuk UI references
+local StatusLabel
+local updateStatus
+
+-- ==================================================================
+-- PET DATA FUNCTIONS
+-- ==================================================================
 local function getPlayerPetData()
     local playerData = DataService:GetData()
     if playerData and playerData.PetsData then
@@ -110,11 +197,8 @@ local function getPetMutationName(petUUID)
     end
     
     if mutationType and mutationType ~= "None" and mutationType ~= "Normal" and mutationType ~= "m" then
-        local success, registry = pcall(function()
-            return require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
-        end)
-        
-        if success and registry and registry.EnumToPetMutation then
+        local registry = safeRequire(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
+        if registry and registry.EnumToPetMutation then
             local mutationName = registry.EnumToPetMutation[mutationType]
             if mutationName then
                 return mutationName
@@ -159,9 +243,6 @@ local function getEquippedPets()
     return petsData.EquippedPets or {}
 end
 
--- ==========================================
--- VALIDASI PET (BARU)
--- ==========================================
 local function isPetValid(petUUID)
     if not petUUID then return false end
     
@@ -174,49 +255,36 @@ local function isPetValid(petUUID)
     return inventory[petUUID] ~= nil
 end
 
--- Cleanup semua pet yang sudah hilang
 local function cleanupInvalidPets()
     local removedCount = 0
     
-    -- Cleanup dari allSelectedPets
     for i = #allSelectedPets, 1, -1 do
-        local petUUID = allSelectedPets[i]
-        if not isPetValid(petUUID) then
+        if not isPetValid(allSelectedPets[i]) then
             table.remove(allSelectedPets, i)
             removedCount = removedCount + 1
         end
     end
     
-    -- Cleanup dari queuedPets
     for i = #queuedPets, 1, -1 do
-        local petUUID = queuedPets[i]
-        if not isPetValid(petUUID) then
+        if not isPetValid(queuedPets[i]) then
             table.remove(queuedPets, i)
         end
     end
     
-    -- Cleanup dari equippedTargetPets
     for i = #equippedTargetPets, 1, -1 do
-        local petUUID = equippedTargetPets[i]
-        if not isPetValid(petUUID) then
+        if not isPetValid(equippedTargetPets[i]) then
             table.remove(equippedTargetPets, i)
         end
     end
     
-    if removedCount > 0 then
-        StatusLabel.Text = string.format("⚠️ %d pet hilang/traded, dihapus dari target", removedCount)
-        updateStatus()
-        wait(2)
+    if removedCount > 0 and StatusLabel then
+        StatusLabel.Text = string.format("⚠️ %d pet hilang, dihapus", removedCount)
     end
     
     return removedCount
 end
 
--- ==========================================
--- EQUIP/UNEQUIP dengan validasi
--- ==========================================
 local function equipPet(petUUID)
-    -- Validasi dulu
     if not isPetValid(petUUID) then
         return false, "Pet tidak valid/hilang"
     end
@@ -229,7 +297,6 @@ local function equipPet(petUUID)
         return false, tostring(err)
     end
     
-    -- Verifikasi pet benar-benar ter-equip
     wait(0.5)
     local equipped = getEquippedPets()
     if not table.find(equipped, petUUID) then
@@ -246,7 +313,6 @@ local function unequipPet(petUUID)
     return success
 end
 
--- Cek status mutasi pet
 local function getMutationStatus(petUUID)
     local petsData = getPlayerPetData()
     if not petsData then return "none" end
@@ -267,11 +333,8 @@ local function getMutationStatus(petUUID)
     end
     
     local mutationName = mutationType
-    local success, registry = pcall(function()
-        return require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
-    end)
-    
-    if success and registry and registry.EnumToPetMutation then
+    local registry = safeRequire(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
+    if registry and registry.EnumToPetMutation then
         mutationName = registry.EnumToPetMutation[mutationType] or mutationType
     end
     
@@ -284,7 +347,6 @@ local function getMutationStatus(petUUID)
     return "desired", mutationName
 end
 
--- Cari pet model di PetMover
 local function findPetModelByUUID(petUUID)
     local petsPhysical = workspace:FindFirstChild("PetsPhysical")
     if not petsPhysical then return nil end
@@ -307,7 +369,6 @@ local function findPetModelByUUID(petUUID)
     return nil
 end
 
--- Cek apakah tool adalah Cleansing Shard
 local function isCleansingShard(tool)
     if not tool:IsA("Tool") then return false end
     
@@ -320,9 +381,7 @@ local function isCleansingShard(tool)
     return string.find(nameLower, "cleansing") ~= nil
 end
 
--- Gunakan Cleansing Shard
 local function useCleansingShard(petUUID)
-    -- VALIDASI: Cek pet masih ada
     if not isPetValid(petUUID) then
         return false, "Pet sudah tidak ada"
     end
@@ -391,15 +450,10 @@ local function useCleansingShard(petUUID)
     return true, nil
 end
 
--- Save/Load System
+-- ==================================================================
+-- PRESET FUNCTIONS
+-- ==================================================================
 local function saveTeamPreset(presetName, petList)
-    local saveFolder = workspace:FindFirstChild("AutoLevel_Presets_Standalone")
-    if not saveFolder then
-        saveFolder = Instance.new("Folder")
-        saveFolder.Name = "AutoLevel_Presets_Standalone"
-        saveFolder.Parent = workspace
-    end
-    
     local petsWithInfo = {}
     for _, petUUID in ipairs(petList) do
         local mutation = getPetMutationName(petUUID)
@@ -411,57 +465,42 @@ local function saveTeamPreset(presetName, petList)
         })
     end
     
-    local presetData = {
+    config.teamPresets[presetName] = {
         name = presetName,
         pets = petsWithInfo,
         savedAt = os.time()
     }
     
-    local existingPreset = saveFolder:FindFirstChild(presetName)
-    if existingPreset then
-        existingPreset:Destroy()
-    end
-    
-    local stringValue = Instance.new("StringValue")
-    stringValue.Name = presetName
-    stringValue.Value = HttpService:JSONEncode(presetData)
-    stringValue.Parent = saveFolder
+    saveConfig()
 end
 
 local function loadTeamPresets()
-    local presets = {}
-    local saveFolder = workspace:FindFirstChild("AutoLevel_Presets_Standalone")
-    if saveFolder then
-        for _, child in pairs(saveFolder:GetChildren()) do
-            if child:IsA("StringValue") then
-                local success, decoded = pcall(function()
-                    return HttpService:JSONDecode(child.Value)
-                end)
-                if success and decoded then
-                    presets[child.Name] = decoded
-                end
-            end
-        end
-    end
-    return presets
+    return config.teamPresets or {}
 end
 
 local function getPresetUUIDs(presetName)
-    local presets = loadTeamPresets()
-    local preset = presets[presetName]
+    local preset = config.teamPresets[presetName]
     if preset then
         local uuids = {}
         for _, petInfo in ipairs(preset.pets) do
-            -- VALIDASI: Hanya tambahkan UUID yang masih valid
             if isPetValid(petInfo.UUID) then
                 table.insert(uuids, petInfo.UUID)
-            else
-                warn("Preset pet hilang:", petInfo.PetType, petInfo.UUID)
             end
         end
         return uuids
     end
     return {}
+end
+
+local function deletePreset(presetName)
+    if not presetName then return false end
+    
+    if config.teamPresets[presetName] then
+        config.teamPresets[presetName] = nil
+        saveConfig()
+        return true
+    end
+    return false
 end
 
 local function getWeightTarget()
@@ -472,9 +511,7 @@ local function getLevelTargetForWeight()
     return rainbowMode and LEVEL_TARGET_RAINBOW or LEVEL_TARGET_NORMAL
 end
 
--- ==========================================
--- FILTER FUNCTIONS (dengan validasi)
--- ==========================================
+-- Filter functions
 local function getPetsForWeight()
     local weightTarget = getWeightTarget()
     local result = {}
@@ -536,164 +573,266 @@ local function getPetsForNormalLeveling()
     return result
 end
 
--- ==========================================
--- MAIN GUI
--- ==========================================
-local AutoLevelGUI = Instance.new("ScreenGui")
-AutoLevelGUI.Name = "AutoLevelGUI_Standalone"
-AutoLevelGUI.ResetOnSpawn = false
-AutoLevelGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+-- ==================================================================
+-- GUI SKELETON
+-- ==================================================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AoneHub"
+screenGui.Parent = playerGui
+screenGui.ResetOnSpawn = false
 
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 380, 0, 700)
-MainFrame.Position = UDim2.new(1, -400, 0.5, -350)
-MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-MainFrame.BorderSizePixel = 0
-MainFrame.ClipsDescendants = true
-MainFrame.Parent = AutoLevelGUI
-
-local UICornerMain = Instance.new("UICorner")
-UICornerMain.CornerRadius = UDim.new(0, 10)
-UICornerMain.Parent = MainFrame
-
--- Title Bar
-local TitleBar = Instance.new("Frame")
-TitleBar.Size = UDim2.new(1, 0, 0, 40)
-TitleBar.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-TitleBar.BorderSizePixel = 0
-TitleBar.Parent = MainFrame
-
-local UICornerTitle = Instance.new("UICorner")
-UICornerTitle.CornerRadius = UDim.new(0, 10)
-UICornerTitle.Parent = TitleBar
-
-local TitleText = Instance.new("TextLabel")
-TitleText.Size = UDim2.new(0.6, 0, 1, 0)
-TitleText.Position = UDim2.new(0, 10, 0, 0)
-TitleText.BackgroundTransparency = 1
-TitleText.Font = Enum.Font.GothamBold
-TitleText.Text = "🐾 Auto Leveling v5"
-TitleText.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleText.TextSize = 14
-TitleText.TextXAlignment = Enum.TextXAlignment.Left
-TitleText.Parent = TitleBar
-
-local MinimizeButton = Instance.new("TextButton")
-MinimizeButton.Size = UDim2.new(0, 25, 0, 25)
-MinimizeButton.Position = UDim2.new(1, -60, 0, 8)
-MinimizeButton.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
-MinimizeButton.BorderSizePixel = 0
-MinimizeButton.Font = Enum.Font.GothamBold
-MinimizeButton.Text = "—"
-MinimizeButton.TextColor3 = Color3.fromRGB(0, 0, 0)
-MinimizeButton.TextSize = 14
-MinimizeButton.Parent = TitleBar
-
-local UICornerMinimize = Instance.new("UICorner")
-UICornerMinimize.CornerRadius = UDim.new(0, 5)
-UICornerMinimize.Parent = MinimizeButton
-
-local CloseButton = Instance.new("TextButton")
-CloseButton.Size = UDim2.new(0, 25, 0, 25)
-CloseButton.Position = UDim2.new(1, -30, 0, 8)
-CloseButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-CloseButton.BorderSizePixel = 0
-CloseButton.Font = Enum.Font.GothamBold
-CloseButton.Text = "X"
-CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-CloseButton.TextSize = 14
-CloseButton.Parent = TitleBar
-
-local UICornerClose = Instance.new("UICorner")
-UICornerClose.CornerRadius = UDim.new(0, 5)
-UICornerClose.Parent = CloseButton
-
-CloseButton.MouseButton1Click:Connect(function()
-    AutoLevelGUI:Destroy()
+screenGui.Destroying:Connect(function()
+    config.selectedTeamPreset = selectedTeamPreset
+    config.selectedWeightPreset = selectedWeightPreset
+    config.selectedAdvancedPreset = selectedAdvancedPreset
+    config.selectedMutationPreset = selectedMutationPreset
+    config.targetLevel = targetLevel
+    config.advancedTargetLevel = advancedTargetLevel
+    config.rainbowMode = rainbowMode
+    config.unwantedMutations = unwantedMutations
+    config.isAutoWeight = isAutoWeight
+    config.isAutoMutation = isAutoMutation
+    config.isAdvancedLeveling = isAdvancedLeveling
+    config.selectedPetTypes = selectedPetTypes
+    saveConfig()
 end)
 
-local ContentFrame = Instance.new("Frame")
-ContentFrame.Size = UDim2.new(1, 0, 1, -40)
-ContentFrame.Position = UDim2.new(0, 0, 0, 40)
-ContentFrame.BackgroundTransparency = 1
-ContentFrame.BorderSizePixel = 0
-ContentFrame.Parent = MainFrame
+local minimizedCircle = Instance.new("ImageButton")
+minimizedCircle.Size = UDim2.new(0, 50, 0, 50)
+minimizedCircle.Position = UDim2.new(0.5, -25, 0.5, -25)
+minimizedCircle.Image = "rbxassetid://78929291660435"
+minimizedCircle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+minimizedCircle.BackgroundTransparency = 1
+minimizedCircle.BorderSizePixel = 0
+minimizedCircle.Visible = false
+minimizedCircle.AutoButtonColor = false
+minimizedCircle.Draggable = true
+minimizedCircle.Parent = screenGui
+Instance.new("UICorner", minimizedCircle).CornerRadius = UDim.new(0, 15)
 
-local isMinimized = false
-MinimizeButton.MouseButton1Click:Connect(function()
-    isMinimized = not isMinimized
-    if isMinimized then
-        MainFrame.Size = UDim2.new(0, 380, 0, 40)
-        ContentFrame.Visible = false
-        MinimizeButton.Text = "+"
-    else
-        MainFrame.Size = UDim2.new(0, 380, 0, 700)
-        ContentFrame.Visible = true
-        MinimizeButton.Text = "—"
-    end
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 580, 0, 320)
+mainFrame.Position = UDim2.new(0.5, -290, 0.5, -160)
+mainFrame.BackgroundColor3 = C.bg
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 28)
+titleBar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
+
+local titleFill = Instance.new("Frame")
+titleFill.Size = UDim2.new(1, 0, 0.5, 0)
+titleFill.Position = UDim2.new(0, 0, 0.5, 0)
+titleFill.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+titleFill.BorderSizePixel = 0
+titleFill.Parent = titleBar
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
+titleLabel.Position = UDim2.new(0, 12, 0, 0)
+titleLabel.Text = "AoneHub"
+titleLabel.TextColor3 = C.text
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 11
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.BackgroundTransparency = 1
+titleLabel.Parent = titleBar
+
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 22, 0, 22)
+minimizeBtn.Position = UDim2.new(1, -50, 0, 3)
+minimizeBtn.Text = "–"
+minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.TextSize = 14
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+minimizeBtn.BorderSizePixel = 0
+minimizeBtn.AutoButtonColor = false
+minimizeBtn.Parent = titleBar
+Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 4)
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 22, 0, 22)
+closeBtn.Position = UDim2.new(1, -25, 0, 3)
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 11
+closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+closeBtn.BorderSizePixel = 0
+closeBtn.AutoButtonColor = false
+closeBtn.Parent = titleBar
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    minimizedCircle.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
+    mainFrame.Visible = false
+    minimizedCircle.Visible = true
 end)
 
--- Draggable
-local dragging = false
-local dragInput = nil
-local dragStart = nil
-local startPos = nil
-
-TitleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = MainFrame.Position
-    end
+minimizedCircle.MouseButton1Click:Connect(function()
+    mainFrame.Position = UDim2.new(0, minimizedCircle.AbsolutePosition.X, 0, minimizedCircle.AbsolutePosition.Y)
+    minimizedCircle.Visible = false
+    mainFrame.Visible = true
 end)
 
-TitleBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then
-        dragInput = input
-    end
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        MainFrame.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
-end)
+local sidebar = Instance.new("Frame")
+sidebar.Size = UDim2.new(0.2, 0, 1, -28)
+sidebar.Position = UDim2.new(0, 0, 0, 28)
+sidebar.BackgroundColor3 = C.sidebar
+sidebar.BorderSizePixel = 0
+sidebar.Parent = mainFrame
+Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 10)
 
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
-end)
+local sidebarFill = Instance.new("Frame")
+sidebarFill.Size = UDim2.new(1, 0, 0.3, 0)
+sidebarFill.Position = UDim2.new(0, 0, 0.85, 0)
+sidebarFill.BackgroundColor3 = C.sidebar
+sidebarFill.BorderSizePixel = 0
+sidebarFill.Parent = sidebar
 
--- Scroll Frame
-local ScrollFrame = Instance.new("ScrollingFrame")
-ScrollFrame.Size = UDim2.new(1, -20, 1, -10)
-ScrollFrame.Position = UDim2.new(0, 10, 0, 5)
-ScrollFrame.BackgroundTransparency = 1
-ScrollFrame.BorderSizePixel = 0
-ScrollFrame.ScrollBarThickness = 4
-ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 1500)
-ScrollFrame.Parent = ContentFrame
+local menuLabel = Instance.new("TextLabel")
+menuLabel.Size = UDim2.new(1, 0, 0, 16)
+menuLabel.Position = UDim2.new(0, 0, 0, 6)
+menuLabel.Text = "MENU"
+menuLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
+menuLabel.Font = Enum.Font.GothamBold
+menuLabel.TextSize = 9
+menuLabel.TextXAlignment = Enum.TextXAlignment.Center
+menuLabel.BackgroundTransparency = 1
+menuLabel.Parent = sidebar
 
-local ContentLayout = Instance.new("UIListLayout")
-ContentLayout.Padding = UDim.new(0, 8)
-ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ContentLayout.Parent = ScrollFrame
+local sep = Instance.new("Frame")
+sep.Size = UDim2.new(0.7, 0, 0, 1)
+sep.Position = UDim2.new(0.15, 0, 0, 26)
+sep.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+sep.BorderSizePixel = 0
+sep.Parent = sidebar
 
--- ==========================================
--- UI HELPERS
--- ==========================================
+local tabs = {
+    {name="Farm", label="🌾 Farm"},
+    {name="Weight", label="⚖️ Weight"},
+    {name="Mutation", label="🌈 Mutation"},
+    {name="Event", label="🔥 Event"},
+    {name="Tools", label="🔧 Tools"},
+    {name="AutoBuy", label="🛒 Buy"},
+    {name="AutoSell", label="💰 Sell"},
+    {name="Trade", label="📧 Trade"},
+    {name="Ekstra", label="⚙️ Extra"}
+}
+
+local tabBtns = {}
+local activeTab = nil
+
+for i, tab in ipairs(tabs) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.82, 0, 0, 22)
+    btn.Position = UDim2.new(0.09, 0, 0, 30 + (i-1)*27)
+    btn.Text = tab.label
+    btn.TextColor3 = C.textDim
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 8
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+    btn.BorderSizePixel = 0
+    btn.AutoButtonColor = false
+    btn.Parent = sidebar
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+    
+    btn.MouseEnter:Connect(function()
+        if activeTab ~= tab.name then
+            btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+        end
+    end)
+    
+    btn.MouseLeave:Connect(function()
+        if activeTab ~= tab.name then
+            btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+        end
+    end)
+    
+    tabBtns[tab.name] = btn
+end
+
+local contentArea = Instance.new("Frame")
+contentArea.Size = UDim2.new(0.8, -8, 1, -34)
+contentArea.Position = UDim2.new(0.2, 4, 0, 32)
+contentArea.BackgroundTransparency = 1
+contentArea.ClipsDescendants = true
+contentArea.Parent = mainFrame
+
+local defaultView = Instance.new("Frame")
+defaultView.Size = UDim2.new(1, 0, 1, 0)
+defaultView.BackgroundTransparency = 1
+defaultView.Parent = contentArea
+
+local logoLabel = Instance.new("TextLabel")
+logoLabel.Size = UDim2.new(1, 0, 0, 32)
+logoLabel.Position = UDim2.new(0, 0, 0.35, -16)
+logoLabel.Text = "AoneHub"
+logoLabel.TextColor3 = C.accent
+logoLabel.Font = Enum.Font.GothamBlack
+logoLabel.TextSize = 24
+logoLabel.BackgroundTransparency = 1
+logoLabel.Parent = defaultView
+
+local subLabel = Instance.new("TextLabel")
+subLabel.Size = UDim2.new(1, 0, 0, 14)
+subLabel.Position = UDim2.new(0, 0, 0.5, 0)
+subLabel.Text = "Pilih menu di samping"
+subLabel.TextColor3 = C.textDim
+subLabel.Font = Enum.Font.Gotham
+subLabel.TextSize = 10
+subLabel.BackgroundTransparency = 1
+subLabel.Parent = defaultView
+
+local tabFrames = {}
+for _, tab in ipairs(tabs) do
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 1, 0)
+    f.BackgroundTransparency = 1
+    f.Visible = false
+    f.Parent = contentArea
+    tabFrames[tab.name] = f
+end
+
+-- ==================================================================
+-- WEIGHT TAB - AUTO LEVELING UI
+-- ==================================================================
+local weightTab = tabFrames["Weight"]
+
+local weightScroll = Instance.new("ScrollingFrame")
+weightScroll.Size = UDim2.new(1, -10, 1, -10)
+weightScroll.Position = UDim2.new(0, 5, 0, 5)
+weightScroll.BackgroundTransparency = 1
+weightScroll.BorderSizePixel = 0
+weightScroll.ScrollBarThickness = 4
+weightScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+weightScroll.CanvasSize = UDim2.new(0, 0, 0, 2000)
+weightScroll.Parent = weightTab
+
+local weightLayout = Instance.new("UIListLayout")
+weightLayout.Padding = UDim.new(0, 6)
+weightLayout.SortOrder = Enum.SortOrder.LayoutOrder
+weightLayout.Parent = weightScroll
+
+-- UI Helper Functions
 local function createSection(parent, title)
     local SectionFrame = Instance.new("Frame")
     SectionFrame.Size = UDim2.new(1, -10, 0, 200)
-    SectionFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    SectionFrame.BackgroundColor3 = Color3.fromRGB(38, 38, 48)
     SectionFrame.BorderSizePixel = 0
     SectionFrame.Parent = parent
     
@@ -702,13 +841,13 @@ local function createSection(parent, title)
     UICornerSection.Parent = SectionFrame
     
     local SectionTitle = Instance.new("TextLabel")
-    SectionTitle.Size = UDim2.new(1, -20, 0, 25)
-    SectionTitle.Position = UDim2.new(0, 10, 0, 5)
+    SectionTitle.Size = UDim2.new(1, -20, 0, 22)
+    SectionTitle.Position = UDim2.new(0, 10, 0, 3)
     SectionTitle.BackgroundTransparency = 1
     SectionTitle.Font = Enum.Font.GothamBold
     SectionTitle.Text = title
     SectionTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SectionTitle.TextSize = 13
+    SectionTitle.TextSize = 11
     SectionTitle.TextXAlignment = Enum.TextXAlignment.Left
     SectionTitle.Parent = SectionFrame
     
@@ -719,7 +858,7 @@ local function createScrollableDropdown(parent, position, size, placeholder)
     local DropdownFrame = Instance.new("Frame")
     DropdownFrame.Size = size
     DropdownFrame.Position = position
-    DropdownFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+    DropdownFrame.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
     DropdownFrame.BorderSizePixel = 0
     DropdownFrame.Parent = parent
     
@@ -733,16 +872,36 @@ local function createScrollableDropdown(parent, position, size, placeholder)
     DropdownButton.Font = Enum.Font.Gotham
     DropdownButton.Text = placeholder
     DropdownButton.TextColor3 = Color3.fromRGB(200, 200, 200)
-    DropdownButton.TextSize = 10
+    DropdownButton.TextSize = 9
     DropdownButton.Parent = DropdownFrame
     
     return DropdownFrame, DropdownButton
 end
 
+local function clearDropdown(listFrame)
+    for _, child in pairs(listFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+end
+
+local function updateCanvasSize(scrollingFrame, itemHeight, padding)
+    local totalItems = 0
+    for _, child in pairs(scrollingFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            totalItems = totalItems + 1
+        end
+    end
+    
+    local totalHeight = totalItems * (itemHeight + padding) + padding
+    scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(totalHeight, 50))
+end
+
 -- ==========================================
 -- SECTION: PILIH TIM
 -- ==========================================
-local TeamSelectSection = createSection(ScrollFrame, "👥 Pilih Tim Leveling")
+local TeamSelectSection = createSection(weightScroll, "👥 Pilih Tim Leveling")
 TeamSelectSection.LayoutOrder = 1
 TeamSelectSection.Size = UDim2.new(1, -10, 0, 120)
 
@@ -752,7 +911,7 @@ SelectedTeamLabel.Position = UDim2.new(0, 10, 0, 28)
 SelectedTeamLabel.BackgroundColor3 = Color3.fromRGB(50, 80, 50)
 SelectedTeamLabel.BorderSizePixel = 0
 SelectedTeamLabel.Font = Enum.Font.GothamBold
-SelectedTeamLabel.Text = "Tim Leveling: Belum dipilih"
+SelectedTeamLabel.Text = selectedTeamPreset and string.format("Tim: %s", selectedTeamPreset) or "Tim Leveling: Belum dipilih"
 SelectedTeamLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 SelectedTeamLabel.TextSize = 9
 SelectedTeamLabel.TextWrapped = true
@@ -766,7 +925,7 @@ local PresetDropdown, PresetDropdownButton = createScrollableDropdown(
     TeamSelectSection,
     UDim2.new(0, 10, 0, 68),
     UDim2.new(1, -20, 0, 28),
-    "📂 Pilih Preset Tim Leveling"
+    selectedTeamPreset and string.format("📂 %s", selectedTeamPreset) or "📂 Pilih Preset Tim Leveling"
 )
 
 local PresetListFrame = Instance.new("ScrollingFrame")
@@ -785,22 +944,44 @@ PresetListLayout.Padding = UDim.new(0, 3)
 PresetListLayout.Parent = PresetListFrame
 
 -- ==========================================
--- SECTION: BUAT PRESET
+-- SECTION: BUAT/EDIT PRESET
 -- ==========================================
-local CreatePresetSection = createSection(ScrollFrame, "💾 Buat Preset Tim")
+local CreatePresetSection = createSection(weightScroll, "💾 Buat/Edit Preset")
 CreatePresetSection.LayoutOrder = 2
-CreatePresetSection.Size = UDim2.new(1, -10, 0, 160)
+CreatePresetSection.Size = UDim2.new(1, -10, 0, 250)
+
+local EditPresetDropdown, EditPresetButton = createScrollableDropdown(
+    CreatePresetSection,
+    UDim2.new(0, 10, 0, 28),
+    UDim2.new(1, -20, 0, 28),
+    "📂 Pilih Preset untuk Diedit/Dihapus"
+)
+
+local EditPresetListFrame = Instance.new("ScrollingFrame")
+EditPresetListFrame.Size = UDim2.new(1, -20, 0, 60)
+EditPresetListFrame.Position = UDim2.new(0, 10, 0, 60)
+EditPresetListFrame.BackgroundTransparency = 1
+EditPresetListFrame.BorderSizePixel = 0
+EditPresetListFrame.ScrollBarThickness = 3
+EditPresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+EditPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 60)
+EditPresetListFrame.Visible = false
+EditPresetListFrame.Parent = CreatePresetSection
+
+local EditPresetLayout = Instance.new("UIListLayout")
+EditPresetLayout.Padding = UDim.new(0, 2)
+EditPresetLayout.Parent = EditPresetListFrame
 
 local PresetNameInput = Instance.new("TextBox")
-PresetNameInput.Size = UDim2.new(1, -20, 0, 25)
-PresetNameInput.Position = UDim2.new(0, 10, 0, 28)
-PresetNameInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+PresetNameInput.Size = UDim2.new(1, -20, 0, 22)
+PresetNameInput.Position = UDim2.new(0, 10, 0, 95)
+PresetNameInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 PresetNameInput.BorderSizePixel = 0
 PresetNameInput.Font = Enum.Font.Gotham
 PresetNameInput.PlaceholderText = "Nama preset tim..."
 PresetNameInput.Text = ""
 PresetNameInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-PresetNameInput.TextSize = 10
+PresetNameInput.TextSize = 9
 PresetNameInput.Parent = CreatePresetSection
 
 local UICornerPresetName = Instance.new("UICorner")
@@ -809,14 +990,14 @@ UICornerPresetName.Parent = PresetNameInput
 
 local PetSearchBox = Instance.new("TextBox")
 PetSearchBox.Size = UDim2.new(1, -20, 0, 22)
-PetSearchBox.Position = UDim2.new(0, 10, 0, 56)
-PetSearchBox.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+PetSearchBox.Position = UDim2.new(0, 10, 0, 122)
+PetSearchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 PetSearchBox.BorderSizePixel = 0
 PetSearchBox.Font = Enum.Font.Gotham
 PetSearchBox.PlaceholderText = "🔍 Cari pet..."
 PetSearchBox.Text = ""
 PetSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-PetSearchBox.TextSize = 10
+PetSearchBox.TextSize = 9
 PetSearchBox.Parent = CreatePresetSection
 
 local UICornerPetSearch = Instance.new("UICorner")
@@ -825,12 +1006,12 @@ UICornerPetSearch.Parent = PetSearchBox
 
 local PetListFrame = Instance.new("ScrollingFrame")
 PetListFrame.Size = UDim2.new(1, -20, 0, 60)
-PetListFrame.Position = UDim2.new(0, 10, 0, 80)
+PetListFrame.Position = UDim2.new(0, 10, 0, 148)
 PetListFrame.BackgroundTransparency = 1
 PetListFrame.BorderSizePixel = 0
 PetListFrame.ScrollBarThickness = 3
 PetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-PetListFrame.CanvasSize = UDim2.new(0, 0, 0, 80)
+PetListFrame.CanvasSize = UDim2.new(0, 0, 0, 60)
 PetListFrame.Parent = CreatePresetSection
 
 local PetListLayout = Instance.new("UIListLayout")
@@ -839,36 +1020,51 @@ PetListLayout.Parent = PetListFrame
 
 local SavePresetButton = Instance.new("TextButton")
 SavePresetButton.Size = UDim2.new(1, -20, 0, 22)
-SavePresetButton.Position = UDim2.new(0, 10, 0, 135)
-SavePresetButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+SavePresetButton.Position = UDim2.new(0, 10, 0, 212)
+SavePresetButton.BackgroundColor3 = C.success
 SavePresetButton.BorderSizePixel = 0
 SavePresetButton.Font = Enum.Font.GothamBold
 SavePresetButton.Text = "💾 Simpan Preset"
 SavePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-SavePresetButton.TextSize = 10
+SavePresetButton.TextSize = 9
 SavePresetButton.Parent = CreatePresetSection
 
 local UICornerSave = Instance.new("UICorner")
 UICornerSave.CornerRadius = UDim.new(0, 4)
 UICornerSave.Parent = SavePresetButton
 
+local DeletePresetButton = Instance.new("TextButton")
+DeletePresetButton.Size = UDim2.new(1, -20, 0, 22)
+DeletePresetButton.Position = UDim2.new(0, 10, 0, 236)
+DeletePresetButton.BackgroundColor3 = C.danger
+DeletePresetButton.BorderSizePixel = 0
+DeletePresetButton.Font = Enum.Font.GothamBold
+DeletePresetButton.Text = "🗑️ Hapus Preset"
+DeletePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+DeletePresetButton.TextSize = 9
+DeletePresetButton.Parent = CreatePresetSection
+
+local UICornerDelete = Instance.new("UICorner")
+UICornerDelete.CornerRadius = UDim.new(0, 4)
+UICornerDelete.Parent = DeletePresetButton
+
 -- ==========================================
 -- SECTION: TARGET LEVEL
 -- ==========================================
-local LevelSection = createSection(ScrollFrame, "🎯 Target Level")
+local LevelSection = createSection(weightScroll, "🎯 Target Level")
 LevelSection.LayoutOrder = 3
-LevelSection.Size = UDim2.new(1, -10, 0, 70)
+LevelSection.Size = UDim2.new(1, -10, 0, 60)
 
 local LevelInput = Instance.new("TextBox")
-LevelInput.Size = UDim2.new(1, -20, 0, 25)
+LevelInput.Size = UDim2.new(1, -20, 0, 22)
 LevelInput.Position = UDim2.new(0, 10, 0, 28)
-LevelInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+LevelInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 LevelInput.BorderSizePixel = 0
 LevelInput.Font = Enum.Font.Gotham
 LevelInput.PlaceholderText = "Target Level"
-LevelInput.Text = tostring(TARGET_LEVEL_DEFAULT)
+LevelInput.Text = tostring(targetLevel)
 LevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-LevelInput.TextSize = 10
+LevelInput.TextSize = 9
 LevelInput.Parent = LevelSection
 
 local UICornerLevelInput = Instance.new("UICorner")
@@ -879,6 +1075,8 @@ LevelInput.FocusLost:Connect(function()
     local newLevel = tonumber(LevelInput.Text)
     if newLevel and newLevel > 0 then
         targetLevel = newLevel
+        config.targetLevel = newLevel
+        saveConfig()
     else
         LevelInput.Text = tostring(targetLevel)
     end
@@ -887,20 +1085,20 @@ end)
 -- ==========================================
 -- SECTION: PET TARGET
 -- ==========================================
-local TargetSection = createSection(ScrollFrame, "🎯 Pet Target (Semua Pet)")
+local TargetSection = createSection(weightScroll, "🎯 Pet Target")
 TargetSection.LayoutOrder = 4
-TargetSection.Size = UDim2.new(1, -10, 0, 160)
+TargetSection.Size = UDim2.new(1, -10, 0, 150)
 
 local TargetSearchBox = Instance.new("TextBox")
 TargetSearchBox.Size = UDim2.new(1, -20, 0, 22)
 TargetSearchBox.Position = UDim2.new(0, 10, 0, 28)
-TargetSearchBox.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+TargetSearchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 TargetSearchBox.BorderSizePixel = 0
 TargetSearchBox.Font = Enum.Font.Gotham
 TargetSearchBox.PlaceholderText = "🔍 Cari pet target..."
 TargetSearchBox.Text = ""
 TargetSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-TargetSearchBox.TextSize = 10
+TargetSearchBox.TextSize = 9
 TargetSearchBox.Parent = TargetSection
 
 local UICornerTargetSearch = Instance.new("UICorner")
@@ -924,12 +1122,12 @@ TargetListLayout.Parent = TargetListFrame
 local ScanButton = Instance.new("TextButton")
 ScanButton.Size = UDim2.new(1, -20, 0, 22)
 ScanButton.Position = UDim2.new(0, 10, 0, 135)
-ScanButton.BackgroundColor3 = Color3.fromRGB(60, 120, 200)
+ScanButton.BackgroundColor3 = C.accent
 ScanButton.BorderSizePixel = 0
 ScanButton.Font = Enum.Font.GothamBold
 ScanButton.Text = "🔍 Refresh List"
 ScanButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ScanButton.TextSize = 10
+ScanButton.TextSize = 9
 ScanButton.Parent = TargetSection
 
 local UICornerScan = Instance.new("UICorner")
@@ -939,19 +1137,19 @@ UICornerScan.Parent = ScanButton
 -- ==========================================
 -- SECTION: AUTO WEIGHT
 -- ==========================================
-local WeightSection = createSection(ScrollFrame, "⚖️ Auto Weight")
+local WeightSection = createSection(weightScroll, "⚖️ Auto Weight")
 WeightSection.LayoutOrder = 5
-WeightSection.Size = UDim2.new(1, -10, 0, 160)
+WeightSection.Size = UDim2.new(1, -10, 0, 150)
 
 local WeightToggleButton = Instance.new("TextButton")
 WeightToggleButton.Size = UDim2.new(1, -20, 0, 28)
 WeightToggleButton.Position = UDim2.new(0, 10, 0, 28)
-WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+WeightToggleButton.BackgroundColor3 = isAutoWeight and C.success or Color3.fromRGB(70, 70, 85)
 WeightToggleButton.BorderSizePixel = 0
 WeightToggleButton.Font = Enum.Font.GothamBold
-WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
+WeightToggleButton.Text = isAutoWeight and "⚖️ Auto Weight: ON" or "⚖️ Auto Weight: OFF"
 WeightToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-WeightToggleButton.TextSize = 11
+WeightToggleButton.TextSize = 10
 WeightToggleButton.Parent = WeightSection
 
 local UICornerWeightToggle = Instance.new("UICorner")
@@ -961,12 +1159,12 @@ UICornerWeightToggle.Parent = WeightToggleButton
 local RainbowModeButton = Instance.new("TextButton")
 RainbowModeButton.Size = UDim2.new(1, -20, 0, 25)
 RainbowModeButton.Position = UDim2.new(0, 10, 0, 60)
-RainbowModeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+RainbowModeButton.BackgroundColor3 = rainbowMode and C.warning or Color3.fromRGB(60, 60, 75)
 RainbowModeButton.BorderSizePixel = 0
 RainbowModeButton.Font = Enum.Font.Gotham
-RainbowModeButton.Text = "☐ Rainbow Mode (BW: 5.5, Lv: 40)"
+RainbowModeButton.Text = rainbowMode and "☑ Rainbow Mode (BW: 5.5, Lv: 40)" or "☐ Rainbow Mode (BW: 5.5, Lv: 40)"
 RainbowModeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-RainbowModeButton.TextSize = 10
+RainbowModeButton.TextSize = 9
 RainbowModeButton.Parent = WeightSection
 
 local UICornerRainbow = Instance.new("UICorner")
@@ -977,17 +1175,17 @@ local WeightPresetDropdown, WeightPresetButton = createScrollableDropdown(
     WeightSection,
     UDim2.new(0, 10, 0, 90),
     UDim2.new(1, -20, 0, 28),
-    "📂 Pilih Preset Auto Weight"
+    selectedWeightPreset and string.format("📂 %s", selectedWeightPreset) or "📂 Pilih Preset Auto Weight"
 )
 
 local WeightPresetListFrame = Instance.new("ScrollingFrame")
-WeightPresetListFrame.Size = UDim2.new(1, -20, 0, 60)
+WeightPresetListFrame.Size = UDim2.new(1, -20, 0, 50)
 WeightPresetListFrame.Position = UDim2.new(0, 10, 0, 120)
 WeightPresetListFrame.BackgroundTransparency = 1
 WeightPresetListFrame.BorderSizePixel = 0
 WeightPresetListFrame.ScrollBarThickness = 3
 WeightPresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-WeightPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 60)
+WeightPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 50)
 WeightPresetListFrame.Visible = false
 WeightPresetListFrame.Parent = WeightSection
 
@@ -998,19 +1196,19 @@ WeightPresetLayout.Parent = WeightPresetListFrame
 -- ==========================================
 -- SECTION: AUTO MUTATION
 -- ==========================================
-local MutationSection = createSection(ScrollFrame, "🧬 Auto Mutation")
+local MutationSection = createSection(weightScroll, "🧬 Auto Mutation")
 MutationSection.LayoutOrder = 6
-MutationSection.Size = UDim2.new(1, -10, 0, 320)
+MutationSection.Size = UDim2.new(1, -10, 0, 300)
 
 local MutationToggleButton = Instance.new("TextButton")
 MutationToggleButton.Size = UDim2.new(1, -20, 0, 28)
 MutationToggleButton.Position = UDim2.new(0, 10, 0, 28)
-MutationToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+MutationToggleButton.BackgroundColor3 = isAutoMutation and C.success or Color3.fromRGB(70, 70, 85)
 MutationToggleButton.BorderSizePixel = 0
 MutationToggleButton.Font = Enum.Font.GothamBold
-MutationToggleButton.Text = "🧬 Auto Mutation: OFF"
+MutationToggleButton.Text = isAutoMutation and "🧬 Auto Mutation: ON" or "🧬 Auto Mutation: OFF"
 MutationToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-MutationToggleButton.TextSize = 11
+MutationToggleButton.TextSize = 10
 MutationToggleButton.Parent = MutationSection
 
 local UICornerMutationToggle = Instance.new("UICorner")
@@ -1021,17 +1219,17 @@ local MutationPresetDropdown, MutationPresetButton = createScrollableDropdown(
     MutationSection,
     UDim2.new(0, 10, 0, 62),
     UDim2.new(1, -20, 0, 28),
-    "📂 Pilih Preset Tim Mutation"
+    selectedMutationPreset and string.format("📂 %s", selectedMutationPreset) or "📂 Pilih Preset Tim Mutation"
 )
 
 local MutationPresetListFrame = Instance.new("ScrollingFrame")
-MutationPresetListFrame.Size = UDim2.new(1, -20, 0, 60)
+MutationPresetListFrame.Size = UDim2.new(1, -20, 0, 50)
 MutationPresetListFrame.Position = UDim2.new(0, 10, 0, 95)
 MutationPresetListFrame.BackgroundTransparency = 1
 MutationPresetListFrame.BorderSizePixel = 0
 MutationPresetListFrame.ScrollBarThickness = 3
 MutationPresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-MutationPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 60)
+MutationPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 50)
 MutationPresetListFrame.Visible = false
 MutationPresetListFrame.Parent = MutationSection
 
@@ -1042,13 +1240,13 @@ MutationPresetLayout.Parent = MutationPresetListFrame
 local MutationSearchBox = Instance.new("TextBox")
 MutationSearchBox.Size = UDim2.new(1, -20, 0, 22)
 MutationSearchBox.Position = UDim2.new(0, 10, 0, 128)
-MutationSearchBox.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+MutationSearchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 MutationSearchBox.BorderSizePixel = 0
 MutationSearchBox.Font = Enum.Font.Gotham
 MutationSearchBox.PlaceholderText = "🔍 Cari mutasi..."
 MutationSearchBox.Text = ""
 MutationSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-MutationSearchBox.TextSize = 10
+MutationSearchBox.TextSize = 9
 MutationSearchBox.Parent = MutationSection
 
 local UICornerMutationSearch = Instance.new("UICorner")
@@ -1056,24 +1254,24 @@ UICornerMutationSearch.CornerRadius = UDim.new(0, 4)
 UICornerMutationSearch.Parent = MutationSearchBox
 
 local MutationListLabel = Instance.new("TextLabel")
-MutationListLabel.Size = UDim2.new(1, -20, 0, 18)
+MutationListLabel.Size = UDim2.new(1, -20, 0, 16)
 MutationListLabel.Position = UDim2.new(0, 10, 0, 152)
 MutationListLabel.BackgroundTransparency = 1
 MutationListLabel.Font = Enum.Font.GothamBold
-MutationListLabel.Text = "❌ Mutasi tidak diinginkan (klik untuk pilih):"
+MutationListLabel.Text = "❌ Mutasi tidak diinginkan:"
 MutationListLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
 MutationListLabel.TextSize = 9
 MutationListLabel.TextXAlignment = Enum.TextXAlignment.Left
 MutationListLabel.Parent = MutationSection
 
 local MutationListFrame = Instance.new("ScrollingFrame")
-MutationListFrame.Size = UDim2.new(1, -20, 0, 140)
+MutationListFrame.Size = UDim2.new(1, -20, 0, 120)
 MutationListFrame.Position = UDim2.new(0, 10, 0, 172)
 MutationListFrame.BackgroundTransparency = 1
 MutationListFrame.BorderSizePixel = 0
 MutationListFrame.ScrollBarThickness = 3
 MutationListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-MutationListFrame.CanvasSize = UDim2.new(0, 0, 0, 140)
+MutationListFrame.CanvasSize = UDim2.new(0, 0, 0, 120)
 MutationListFrame.Parent = MutationSection
 
 local MutationListLayout = Instance.new("UIListLayout")
@@ -1083,19 +1281,19 @@ MutationListLayout.Parent = MutationListFrame
 -- ==========================================
 -- SECTION: ADVANCED
 -- ==========================================
-local AdvancedSection = createSection(ScrollFrame, "🚀 Advanced (Opsional)")
+local AdvancedSection = createSection(weightScroll, "🚀 Advanced")
 AdvancedSection.LayoutOrder = 7
-AdvancedSection.Size = UDim2.new(1, -10, 0, 120)
+AdvancedSection.Size = UDim2.new(1, -10, 0, 110)
 
 local AdvancedToggleButton = Instance.new("TextButton")
 AdvancedToggleButton.Size = UDim2.new(1, -20, 0, 25)
 AdvancedToggleButton.Position = UDim2.new(0, 10, 0, 28)
-AdvancedToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
+AdvancedToggleButton.BackgroundColor3 = isAdvancedLeveling and C.success or Color3.fromRGB(70, 70, 85)
 AdvancedToggleButton.BorderSizePixel = 0
 AdvancedToggleButton.Font = Enum.Font.GothamBold
-AdvancedToggleButton.Text = "🚀 Advanced: OFF"
+AdvancedToggleButton.Text = isAdvancedLeveling and "🚀 Advanced: ON" or "🚀 Advanced: OFF"
 AdvancedToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-AdvancedToggleButton.TextSize = 10
+AdvancedToggleButton.TextSize = 9
 AdvancedToggleButton.Parent = AdvancedSection
 
 local UICornerAdvancedToggle = Instance.new("UICorner")
@@ -1105,13 +1303,13 @@ UICornerAdvancedToggle.Parent = AdvancedToggleButton
 local AdvancedLevelInput = Instance.new("TextBox")
 AdvancedLevelInput.Size = UDim2.new(1, -20, 0, 22)
 AdvancedLevelInput.Position = UDim2.new(0, 10, 0, 56)
-AdvancedLevelInput.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+AdvancedLevelInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 AdvancedLevelInput.BorderSizePixel = 0
 AdvancedLevelInput.Font = Enum.Font.Gotham
 AdvancedLevelInput.PlaceholderText = "Advanced Target Level"
-AdvancedLevelInput.Text = "150"
+AdvancedLevelInput.Text = tostring(advancedTargetLevel)
 AdvancedLevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-AdvancedLevelInput.TextSize = 10
+AdvancedLevelInput.TextSize = 9
 AdvancedLevelInput.Parent = AdvancedSection
 
 local UICornerAdvancedLevel = Instance.new("UICorner")
@@ -1122,6 +1320,8 @@ AdvancedLevelInput.FocusLost:Connect(function()
     local newLevel = tonumber(AdvancedLevelInput.Text)
     if newLevel and newLevel > 0 then
         advancedTargetLevel = newLevel
+        config.advancedTargetLevel = newLevel
+        saveConfig()
     else
         AdvancedLevelInput.Text = tostring(advancedTargetLevel)
     end
@@ -1130,18 +1330,18 @@ end)
 local AdvancedPresetDropdown, AdvancedPresetButton = createScrollableDropdown(
     AdvancedSection,
     UDim2.new(0, 10, 0, 82),
-    UDim2.new(1, -20, 0, 25),
-    "📂 Pilih Preset Advanced"
+    UDim2.new(1, -20, 0, 22),
+    selectedAdvancedPreset and string.format("📂 %s", selectedAdvancedPreset) or "📂 Pilih Preset Advanced"
 )
 
 local AdvancedPresetListFrame = Instance.new("ScrollingFrame")
-AdvancedPresetListFrame.Size = UDim2.new(1, -20, 0, 50)
-AdvancedPresetListFrame.Position = UDim2.new(0, 10, 0, 110)
+AdvancedPresetListFrame.Size = UDim2.new(1, -20, 0, 40)
+AdvancedPresetListFrame.Position = UDim2.new(0, 10, 0, 105)
 AdvancedPresetListFrame.BackgroundTransparency = 1
 AdvancedPresetListFrame.BorderSizePixel = 0
 AdvancedPresetListFrame.ScrollBarThickness = 3
 AdvancedPresetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-AdvancedPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 50)
+AdvancedPresetListFrame.CanvasSize = UDim2.new(0, 0, 0, 40)
 AdvancedPresetListFrame.Visible = false
 AdvancedPresetListFrame.Parent = AdvancedSection
 
@@ -1152,60 +1352,40 @@ AdvancedPresetLayout.Parent = AdvancedPresetListFrame
 -- ==========================================
 -- SECTION: KONTROL
 -- ==========================================
-local ButtonSection = createSection(ScrollFrame, "⚙️ Kontrol")
+local ButtonSection = createSection(weightScroll, "⚙️ Kontrol")
 ButtonSection.LayoutOrder = 8
-ButtonSection.Size = UDim2.new(1, -10, 0, 80)
+ButtonSection.Size = UDim2.new(1, -10, 0, 75)
 
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Size = UDim2.new(1, -20, 0, 30)
 ToggleButton.Position = UDim2.new(0, 10, 0, 25)
-ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+ToggleButton.BackgroundColor3 = C.success
 ToggleButton.BorderSizePixel = 0
 ToggleButton.Font = Enum.Font.GothamBold
 ToggleButton.Text = "▶️ Mulai"
 ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-ToggleButton.TextSize = 11
+ToggleButton.TextSize = 10
 ToggleButton.Parent = ButtonSection
 
 local UICornerToggle = Instance.new("UICorner")
 UICornerToggle.CornerRadius = UDim.new(0, 5)
 UICornerToggle.Parent = ToggleButton
 
-local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -20, 0, 15)
+StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -20, 0, 14)
 StatusLabel.Position = UDim2.new(0, 10, 0, 58)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Font = Enum.Font.Gotham
 StatusLabel.Text = "Status: Idle"
 StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-StatusLabel.TextSize = 9
+StatusLabel.TextSize = 8
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 StatusLabel.Parent = ButtonSection
 
--- ==========================================
--- HELPER FUNCTIONS
--- ==========================================
-local function clearDropdown(listFrame)
-    for _, child in pairs(listFrame:GetChildren()) do
-        if child:IsA("TextButton") then
-            child:Destroy()
-        end
-    end
-end
-
-local function updateCanvasSize(scrollingFrame, itemHeight, padding)
-    local totalItems = 0
-    for _, child in pairs(scrollingFrame:GetChildren()) do
-        if child:IsA("TextButton") then
-            totalItems = totalItems + 1
-        end
-    end
-    
-    local totalHeight = totalItems * (itemHeight + padding) + padding
-    scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(totalHeight, 50))
-end
-
-local function updateStatus()
+-- ==================================================================
+-- POPULATE FUNCTIONS
+-- ==================================================================
+updateStatus = function()
     local teamCount = selectedTeamPreset and #getPresetUUIDs(selectedTeamPreset) or 0
     local modeText = rainbowMode and "🌈" or "📊"
     
@@ -1220,7 +1400,6 @@ local function updateStatus()
     )
 end
 
--- Populate Preset Dropdown
 local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
     clearDropdown(listFrame)
     
@@ -1234,7 +1413,6 @@ local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
     for i, presetName in ipairs(presetNames) do
         local preset = presets[presetName]
         
-        -- Hitung pet valid
         local validCount = 0
         for _, petInfo in ipairs(preset.pets) do
             if isPetValid(petInfo.UUID) then
@@ -1243,13 +1421,13 @@ local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
         end
         
         local PresetButton = Instance.new("TextButton")
-        PresetButton.Size = UDim2.new(1, 0, 0, 25)
-        PresetButton.BackgroundColor3 = selectedPreset == presetName and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(70, 70, 85)
+        PresetButton.Size = UDim2.new(1, 0, 0, 22)
+        PresetButton.BackgroundColor3 = selectedPreset == presetName and C.success or Color3.fromRGB(65, 65, 80)
         PresetButton.BorderSizePixel = 0
         PresetButton.Font = Enum.Font.Gotham
-        PresetButton.Text = string.format("📁 %s (%d/%d pet)", presetName, validCount, #preset.pets)
+        PresetButton.Text = string.format("📁 %s (%d/%d)", presetName, validCount, #preset.pets)
         PresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        PresetButton.TextSize = 9
+        PresetButton.TextSize = 8
         PresetButton.Parent = listFrame
         
         local UICornerPreset = Instance.new("UICorner")
@@ -1263,10 +1441,63 @@ local function populatePresetDropdown(listFrame, selectedPreset, onSelect)
         end)
     end
     
-    updateCanvasSize(listFrame, 25, 3)
+    updateCanvasSize(listFrame, 22, 3)
 end
 
--- Populate Mutation List
+local function populateEditPresetDropdown()
+    clearDropdown(EditPresetListFrame)
+    
+    local presets = loadTeamPresets()
+    local presetNames = {}
+    for name in pairs(presets) do
+        table.insert(presetNames, name)
+    end
+    table.sort(presetNames)
+    
+    for i, presetName in ipairs(presetNames) do
+        local preset = presets[presetName]
+        
+        local validCount = 0
+        for _, petInfo in ipairs(preset.pets) do
+            if isPetValid(petInfo.UUID) then
+                validCount = validCount + 1
+            end
+        end
+        
+        local PresetButton = Instance.new("TextButton")
+        PresetButton.Size = UDim2.new(1, 0, 0, 20)
+        PresetButton.BackgroundColor3 = editingPresetName == presetName and C.success or Color3.fromRGB(65, 65, 80)
+        PresetButton.BorderSizePixel = 0
+        PresetButton.Font = Enum.Font.Gotham
+        PresetButton.Text = string.format("📁 %s (%d pet)", presetName, validCount)
+        PresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        PresetButton.TextSize = 8
+        PresetButton.Parent = EditPresetListFrame
+        
+        local UICornerPreset = Instance.new("UICorner")
+        UICornerPreset.CornerRadius = UDim.new(0, 3)
+        UICornerPreset.Parent = PresetButton
+        
+        PresetButton.MouseButton1Click:Connect(function()
+            editingPresetName = presetName
+            PresetNameInput.Text = presetName
+            
+            tempPresetPets = {}
+            for _, petInfo in ipairs(preset.pets) do
+                if isPetValid(petInfo.UUID) then
+                    table.insert(tempPresetPets, petInfo.UUID)
+                end
+            end
+            
+            populatePetList()
+            EditPresetButton.Text = string.format("📂 %s", presetName)
+            EditPresetListFrame.Visible = false
+        end)
+    end
+    
+    updateCanvasSize(EditPresetListFrame, 20, 2)
+end
+
 local function populateMutationList()
     clearDropdown(MutationListFrame)
     
@@ -1275,13 +1506,13 @@ local function populateMutationList()
             local isSelected = table.find(unwantedMutations, mutationName) ~= nil
             
             local MutationButton = Instance.new("TextButton")
-            MutationButton.Size = UDim2.new(1, 0, 0, 22)
-            MutationButton.BackgroundColor3 = isSelected and Color3.fromRGB(200, 50, 50) or Color3.fromRGB(70, 70, 85)
+            MutationButton.Size = UDim2.new(1, 0, 0, 20)
+            MutationButton.BackgroundColor3 = isSelected and C.danger or Color3.fromRGB(65, 65, 80)
             MutationButton.BorderSizePixel = 0
             MutationButton.Font = Enum.Font.Gotham
             MutationButton.Text = isSelected and string.format("❌ %s", mutationName) or string.format("☐ %s", mutationName)
             MutationButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-            MutationButton.TextSize = 9
+            MutationButton.TextSize = 8
             MutationButton.Parent = MutationListFrame
             
             local UICorner = Instance.new("UICorner")
@@ -1295,15 +1526,16 @@ local function populateMutationList()
                 else
                     table.insert(unwantedMutations, mutationName)
                 end
+                config.unwantedMutations = unwantedMutations
+                saveConfig()
                 populateMutationList()
             end)
         end
     end
     
-    updateCanvasSize(MutationListFrame, 22, 2)
+    updateCanvasSize(MutationListFrame, 20, 2)
 end
 
--- Populate Pet List
 local function populatePetList()
     clearDropdown(PetListFrame)
     
@@ -1335,13 +1567,13 @@ local function populatePetList()
     
     for i, petInfo in ipairs(allPets) do
         local PetButton = Instance.new("TextButton")
-        PetButton.Size = UDim2.new(1, 0, 0, 25)
-        PetButton.BackgroundColor3 = petInfo.IsSelected and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(70, 70, 85)
+        PetButton.Size = UDim2.new(1, 0, 0, 20)
+        PetButton.BackgroundColor3 = petInfo.IsSelected and C.success or Color3.fromRGB(65, 65, 80)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
         PetButton.Text = petInfo.IsSelected and string.format("✓ %s (Lv.%d)", petInfo.DisplayName, petInfo.Level) or string.format("%s (Lv.%d)", petInfo.DisplayName, petInfo.Level)
         PetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        PetButton.TextSize = 9
+        PetButton.TextSize = 8
         PetButton.Parent = PetListFrame
         
         local UICornerPet = Instance.new("UICorner")
@@ -1361,10 +1593,9 @@ local function populatePetList()
         end)
     end
     
-    updateCanvasSize(PetListFrame, 25, 3)
+    updateCanvasSize(PetListFrame, 20, 2)
 end
 
--- SCAN TARGET
 local function scanTargetPets()
     local petsData = getPlayerPetData()
     if not petsData then return {} end
@@ -1390,7 +1621,6 @@ local function scanTargetPets()
     return petTypes
 end
 
--- Populate Target Dropdown
 local function populateTargetDropdown()
     clearDropdown(TargetListFrame)
     
@@ -1411,13 +1641,13 @@ local function populateTargetDropdown()
     
     for i, petInfo in ipairs(allPetTypes) do
         local PetButton = Instance.new("TextButton")
-        PetButton.Size = UDim2.new(1, 0, 0, 25)
-        PetButton.BackgroundColor3 = petInfo.IsSelected and Color3.fromRGB(200, 150, 50) or Color3.fromRGB(70, 70, 85)
+        PetButton.Size = UDim2.new(1, 0, 0, 20)
+        PetButton.BackgroundColor3 = petInfo.IsSelected and C.warning or Color3.fromRGB(65, 65, 80)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
         PetButton.Text = petInfo.IsSelected and string.format("✓ %s (x%d)", petInfo.PetType, petInfo.Count) or string.format("%s (x%d)", petInfo.PetType, petInfo.Count)
         PetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        PetButton.TextSize = 9
+        PetButton.TextSize = 8
         PetButton.Parent = TargetListFrame
         
         local UICornerTarget = Instance.new("UICorner")
@@ -1443,27 +1673,75 @@ local function populateTargetDropdown()
                 end
             end
             
+            config.selectedPetTypes = selectedPetTypes
+            saveConfig()
+            
             populateTargetDropdown()
             updateStatus()
         end)
     end
     
-    updateCanvasSize(TargetListFrame, 25, 3)
+    updateCanvasSize(TargetListFrame, 20, 2)
 end
 
--- ==========================================
+-- ==================================================================
 -- EVENT HANDLERS
--- ==========================================
+-- ==================================================================
 SavePresetButton.MouseButton1Click:Connect(function()
     local presetName = PresetNameInput.Text
-    if presetName == "" then StatusLabel.Text = "⚠️ Masukkan nama preset!" return end
-    if #tempPresetPets == 0 then StatusLabel.Text = "⚠️ Pilih minimal 1 pet!" return end
+    
+    if presetName == "" then 
+        StatusLabel.Text = "⚠️ Masukkan nama preset!" 
+        return 
+    end
+    
+    if #tempPresetPets == 0 then 
+        StatusLabel.Text = "⚠️ Pilih minimal 1 pet!" 
+        return 
+    end
+    
+    if editingPresetName and editingPresetName ~= presetName then
+        deletePreset(editingPresetName)
+    end
     
     saveTeamPreset(presetName, tempPresetPets)
-    StatusLabel.Text = string.format("✅ Preset '%s' disimpan!", presetName)
+    
+    if editingPresetName then
+        StatusLabel.Text = string.format("✅ Preset '%s' diupdate!", presetName)
+    else
+        StatusLabel.Text = string.format("✅ Preset '%s' disimpan!", presetName)
+    end
+    
+    editingPresetName = nil
     PresetNameInput.Text = ""
     tempPresetPets = {}
+    EditPresetButton.Text = "📂 Pilih Preset untuk Diedit/Dihapus"
     populatePetList()
+    populateEditPresetDropdown()
+end)
+
+DeletePresetButton.MouseButton1Click:Connect(function()
+    if not editingPresetName then
+        StatusLabel.Text = "⚠️ Pilih preset dulu!"
+        return
+    end
+    
+    deletePreset(editingPresetName)
+    StatusLabel.Text = string.format("🗑️ Preset '%s' dihapus!", editingPresetName)
+    
+    editingPresetName = nil
+    tempPresetPets = {}
+    PresetNameInput.Text = ""
+    EditPresetButton.Text = "📂 Pilih Preset untuk Diedit/Dihapus"
+    populatePetList()
+    populateEditPresetDropdown()
+end)
+
+EditPresetButton.MouseButton1Click:Connect(function()
+    EditPresetListFrame.Visible = not EditPresetListFrame.Visible
+    if EditPresetListFrame.Visible then
+        populateEditPresetDropdown()
+    end
 end)
 
 PresetDropdownButton.MouseButton1Click:Connect(function()
@@ -1471,7 +1749,10 @@ PresetDropdownButton.MouseButton1Click:Connect(function()
     if PresetListFrame.Visible then
         populatePresetDropdown(PresetListFrame, selectedTeamPreset, function(name)
             selectedTeamPreset = name
-            SelectedTeamLabel.Text = string.format("Tim Leveling: %s", name)
+            config.selectedTeamPreset = name
+            saveConfig()
+            SelectedTeamLabel.Text = string.format("Tim: %s", name)
+            PresetDropdownButton.Text = string.format("📂 %s", name)
         end)
     end
 end)
@@ -1481,6 +1762,8 @@ WeightPresetButton.MouseButton1Click:Connect(function()
     if WeightPresetListFrame.Visible then
         populatePresetDropdown(WeightPresetListFrame, selectedWeightPreset, function(name)
             selectedWeightPreset = name
+            config.selectedWeightPreset = name
+            saveConfig()
             WeightPresetButton.Text = string.format("📂 %s", name)
         end)
     end
@@ -1491,6 +1774,8 @@ MutationPresetButton.MouseButton1Click:Connect(function()
     if MutationPresetListFrame.Visible then
         populatePresetDropdown(MutationPresetListFrame, selectedMutationPreset, function(name)
             selectedMutationPreset = name
+            config.selectedMutationPreset = name
+            saveConfig()
             MutationPresetButton.Text = string.format("📂 %s", name)
         end)
     end
@@ -1501,6 +1786,8 @@ AdvancedPresetButton.MouseButton1Click:Connect(function()
     if AdvancedPresetListFrame.Visible then
         populatePresetDropdown(AdvancedPresetListFrame, selectedAdvancedPreset, function(name)
             selectedAdvancedPreset = name
+            config.selectedAdvancedPreset = name
+            saveConfig()
             AdvancedPresetButton.Text = string.format("📂 %s", name)
         end)
     end
@@ -1508,9 +1795,12 @@ end)
 
 WeightToggleButton.MouseButton1Click:Connect(function()
     isAutoWeight = not isAutoWeight
+    config.isAutoWeight = isAutoWeight
+    saveConfig()
+    
     if isAutoWeight then
         WeightToggleButton.Text = "⚖️ Auto Weight: ON"
-        WeightToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+        WeightToggleButton.BackgroundColor3 = C.success
     else
         WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
         WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
@@ -1520,9 +1810,12 @@ end)
 
 AdvancedToggleButton.MouseButton1Click:Connect(function()
     isAdvancedLeveling = not isAdvancedLeveling
+    config.isAdvancedLeveling = isAdvancedLeveling
+    saveConfig()
+    
     if isAdvancedLeveling then
         AdvancedToggleButton.Text = "🚀 Advanced: ON"
-        AdvancedToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+        AdvancedToggleButton.BackgroundColor3 = C.success
     else
         AdvancedToggleButton.Text = "🚀 Advanced: OFF"
         AdvancedToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
@@ -1532,9 +1825,12 @@ end)
 
 MutationToggleButton.MouseButton1Click:Connect(function()
     isAutoMutation = not isAutoMutation
+    config.isAutoMutation = isAutoMutation
+    saveConfig()
+    
     if isAutoMutation then
         MutationToggleButton.Text = "🧬 Auto Mutation: ON"
-        MutationToggleButton.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+        MutationToggleButton.BackgroundColor3 = C.success
     else
         MutationToggleButton.Text = "🧬 Auto Mutation: OFF"
         MutationToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
@@ -1544,9 +1840,12 @@ end)
 
 RainbowModeButton.MouseButton1Click:Connect(function()
     rainbowMode = not rainbowMode
+    config.rainbowMode = rainbowMode
+    saveConfig()
+    
     if rainbowMode then
         RainbowModeButton.Text = "☑ Rainbow Mode (BW: 5.5, Lv: 40)"
-        RainbowModeButton.BackgroundColor3 = Color3.fromRGB(200, 150, 50)
+        RainbowModeButton.BackgroundColor3 = C.warning
     else
         RainbowModeButton.Text = "☐ Rainbow Mode (BW: 5.5, Lv: 40)"
         RainbowModeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
@@ -1576,14 +1875,14 @@ ScanButton.MouseButton1Click:Connect(function()
     updateStatus()
 end)
 
--- ==========================================
--- MAIN LOGIC (DENGAN VALIDASI)
--- ==========================================
+-- ==================================================================
+-- MAIN LOGIC - AUTO LEVELING
+-- ==================================================================
 ToggleButton.MouseButton1Click:Connect(function()
     if isLeveling then
         isLeveling = false
         ToggleButton.Text = "▶️ Mulai"
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+        ToggleButton.BackgroundColor3 = C.success
         updateStatus()
         return
     end
@@ -1620,7 +1919,7 @@ ToggleButton.MouseButton1Click:Connect(function()
     
     isLeveling = true
     ToggleButton.Text = "⏹️ Stop"
-    ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    ToggleButton.BackgroundColor3 = C.danger
     
     local function unequipAllPets()
         StatusLabel.Text = "🔄 Membersihkan semua slot..."
@@ -1650,7 +1949,6 @@ ToggleButton.MouseButton1Click:Connect(function()
     
     local function equipPetList(petList, label)
         for _, petUUID in ipairs(petList) do
-            -- VALIDASI: Skip pet yang hilang
             if isPetValid(petUUID) then
                 equipPet(petUUID)
             end
@@ -1659,21 +1957,15 @@ ToggleButton.MouseButton1Click:Connect(function()
     end
     
     spawn(function()
-        -- UNEQUIP SEMUA DI AWAL
         unequipAllPets()
         wait(2)
-        
-        -- CLEANUP PERTAMA
         cleanupInvalidPets()
         
-        -- ==========================================
         -- PRIORITAS 1: AUTO WEIGHT
-        -- ==========================================
         if isAutoWeight then
             local weightLoopActive = true
             
             while isLeveling and weightLoopActive do
-                -- CLEANUP setiap iterasi
                 cleanupInvalidPets()
                 
                 if #allSelectedPets == 0 then
@@ -1689,6 +1981,8 @@ ToggleButton.MouseButton1Click:Connect(function()
                 if #weightPets == 0 then
                     StatusLabel.Text = "✅ Semua base weight tercapai!"
                     isAutoWeight = false
+                    config.isAutoWeight = false
+                    saveConfig()
                     WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
                     WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
                     weightLoopActive = false
@@ -1697,7 +1991,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                 
                 StatusLabel.Text = string.format("⚖️ %d pet butuh weight", #weightPets)
                 
-                -- Leveling ke 40/50
                 local levelTargets = {}
                 for _, petUUID in ipairs(weightPets) do
                     if getPetLevel(petUUID) < levelTargetForWeight then
@@ -1727,8 +2020,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                         if #pendingLevelTargets > 0 then
                             local petUUID = pendingLevelTargets[1]
                             table.remove(pendingLevelTargets, 1)
-                            
-                            -- VALIDASI
                             if isPetValid(petUUID) then
                                 equipPet(petUUID)
                                 table.insert(levelingEquippedPets, petUUID)
@@ -1741,9 +2032,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                         for i = #levelingEquippedPets, 1, -1 do
                             local petUUID = levelingEquippedPets[i]
                             
-                            -- VALIDASI: Cek pet masih ada
                             if not isPetValid(petUUID) then
-                                StatusLabel.Text = "⚠️ Pet hilang, skip..."
                                 table.remove(levelingEquippedPets, i)
                                 continue
                             end
@@ -1822,7 +2111,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                         for i = #weightEquippedPets, 1, -1 do
                             local petUUID = weightEquippedPets[i]
                             
-                            -- VALIDASI
                             if not isPetValid(petUUID) then
                                 table.remove(weightEquippedPets, i)
                                 continue
@@ -1868,6 +2156,8 @@ ToggleButton.MouseButton1Click:Connect(function()
                         if allWeightDone then
                             StatusLabel.Text = "✅ Semua base weight tercapai!"
                             isAutoWeight = false
+                            config.isAutoWeight = false
+                            saveConfig()
                             WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
                             WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
                             weightLoopActive = false
@@ -1887,14 +2177,11 @@ ToggleButton.MouseButton1Click:Connect(function()
             end
         end
         
-        -- ==========================================
         -- PRIORITAS 2: AUTO MUTATION
-        -- ==========================================
         if isAutoMutation and isLeveling then
             local mutationLoopActive = true
             
             while isLeveling and mutationLoopActive do
-                -- CLEANUP setiap iterasi
                 cleanupInvalidPets()
                 
                 if #allSelectedPets == 0 then
@@ -1907,13 +2194,15 @@ ToggleButton.MouseButton1Click:Connect(function()
                 if #mutationPets == 0 then
                     StatusLabel.Text = "🎉 Semua pet target sudah bermutasi diinginkan!"
                     isAutoMutation = false
+                    config.isAutoMutation = false
+                    saveConfig()
                     MutationToggleButton.Text = "🧬 Auto Mutation: OFF"
                     MutationToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
                     mutationLoopActive = false
                     break
                 end
                 
-                StatusLabel.Text = string.format("🧬 %d pet perlu diproses mutasi", #mutationPets)
+                StatusLabel.Text = string.format("🧬 %d pet perlu mutasi", #mutationPets)
                 
                 unequipAllPets()
                 wait(2)
@@ -1946,16 +2235,12 @@ ToggleButton.MouseButton1Click:Connect(function()
                 
                 wait(2)
                 
-                -- Monitoring dengan rotasi
                 while isLeveling and #equippedForMutation > 0 do
                     for i = #equippedForMutation, 1, -1 do
                         local petUUID = equippedForMutation[i]
                         
-                        -- VALIDASI: Cek pet masih ada
                         if not isPetValid(petUUID) then
-                            StatusLabel.Text = "⚠️ Pet hilang saat diproses, skip..."
                             table.remove(equippedForMutation, i)
-                            
                             if #pendingMutationList > 0 then
                                 local nextPet = pendingMutationList[1]
                                 table.remove(pendingMutationList, 1)
@@ -1982,7 +2267,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                                 if isPetValid(nextPet) then
                                     equipPet(nextPet)
                                     table.insert(equippedForMutation, nextPet)
-                                    StatusLabel.Text = string.format("🔄 Ganti %s...", getPetType(nextPet))
                                 end
                                 wait(1)
                             end
@@ -1994,10 +2278,8 @@ ToggleButton.MouseButton1Click:Connect(function()
                                 success, errMsg = useCleansingShard(petUUID)
                             end)
                             
-                            if not ok then
-                                StatusLabel.Text = string.format("❌ %s: %s", petType, tostring(err):sub(1, 30))
-                            elseif not success then
-                                StatusLabel.Text = string.format("⚠️ %s: %s", petType, errMsg or "Unknown")
+                            if not ok or not success then
+                                StatusLabel.Text = string.format("⚠️ Gagal cleansing %s", petType)
                             else
                                 StatusLabel.Text = string.format("✅ %s di-cleansing!", petType)
                             end
@@ -2018,9 +2300,7 @@ ToggleButton.MouseButton1Click:Connect(function()
             end
         end
         
-        -- ==========================================
         -- PRIORITAS 3: NORMAL LEVELING
-        -- ==========================================
         if isLeveling then
             cleanupInvalidPets()
             
@@ -2100,9 +2380,7 @@ ToggleButton.MouseButton1Click:Connect(function()
             end
         end
         
-        -- ==========================================
         -- PRIORITAS 4: ADVANCED LEVELING
-        -- ==========================================
         if isAdvancedLeveling and isLeveling then
             cleanupInvalidPets()
             
@@ -2211,31 +2489,50 @@ ToggleButton.MouseButton1Click:Connect(function()
             end
         end
         
-        -- ==========================================
         -- SELESAI
-        -- ==========================================
         StatusLabel.Text = "🎉 Semua proses selesai!"
         isLeveling = false
         ToggleButton.Text = "▶️ Mulai"
-        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+        ToggleButton.BackgroundColor3 = C.success
         updateStatus()
     end)
 end)
 
--- Initial setup
-populatePetList()
-populateMutationList()
-populateTargetDropdown()
-updateStatus()
+-- ==================================================================
+-- TAB SWITCHING
+-- ==================================================================
+local function switchTab(tabName)
+    defaultView.Visible = false
+    for _, f in pairs(tabFrames) do
+        f.Visible = false
+    end
+    for _, btn in pairs(tabBtns) do
+        btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+        btn.TextColor3 = C.textDim
+    end
+    
+    if tabFrames[tabName] then
+        tabFrames[tabName].Visible = true
+        tabBtns[tabName].BackgroundColor3 = C.accent
+        tabBtns[tabName].TextColor3 = C.text
+        activeTab = tabName
+    end
+end
 
--- Load available mutations
+for _, tab in ipairs(tabs) do
+    tabBtns[tab.name].MouseButton1Click:Connect(function()
+        switchTab(tab.name)
+    end)
+end
+
+-- ==================================================================
+-- INITIAL SETUP
+-- ==================================================================
 local function loadAvailableMutations()
     local mutations = {}
-    local success, registry = pcall(function()
-        return require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
-    end)
+    local registry = safeRequire(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
     
-    if success and registry and registry.PetMutationRegistry then
+    if registry and registry.PetMutationRegistry then
         for mutationName, _ in pairs(registry.PetMutationRegistry) do
             if mutationName ~= "Normal" and mutationName ~= "Rideable" then
                 table.insert(mutations, mutationName)
@@ -2248,8 +2545,32 @@ local function loadAvailableMutations()
 end
 
 availableMutations = loadAvailableMutations()
+
+-- Populate UI
+populatePetList()
 populateMutationList()
+populateTargetDropdown()
+populateEditPresetDropdown()
+updateStatus()
 
-AutoLevelGUI.Parent = playerGui
+-- Auto-load selected pet types dari config
+if config.selectedPetTypes and #config.selectedPetTypes > 0 then
+    for _, petType in ipairs(config.selectedPetTypes) do
+        local petsData = getPlayerPetData()
+        if petsData then
+            local inventory = petsData.PetInventory.Data or {}
+            for petUUID, _ in pairs(inventory) do
+                if getPetType(petUUID) == petType then
+                    if not table.find(allSelectedPets, petUUID) then
+                        table.insert(allSelectedPets, petUUID)
+                    end
+                end
+            end
+        end
+    end
+end
 
-print("✅ Auto Leveling v5 dengan Pet Validation loaded!")
+-- Switch ke Weight tab default
+switchTab("Weight")
+
+print("✅ AoneHub Auto Leveling loaded! Config saved to:", SAVE_FILE)
