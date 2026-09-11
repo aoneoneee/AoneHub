@@ -856,9 +856,9 @@ local function createSection(parent, title)
 end
 
 -- ==================================================================
--- DYNAMIC DROPDOWN
+-- DYNAMIC DROPDOWN (FIXED - AUTO REPOSITION)
 -- ==================================================================
-local function createDynamicDropdown(parent, position, placeholder, parentSection, baseSectionHeight)
+local function createDynamicDropdown(parent, position, placeholder, parentSection, baseSectionHeight, parentScroll)
     local width = 1
     local offsetX = -20
     local itemHeight = 22
@@ -956,36 +956,52 @@ local function createDynamicDropdown(parent, position, placeholder, parentSectio
         return count
     end
     
-    local function updateSize()
+    -- ⭐ KUNCI PERBAIKAN: Update semua section & canvas size
+    local function updateAll()
         local itemCount = getItemCount()
         local contentHeight = itemCount * (itemHeight + 2) + 2
         local listHeight = math.min(contentHeight, maxListHeight)
         
+        -- Update ListContainer
         ListContainer.Size = UDim2.new(1, 0, 0, listHeight)
         ListScroll.CanvasSize = UDim2.new(0, 0, 0, contentHeight)
         
+        -- Update Container
         if isOpen then
             Container.Size = UDim2.new(width, offsetX, 0, 30 + listHeight + 2)
         else
             Container.Size = UDim2.new(width, offsetX, 0, 28)
         end
         
+        -- ⭐ Update parent section (yang berisi dropdown)
         if parentSection then
+            local extraHeight = 0
             if isOpen then
-                parentSection.Size = UDim2.new(
-                    parentSection.Size.X.Scale,
-                    parentSection.Size.X.Offset,
-                    0,
-                    originalSectionHeight + listHeight + 2
-                )
-            else
-                parentSection.Size = UDim2.new(
-                    parentSection.Size.X.Scale,
-                    parentSection.Size.X.Offset,
-                    0,
-                    originalSectionHeight
-                )
+                extraHeight = listHeight + 2
             end
+            
+            parentSection.Size = UDim2.new(
+                parentSection.Size.X.Scale,
+                parentSection.Size.X.Offset,
+                0,
+                originalSectionHeight + extraHeight
+            )
+        end
+        
+        -- ⭐ Update CanvasSize dari parent ScrollingFrame
+        if parentScroll then
+            -- Hitung total height dari semua section
+            local totalHeight = 0
+            local layout = parentScroll:FindFirstChildOfClass("UIListLayout")
+            local padding = layout and layout.Padding.Offset or 6
+            
+            for _, child in pairs(parentScroll:GetChildren()) do
+                if child:IsA("Frame") and child ~= ListContainer then
+                    totalHeight = totalHeight + child.Size.Y.Offset + padding
+                end
+            end
+            
+            parentScroll.CanvasSize = UDim2.new(0, 0, 0, math.max(totalHeight + 20, 500))
         end
     end
     
@@ -994,7 +1010,7 @@ local function createDynamicDropdown(parent, position, placeholder, parentSectio
             isOpen = false
             ListContainer.Visible = false
             ArrowLabel.Text = "▼"
-            updateSize()
+            updateAll()
         end
     end
     
@@ -1008,7 +1024,7 @@ local function createDynamicDropdown(parent, position, placeholder, parentSectio
             ListContainer.Visible = false
             ArrowLabel.Text = "▼"
         end
-        updateSize()
+        updateAll()
     end
     
     HeaderButton.MouseButton1Click:Connect(toggle)
@@ -1019,20 +1035,115 @@ local function createDynamicDropdown(parent, position, placeholder, parentSectio
         ListContainer = ListContainer,
         ListScroll = ListScroll,
         ItemHeight = itemHeight,
-        UpdateSize = updateSize,
+        UpdateSize = updateAll,
         Close = close,
         Toggle = toggle,
         IsOpen = function() return isOpen end,
         GetItemCount = getItemCount,
+        ParentSection = parentSection,
+        BaseHeight = originalSectionHeight,
     }
 end
+
+-- ==================================================================
+-- SECTION: BUAT/EDIT PRESET (DROPDOWN DINAMIS)
+-- ==================================================================
+local CreatePresetSection = createSection(weightScroll, "💾 Buat/Edit Preset")
+CreatePresetSection.LayoutOrder = 1
+CreatePresetSection.Size = UDim2.new(1, -10, 0, 239)
+
+-- Dropdown untuk Edit Preset
+local EditPresetDropdown = createDynamicDropdown(
+    CreatePresetSection,
+    UDim2.new(0, 10, 0, 28),
+    "📂 Pilih Preset untuk Diedit/Dihapus",
+    CreatePresetSection,
+    239,
+    weightScroll
+)
+
+local PresetNameInput = Instance.new("TextBox")
+PresetNameInput.Size = UDim2.new(1, -20, 0, 22)
+PresetNameInput.Position = UDim2.new(0, 10, 0, 61)
+PresetNameInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+PresetNameInput.BorderSizePixel = 0
+PresetNameInput.Font = Enum.Font.Gotham
+PresetNameInput.PlaceholderText = "Nama preset tim..."
+PresetNameInput.Text = ""
+PresetNameInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+PresetNameInput.TextSize = 9
+PresetNameInput.Parent = CreatePresetSection
+
+local UICornerPresetName = Instance.new("UICorner")
+UICornerPresetName.CornerRadius = UDim.new(0, 4)
+UICornerPresetName.Parent = PresetNameInput
+
+local PetSearchBox = Instance.new("TextBox")
+PetSearchBox.Size = UDim2.new(1, -20, 0, 22)
+PetSearchBox.Position = UDim2.new(0, 10, 0, 88)
+PetSearchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+PetSearchBox.BorderSizePixel = 0
+PetSearchBox.Font = Enum.Font.Gotham
+PetSearchBox.PlaceholderText = "🔍 Cari pet..."
+PetSearchBox.Text = ""
+PetSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+PetSearchBox.TextSize = 9
+PetSearchBox.Parent = CreatePresetSection
+
+local UICornerPetSearch = Instance.new("UICorner")
+UICornerPetSearch.CornerRadius = UDim.new(0, 4)
+UICornerPetSearch.Parent = PetSearchBox
+
+local PetListFrame = Instance.new("ScrollingFrame")
+PetListFrame.Size = UDim2.new(1, -20, 0, 60)
+PetListFrame.Position = UDim2.new(0, 10, 0, 115)
+PetListFrame.BackgroundTransparency = 1
+PetListFrame.BorderSizePixel = 0
+PetListFrame.ScrollBarThickness = 3
+PetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+PetListFrame.CanvasSize = UDim2.new(0, 0, 0, 60)
+PetListFrame.Parent = CreatePresetSection
+
+local PetListLayout = Instance.new("UIListLayout")
+PetListLayout.Padding = UDim.new(0, 2)
+PetListLayout.Parent = PetListFrame
+
+local SavePresetButton = Instance.new("TextButton")
+SavePresetButton.Size = UDim2.new(1, -20, 0, 22)
+SavePresetButton.Position = UDim2.new(0, 10, 0, 180)
+SavePresetButton.BackgroundColor3 = C.success
+SavePresetButton.BorderSizePixel = 0
+SavePresetButton.Font = Enum.Font.GothamBold
+SavePresetButton.Text = "💾 Simpan Preset"
+SavePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SavePresetButton.TextSize = 9
+SavePresetButton.Parent = CreatePresetSection
+
+local UICornerSave = Instance.new("UICorner")
+UICornerSave.CornerRadius = UDim.new(0, 4)
+UICornerSave.Parent = SavePresetButton
+
+local DeletePresetButton = Instance.new("TextButton")
+DeletePresetButton.Size = UDim2.new(1, -20, 0, 22)
+DeletePresetButton.Position = UDim2.new(0, 10, 0, 207)
+DeletePresetButton.BackgroundColor3 = C.danger
+DeletePresetButton.BorderSizePixel = 0
+DeletePresetButton.Font = Enum.Font.GothamBold
+DeletePresetButton.Text = "🗑️ Hapus Preset"
+DeletePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+DeletePresetButton.TextSize = 9
+DeletePresetButton.Parent = CreatePresetSection
+
+local UICornerDelete = Instance.new("UICorner")
+UICornerDelete.CornerRadius = UDim.new(0, 4)
+UICornerDelete.Parent = DeletePresetButton
 
 -- ==================================================================
 -- SECTION: PILIH TIM (DROPDOWN DINAMIS)
 -- ==================================================================
 local TeamSelectSection = createSection(weightScroll, "👥 Pilih Tim Leveling")
-TeamSelectSection.LayoutOrder = 1
-TeamSelectSection.Size = UDim2.new(1, -10, 0, 120)
+TeamSelectSection.LayoutOrder = 2
+TeamSelectSection.Size = UDim2.new(1, -10, 0, 106)
 
 local SelectedTeamLabel = Instance.new("TextLabel")
 SelectedTeamLabel.Size = UDim2.new(1, -20, 0, 35)
@@ -1056,100 +1167,9 @@ local TeamPresetDropdown = createDynamicDropdown(
     UDim2.new(0, 10, 0, 68),
     selectedTeamPreset and string.format("📂 %s", selectedTeamPreset) or "📂 Pilih Preset Tim Leveling",
     TeamSelectSection,
-    120
+    106,
+    weightScroll
 )
-
--- ==================================================================
--- SECTION: BUAT/EDIT PRESET (DROPDOWN DINAMIS)
--- ==================================================================
-local CreatePresetSection = createSection(weightScroll, "💾 Buat/Edit Preset")
-CreatePresetSection.LayoutOrder = 2
-CreatePresetSection.Size = UDim2.new(1, -10, 0, 250)
-
--- Dropdown untuk Edit Preset
-local EditPresetDropdown = createDynamicDropdown(
-    CreatePresetSection,
-    UDim2.new(0, 10, 0, 28),
-    "📂 Pilih Preset untuk Diedit/Dihapus",
-    CreatePresetSection,
-    250
-)
-
-local PresetNameInput = Instance.new("TextBox")
-PresetNameInput.Size = UDim2.new(1, -20, 0, 22)
-PresetNameInput.Position = UDim2.new(0, 10, 0, 95)
-PresetNameInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-PresetNameInput.BorderSizePixel = 0
-PresetNameInput.Font = Enum.Font.Gotham
-PresetNameInput.PlaceholderText = "Nama preset tim..."
-PresetNameInput.Text = ""
-PresetNameInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-PresetNameInput.TextSize = 9
-PresetNameInput.Parent = CreatePresetSection
-
-local UICornerPresetName = Instance.new("UICorner")
-UICornerPresetName.CornerRadius = UDim.new(0, 4)
-UICornerPresetName.Parent = PresetNameInput
-
-local PetSearchBox = Instance.new("TextBox")
-PetSearchBox.Size = UDim2.new(1, -20, 0, 22)
-PetSearchBox.Position = UDim2.new(0, 10, 0, 122)
-PetSearchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-PetSearchBox.BorderSizePixel = 0
-PetSearchBox.Font = Enum.Font.Gotham
-PetSearchBox.PlaceholderText = "🔍 Cari pet..."
-PetSearchBox.Text = ""
-PetSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-PetSearchBox.TextSize = 9
-PetSearchBox.Parent = CreatePresetSection
-
-local UICornerPetSearch = Instance.new("UICorner")
-UICornerPetSearch.CornerRadius = UDim.new(0, 4)
-UICornerPetSearch.Parent = PetSearchBox
-
-local PetListFrame = Instance.new("ScrollingFrame")
-PetListFrame.Size = UDim2.new(1, -20, 0, 60)
-PetListFrame.Position = UDim2.new(0, 10, 0, 148)
-PetListFrame.BackgroundTransparency = 1
-PetListFrame.BorderSizePixel = 0
-PetListFrame.ScrollBarThickness = 3
-PetListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-PetListFrame.CanvasSize = UDim2.new(0, 0, 0, 60)
-PetListFrame.Parent = CreatePresetSection
-
-local PetListLayout = Instance.new("UIListLayout")
-PetListLayout.Padding = UDim.new(0, 2)
-PetListLayout.Parent = PetListFrame
-
-local SavePresetButton = Instance.new("TextButton")
-SavePresetButton.Size = UDim2.new(1, -20, 0, 22)
-SavePresetButton.Position = UDim2.new(0, 10, 0, 212)
-SavePresetButton.BackgroundColor3 = C.success
-SavePresetButton.BorderSizePixel = 0
-SavePresetButton.Font = Enum.Font.GothamBold
-SavePresetButton.Text = "💾 Simpan Preset"
-SavePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-SavePresetButton.TextSize = 9
-SavePresetButton.Parent = CreatePresetSection
-
-local UICornerSave = Instance.new("UICorner")
-UICornerSave.CornerRadius = UDim.new(0, 4)
-UICornerSave.Parent = SavePresetButton
-
-local DeletePresetButton = Instance.new("TextButton")
-DeletePresetButton.Size = UDim2.new(1, -20, 0, 22)
-DeletePresetButton.Position = UDim2.new(0, 10, 0, 236)
-DeletePresetButton.BackgroundColor3 = C.danger
-DeletePresetButton.BorderSizePixel = 0
-DeletePresetButton.Font = Enum.Font.GothamBold
-DeletePresetButton.Text = "🗑️ Hapus Preset"
-DeletePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-DeletePresetButton.TextSize = 9
-DeletePresetButton.Parent = CreatePresetSection
-
-local UICornerDelete = Instance.new("UICorner")
-UICornerDelete.CornerRadius = UDim.new(0, 4)
-UICornerDelete.Parent = DeletePresetButton
 
 -- ==================================================================
 -- SECTION: TARGET LEVEL
@@ -1190,7 +1210,7 @@ end)
 -- ==================================================================
 local TargetSection = createSection(weightScroll, "🎯 Pet Target")
 TargetSection.LayoutOrder = 4
-TargetSection.Size = UDim2.new(1, -10, 0, 150)
+TargetSection.Size = UDim2.new(1, -10, 0, 172)
 
 local TargetSearchBox = Instance.new("TextBox")
 TargetSearchBox.Size = UDim2.new(1, -20, 0, 22)
@@ -1210,7 +1230,7 @@ UICornerTargetSearch.Parent = TargetSearchBox
 
 local TargetListFrame = Instance.new("ScrollingFrame")
 TargetListFrame.Size = UDim2.new(1, -20, 0, 80)
-TargetListFrame.Position = UDim2.new(0, 10, 0, 52)
+TargetListFrame.Position = UDim2.new(0, 10, 0, 55)
 TargetListFrame.BackgroundTransparency = 1
 TargetListFrame.BorderSizePixel = 0
 TargetListFrame.ScrollBarThickness = 3
@@ -1224,7 +1244,7 @@ TargetListLayout.Parent = TargetListFrame
 
 local ScanButton = Instance.new("TextButton")
 ScanButton.Size = UDim2.new(1, -20, 0, 22)
-ScanButton.Position = UDim2.new(0, 10, 0, 135)
+ScanButton.Position = UDim2.new(0, 10, 0, 140)
 ScanButton.BackgroundColor3 = C.accent
 ScanButton.BorderSizePixel = 0
 ScanButton.Font = Enum.Font.GothamBold
@@ -1242,7 +1262,7 @@ UICornerScan.Parent = ScanButton
 -- ==================================================================
 local WeightSection = createSection(weightScroll, "⚖️ Auto Weight")
 WeightSection.LayoutOrder = 5
-WeightSection.Size = UDim2.new(1, -10, 0, 150)
+WeightSection.Size = UDim2.new(1, -10, 0, 129)
 
 local WeightToggleButton = Instance.new("TextButton")
 WeightToggleButton.Size = UDim2.new(1, -20, 0, 28)
@@ -1261,7 +1281,7 @@ UICornerWeightToggle.Parent = WeightToggleButton
 
 local RainbowModeButton = Instance.new("TextButton")
 RainbowModeButton.Size = UDim2.new(1, -20, 0, 25)
-RainbowModeButton.Position = UDim2.new(0, 10, 0, 60)
+RainbowModeButton.Position = UDim2.new(0, 10, 0, 61)
 RainbowModeButton.BackgroundColor3 = rainbowMode and C.warning or Color3.fromRGB(60, 60, 75)
 RainbowModeButton.BorderSizePixel = 0
 RainbowModeButton.Font = Enum.Font.Gotham
@@ -1277,10 +1297,11 @@ UICornerRainbow.Parent = RainbowModeButton
 -- Dropdown Weight Preset
 local WeightPresetDropdown = createDynamicDropdown(
     WeightSection,
-    UDim2.new(0, 10, 0, 90),
+    UDim2.new(0, 10, 0, 91),
     selectedWeightPreset and string.format("📂 %s", selectedWeightPreset) or "📂 Pilih Preset Auto Weight",
     WeightSection,
-    150
+    129,
+    weightScroll
 )
 
 -- ==================================================================
@@ -1288,7 +1309,7 @@ local WeightPresetDropdown = createDynamicDropdown(
 -- ==================================================================
 local MutationSection = createSection(weightScroll, "🧬 Auto Mutation")
 MutationSection.LayoutOrder = 6
-MutationSection.Size = UDim2.new(1, -10, 0, 300)
+MutationSection.Size = UDim2.new(1, -10, 0, 272)
 
 local MutationToggleButton = Instance.new("TextButton")
 MutationToggleButton.Size = UDim2.new(1, -20, 0, 28)
@@ -1308,15 +1329,16 @@ UICornerMutationToggle.Parent = MutationToggleButton
 -- Dropdown Mutation Preset
 local MutationPresetDropdown = createDynamicDropdown(
     MutationSection,
-    UDim2.new(0, 10, 0, 62),
+    UDim2.new(0, 10, 0, 61),
     selectedMutationPreset and string.format("📂 %s", selectedMutationPreset) or "📂 Pilih Preset Tim Mutation",
     MutationSection,
-    300
+    272,
+    weightScroll
 )
 
 local MutationSearchBox = Instance.new("TextBox")
 MutationSearchBox.Size = UDim2.new(1, -20, 0, 22)
-MutationSearchBox.Position = UDim2.new(0, 10, 0, 128)
+MutationSearchBox.Position = UDim2.new(0, 10, 0, 94)
 MutationSearchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 MutationSearchBox.BorderSizePixel = 0
 MutationSearchBox.Font = Enum.Font.Gotham
@@ -1332,7 +1354,7 @@ UICornerMutationSearch.Parent = MutationSearchBox
 
 local MutationListLabel = Instance.new("TextLabel")
 MutationListLabel.Size = UDim2.new(1, -20, 0, 16)
-MutationListLabel.Position = UDim2.new(0, 10, 0, 152)
+MutationListLabel.Position = UDim2.new(0, 10, 0, 121)
 MutationListLabel.BackgroundTransparency = 1
 MutationListLabel.Font = Enum.Font.GothamBold
 MutationListLabel.Text = "❌ Mutasi tidak diinginkan:"
@@ -1343,7 +1365,7 @@ MutationListLabel.Parent = MutationSection
 
 local MutationListFrame = Instance.new("ScrollingFrame")
 MutationListFrame.Size = UDim2.new(1, -20, 0, 120)
-MutationListFrame.Position = UDim2.new(0, 10, 0, 172)
+MutationListFrame.Position = UDim2.new(0, 10, 0, 142)
 MutationListFrame.BackgroundTransparency = 1
 MutationListFrame.BorderSizePixel = 0
 MutationListFrame.ScrollBarThickness = 3
@@ -1360,7 +1382,7 @@ MutationListLayout.Parent = MutationListFrame
 -- ==================================================================
 local AdvancedSection = createSection(weightScroll, "🚀 Advanced")
 AdvancedSection.LayoutOrder = 7
-AdvancedSection.Size = UDim2.new(1, -10, 0, 110)
+AdvancedSection.Size = UDim2.new(1, -10, 0, 120)
 
 local AdvancedToggleButton = Instance.new("TextButton")
 AdvancedToggleButton.Size = UDim2.new(1, -20, 0, 25)
@@ -1379,7 +1401,7 @@ UICornerAdvancedToggle.Parent = AdvancedToggleButton
 
 local AdvancedLevelInput = Instance.new("TextBox")
 AdvancedLevelInput.Size = UDim2.new(1, -20, 0, 22)
-AdvancedLevelInput.Position = UDim2.new(0, 10, 0, 56)
+AdvancedLevelInput.Position = UDim2.new(0, 10, 0, 55)
 AdvancedLevelInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 AdvancedLevelInput.BorderSizePixel = 0
 AdvancedLevelInput.Font = Enum.Font.Gotham
@@ -1410,7 +1432,8 @@ local AdvancedPresetDropdown = createDynamicDropdown(
     UDim2.new(0, 10, 0, 82),
     selectedAdvancedPreset and string.format("📂 %s", selectedAdvancedPreset) or "📂 Pilih Preset Advanced",
     AdvancedSection,
-    110
+    120,
+    weightScroll
 )
 
 -- ==================================================================
@@ -1562,122 +1585,6 @@ local function populateAdvancedPresetDropdown()
     end)
 end
 
--- Populate edit preset dropdown
-local function populateEditPresetDropdown()
-    for _, child in pairs(EditPresetDropdown.ListScroll:GetChildren()) do
-        if child:IsA("TextButton") then
-            child:Destroy()
-        end
-    end
-    
-    local presets = loadTeamPresets()
-    local presetNames = {}
-    for name in pairs(presets) do
-        table.insert(presetNames, name)
-    end
-    table.sort(presetNames)
-    
-    for i, presetName in ipairs(presetNames) do
-        local preset = presets[presetName]
-        
-        local validCount = 0
-        for _, petInfo in ipairs(preset.pets) do
-            if isPetValid(petInfo.UUID) then
-                validCount = validCount + 1
-            end
-        end
-        
-        local PresetButton = Instance.new("TextButton")
-        PresetButton.Size = UDim2.new(1, -4, 0, EditPresetDropdown.ItemHeight)
-        PresetButton.BackgroundColor3 = editingPresetName == presetName and C.success or Color3.fromRGB(65, 65, 80)
-        PresetButton.BorderSizePixel = 0
-        PresetButton.Font = Enum.Font.Gotham
-        PresetButton.Text = string.format("📁 %s (%d pet)", presetName, validCount)
-        PresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-        PresetButton.TextSize = 8
-        PresetButton.TextXAlignment = Enum.TextXAlignment.Left
-        PresetButton.LayoutOrder = i
-        PresetButton.ZIndex = 12
-        PresetButton.Parent = EditPresetDropdown.ListScroll
-        
-        local UICornerPreset = Instance.new("UICorner")
-        UICornerPreset.CornerRadius = UDim.new(0, 3)
-        UICornerPreset.Parent = PresetButton
-        
-        local Padding = Instance.new("UIPadding")
-        Padding.PaddingLeft = UDim.new(0, 6)
-        Padding.Parent = PresetButton
-        
-        PresetButton.MouseButton1Click:Connect(function()
-            editingPresetName = presetName
-            PresetNameInput.Text = presetName
-            
-            tempPresetPets = {}
-            for _, petInfo in ipairs(preset.pets) do
-                if isPetValid(petInfo.UUID) then
-                    table.insert(tempPresetPets, petInfo.UUID)
-                end
-            end
-            
-            populatePetList()
-            EditPresetDropdown.HeaderButton.Text = string.format("📂 %s", presetName)
-            EditPresetDropdown.Close()
-        end)
-    end
-    
-    EditPresetDropdown.UpdateSize()
-end
-
--- Populate mutation list (unwanted)
-local function populateMutationList()
-    for _, child in pairs(MutationListFrame:GetChildren()) do
-        if child:IsA("TextButton") then
-            child:Destroy()
-        end
-    end
-    
-    for _, mutationName in ipairs(availableMutations) do
-        if mutationSearchText == "" or mutationName:lower():find(mutationSearchText:lower()) then
-            local isSelected = table.find(unwantedMutations, mutationName) ~= nil
-            
-            local MutationButton = Instance.new("TextButton")
-            MutationButton.Size = UDim2.new(1, 0, 0, 20)
-            MutationButton.BackgroundColor3 = isSelected and C.danger or Color3.fromRGB(65, 65, 80)
-            MutationButton.BorderSizePixel = 0
-            MutationButton.Font = Enum.Font.Gotham
-            MutationButton.Text = isSelected and string.format("❌ %s", mutationName) or string.format("☐ %s", mutationName)
-            MutationButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-            MutationButton.TextSize = 8
-            MutationButton.Parent = MutationListFrame
-            
-            local UICorner = Instance.new("UICorner")
-            UICorner.CornerRadius = UDim.new(0, 3)
-            UICorner.Parent = MutationButton
-            
-            MutationButton.MouseButton1Click:Connect(function()
-                local idx = table.find(unwantedMutations, mutationName)
-                if idx then
-                    table.remove(unwantedMutations, idx)
-                else
-                    table.insert(unwantedMutations, mutationName)
-                end
-                config.unwantedMutations = unwantedMutations
-                saveConfig()
-                populateMutationList()
-            end)
-        end
-    end
-    
-    -- Update canvas
-    local count = 0
-    for _, child in pairs(MutationListFrame:GetChildren()) do
-        if child:IsA("TextButton") then
-            count = count + 1
-        end
-    end
-    MutationListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22, 50))
-end
-
 -- Populate pet list (untuk preset editor)
 local function populatePetList()
     for _, child in pairs(PetListFrame:GetChildren()) do
@@ -1747,6 +1654,131 @@ local function populatePetList()
         end
     end
     PetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22, 50))
+end
+
+-- Populate edit preset dropdown - DIPERBAIKI
+local function populateEditPresetDropdown()
+    for _, child in pairs(EditPresetDropdown.ListScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    local presets = loadTeamPresets()
+    local presetNames = {}
+    for name in pairs(presets) do
+        table.insert(presetNames, name)
+    end
+    table.sort(presetNames)
+    
+    for i, presetName in ipairs(presetNames) do
+        local preset = presets[presetName]
+        
+        local validCount = 0
+        for _, petInfo in ipairs(preset.pets) do
+            if isPetValid(petInfo.UUID) then
+                validCount = validCount + 1
+            end
+        end
+        
+        local PresetButton = Instance.new("TextButton")
+        PresetButton.Size = UDim2.new(1, -4, 0, EditPresetDropdown.ItemHeight)
+        PresetButton.BackgroundColor3 = editingPresetName == presetName and C.success or Color3.fromRGB(65, 65, 80)
+        PresetButton.BorderSizePixel = 0
+        PresetButton.Font = Enum.Font.Gotham
+        PresetButton.Text = string.format("📁 %s (%d pet)", presetName, validCount)
+        PresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        PresetButton.TextSize = 8
+        PresetButton.TextXAlignment = Enum.TextXAlignment.Left
+        PresetButton.LayoutOrder = i
+        PresetButton.ZIndex = 12
+        PresetButton.Parent = EditPresetDropdown.ListScroll
+        
+        local UICornerPreset = Instance.new("UICorner")
+        UICornerPreset.CornerRadius = UDim.new(0, 3)
+        UICornerPreset.Parent = PresetButton
+        
+        local Padding = Instance.new("UIPadding")
+        Padding.PaddingLeft = UDim.new(0, 6)
+        Padding.Parent = PresetButton
+        
+        PresetButton.MouseButton1Click:Connect(function()
+            editingPresetName = presetName
+            PresetNameInput.Text = presetName
+            
+            -- ⭐ Load pet dari preset
+            tempPresetPets = {}
+            for _, petInfo in ipairs(preset.pets) do
+                if isPetValid(petInfo.UUID) then
+                    table.insert(tempPresetPets, petInfo.UUID)
+                end
+            end
+            
+            -- ⭐ REFRESH pet list dengan pet yang sudah dipilih
+            populatePetList()
+            
+            -- ⭐ Update header text
+            EditPresetDropdown.HeaderButton.Text = string.format("📂 %s", presetName)
+            
+            -- ⭐ AUTO CLOSE dropdown
+            EditPresetDropdown.Close()
+            
+            -- ⭐ Update status
+            StatusLabel.Text = string.format("✏️ Preset '%s' dimuat (%d pet)", presetName, #tempPresetPets)
+        end)
+    end
+    
+    EditPresetDropdown.UpdateSize()
+end
+
+-- Populate mutation list (unwanted)
+local function populateMutationList()
+    for _, child in pairs(MutationListFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    for _, mutationName in ipairs(availableMutations) do
+        if mutationSearchText == "" or mutationName:lower():find(mutationSearchText:lower()) then
+            local isSelected = table.find(unwantedMutations, mutationName) ~= nil
+            
+            local MutationButton = Instance.new("TextButton")
+            MutationButton.Size = UDim2.new(1, 0, 0, 20)
+            MutationButton.BackgroundColor3 = isSelected and C.danger or Color3.fromRGB(65, 65, 80)
+            MutationButton.BorderSizePixel = 0
+            MutationButton.Font = Enum.Font.Gotham
+            MutationButton.Text = isSelected and string.format("❌ %s", mutationName) or string.format("☐ %s", mutationName)
+            MutationButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            MutationButton.TextSize = 8
+            MutationButton.Parent = MutationListFrame
+            
+            local UICorner = Instance.new("UICorner")
+            UICorner.CornerRadius = UDim.new(0, 3)
+            UICorner.Parent = MutationButton
+            
+            MutationButton.MouseButton1Click:Connect(function()
+                local idx = table.find(unwantedMutations, mutationName)
+                if idx then
+                    table.remove(unwantedMutations, idx)
+                else
+                    table.insert(unwantedMutations, mutationName)
+                end
+                config.unwantedMutations = unwantedMutations
+                saveConfig()
+                populateMutationList()
+            end)
+        end
+    end
+    
+    -- Update canvas
+    local count = 0
+    for _, child in pairs(MutationListFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            count = count + 1
+        end
+    end
+    MutationListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22, 50))
 end
 
 -- Scan target pets
@@ -1920,7 +1952,12 @@ SavePresetButton.MouseButton1Click:Connect(function()
     PresetNameInput.Text = ""
     tempPresetPets = {}
     EditPresetDropdown.HeaderButton.Text = "📂 Pilih Preset untuk Diedit/Dihapus"
+    
+    -- ⭐ Refresh pet list (hapus centang)
     populatePetList()
+    
+    -- ⭐ Refresh dropdown list agar preset baru muncul
+    populateEditPresetDropdown()
 end)
 
 DeletePresetButton.MouseButton1Click:Connect(function()
@@ -1932,10 +1969,13 @@ DeletePresetButton.MouseButton1Click:Connect(function()
     deletePreset(editingPresetName)
     StatusLabel.Text = string.format("🗑️ Preset '%s' dihapus!", editingPresetName)
     
+    -- ⭐ Reset editor
     editingPresetName = nil
     tempPresetPets = {}
     PresetNameInput.Text = ""
     EditPresetDropdown.HeaderButton.Text = "📂 Pilih Preset untuk Diedit/Dihapus"
+    
+    -- ⭐ Refresh pet list (hapus semua centang)
     populatePetList()
 end)
 
