@@ -37,7 +37,7 @@ local C = {
 local UIStroke = player.PlayerGui
     .Seed_Shop
     .Frame
-    .Scrolling_Frame
+    .ScrollingFrame
     ["Elder Strawberry"]
     .Main_Frame
     .Rarity_Text
