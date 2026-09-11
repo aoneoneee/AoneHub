@@ -722,8 +722,8 @@ sep.Parent = sidebar
 
 local tabs = {
     {name="Farm", label="🌾 Farm"},
-    {name="Weight", label="⚖️ Weight"},
-    {name="Mutation", label="🌈 Mutation"},
+    {name="Weight", label="🐘 Weight"},
+    {name="Mutation", label="🧬 Mutation"},
     {name="Event", label="🔥 Event"},
     {name="Tools", label="🔧 Tools"},
     {name="AutoBuy", label="🛒 Buy"},
@@ -836,22 +836,27 @@ local function createSection(parent, title)
     SectionFrame.BackgroundColor3 = Color3.fromRGB(38, 38, 48)
     SectionFrame.BorderSizePixel = 0
     SectionFrame.Parent = parent
-    
+
     local UICornerSection = Instance.new("UICorner")
     UICornerSection.CornerRadius = UDim.new(0, 6)
     UICornerSection.Parent = SectionFrame
-    
-    local SectionTitle = Instance.new("TextLabel")
-    SectionTitle.Size = UDim2.new(1, -20, 0, 22)
-    SectionTitle.Position = UDim2.new(0, 10, 0, 3)
-    SectionTitle.BackgroundTransparency = 1
-    SectionTitle.Font = Enum.Font.GothamBold
-    SectionTitle.Text = title
-    SectionTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SectionTitle.TextSize = 11
-    SectionTitle.TextXAlignment = Enum.TextXAlignment.Left
-    SectionTitle.Parent = SectionFrame
-    
+
+    local SectionTitle
+
+    -- Buat header hanya jika title diberikan
+    if title then
+        SectionTitle = Instance.new("TextLabel")
+        SectionTitle.Size = UDim2.new(1, -20, 0, 22)
+        SectionTitle.Position = UDim2.new(0, 10, 0, 3)
+        SectionTitle.BackgroundTransparency = 1
+        SectionTitle.Font = Enum.Font.GothamBold
+        SectionTitle.Text = title
+        SectionTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+        SectionTitle.TextSize = 11
+        SectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+        SectionTitle.Parent = SectionFrame
+    end
+
     return SectionFrame, SectionTitle
 end
 
@@ -1050,21 +1055,11 @@ end
 -- ==================================================================
 local CreatePresetSection = createSection(weightScroll, "💾 Buat/Edit Preset")
 CreatePresetSection.LayoutOrder = 1
-CreatePresetSection.Size = UDim2.new(1, -10, 0, 239)
-
--- Dropdown untuk Edit Preset
-local EditPresetDropdown = createDynamicDropdown(
-    CreatePresetSection,
-    UDim2.new(0, 10, 0, 28),
-    "📂 Pilih Preset untuk Diedit/Dihapus",
-    CreatePresetSection,
-    239,
-    weightScroll
-)
+CreatePresetSection.Size = UDim2.new(1, -10, 0, 185)
 
 local PresetNameInput = Instance.new("TextBox")
 PresetNameInput.Size = UDim2.new(1, -20, 0, 22)
-PresetNameInput.Position = UDim2.new(0, 10, 0, 61)
+PresetNameInput.Position = UDim2.new(0, 10, 0, 28)
 PresetNameInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 PresetNameInput.BorderSizePixel = 0
 PresetNameInput.Font = Enum.Font.Gotham
@@ -1080,7 +1075,7 @@ UICornerPresetName.Parent = PresetNameInput
 
 local PetSearchBox = Instance.new("TextBox")
 PetSearchBox.Size = UDim2.new(1, -20, 0, 22)
-PetSearchBox.Position = UDim2.new(0, 10, 0, 88)
+PetSearchBox.Position = UDim2.new(0, 10, 0, 55)
 PetSearchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 PetSearchBox.BorderSizePixel = 0
 PetSearchBox.Font = Enum.Font.Gotham
@@ -1096,7 +1091,7 @@ UICornerPetSearch.Parent = PetSearchBox
 
 local PetListFrame = Instance.new("ScrollingFrame")
 PetListFrame.Size = UDim2.new(1, -20, 0, 60)
-PetListFrame.Position = UDim2.new(0, 10, 0, 115)
+PetListFrame.Position = UDim2.new(0, 10, 0, 82)
 PetListFrame.BackgroundTransparency = 1
 PetListFrame.BorderSizePixel = 0
 PetListFrame.ScrollBarThickness = 3
@@ -1108,9 +1103,23 @@ local PetListLayout = Instance.new("UIListLayout")
 PetListLayout.Padding = UDim.new(0, 2)
 PetListLayout.Parent = PetListFrame
 
+-- Dropdown untuk Edit Preset
+local EditPresetDropdown = createDynamicDropdown(
+    CreatePresetSection,
+    UDim2.new(0, 10, 0, 147),
+    "📂 Pilih Preset untuk Diedit/Dihapus",
+    CreatePresetSection,
+    185,
+    weightScroll
+)
+
+local CreatePresetButtonSection = createSection(weightScroll)
+CreatePresetButtonSection.LayoutOrder = 2
+CreatePresetButtonSection.Size = UDim2.new(1, -10, 0, 69)
+
 local SavePresetButton = Instance.new("TextButton")
 SavePresetButton.Size = UDim2.new(1, -20, 0, 22)
-SavePresetButton.Position = UDim2.new(0, 10, 0, 180)
+SavePresetButton.Position = UDim2.new(0, 10, 0, 10)
 SavePresetButton.BackgroundColor3 = C.success
 SavePresetButton.BorderSizePixel = 0
 SavePresetButton.Font = Enum.Font.GothamBold
@@ -1125,7 +1134,7 @@ UICornerSave.Parent = SavePresetButton
 
 local DeletePresetButton = Instance.new("TextButton")
 DeletePresetButton.Size = UDim2.new(1, -20, 0, 22)
-DeletePresetButton.Position = UDim2.new(0, 10, 0, 207)
+DeletePresetButton.Position = UDim2.new(0, 10, 0, 37)
 DeletePresetButton.BackgroundColor3 = C.danger
 DeletePresetButton.BorderSizePixel = 0
 DeletePresetButton.Font = Enum.Font.GothamBold
@@ -1142,7 +1151,7 @@ UICornerDelete.Parent = DeletePresetButton
 -- SECTION: PILIH TIM (DROPDOWN DINAMIS)
 -- ==================================================================
 local TeamSelectSection = createSection(weightScroll, "👥 Pilih Tim Leveling")
-TeamSelectSection.LayoutOrder = 2
+TeamSelectSection.LayoutOrder = 3
 TeamSelectSection.Size = UDim2.new(1, -10, 0, 106)
 
 local SelectedTeamLabel = Instance.new("TextLabel")
@@ -1175,7 +1184,7 @@ local TeamPresetDropdown = createDynamicDropdown(
 -- SECTION: TARGET LEVEL
 -- ==================================================================
 local LevelSection = createSection(weightScroll, "🎯 Target Level")
-LevelSection.LayoutOrder = 3
+LevelSection.LayoutOrder = 4
 LevelSection.Size = UDim2.new(1, -10, 0, 60)
 
 local LevelInput = Instance.new("TextBox")
@@ -1209,7 +1218,7 @@ end)
 -- SECTION: PET TARGET
 -- ==================================================================
 local TargetSection = createSection(weightScroll, "🎯 Pet Target")
-TargetSection.LayoutOrder = 4
+TargetSection.LayoutOrder = 5
 TargetSection.Size = UDim2.new(1, -10, 0, 172)
 
 local TargetSearchBox = Instance.new("TextBox")
@@ -1261,7 +1270,7 @@ UICornerScan.Parent = ScanButton
 -- SECTION: AUTO WEIGHT (DROPDOWN DINAMIS)
 -- ==================================================================
 local WeightSection = createSection(weightScroll, "⚖️ Auto Weight")
-WeightSection.LayoutOrder = 5
+WeightSection.LayoutOrder = 6
 WeightSection.Size = UDim2.new(1, -10, 0, 129)
 
 local WeightToggleButton = Instance.new("TextButton")
@@ -1308,8 +1317,8 @@ local WeightPresetDropdown = createDynamicDropdown(
 -- SECTION: AUTO MUTATION (DROPDOWN DINAMIS)
 -- ==================================================================
 local MutationSection = createSection(weightScroll, "🧬 Auto Mutation")
-MutationSection.LayoutOrder = 6
-MutationSection.Size = UDim2.new(1, -10, 0, 272)
+MutationSection.LayoutOrder = 7
+MutationSection.Size = UDim2.new(1, -10, 0, 99)
 
 local MutationToggleButton = Instance.new("TextButton")
 MutationToggleButton.Size = UDim2.new(1, -20, 0, 28)
@@ -1332,13 +1341,17 @@ local MutationPresetDropdown = createDynamicDropdown(
     UDim2.new(0, 10, 0, 61),
     selectedMutationPreset and string.format("📂 %s", selectedMutationPreset) or "📂 Pilih Preset Tim Mutation",
     MutationSection,
-    272,
+    99,
     weightScroll
 )
 
+local MutationListSection = createSection(weightScroll, "❌ Mutasi yg tidak diinginkan:")
+MutationListSection.LayoutOrder = 8
+MutationListSection.Size = UDim2.new(1, -10, 0, 185)
+
 local MutationSearchBox = Instance.new("TextBox")
 MutationSearchBox.Size = UDim2.new(1, -20, 0, 22)
-MutationSearchBox.Position = UDim2.new(0, 10, 0, 94)
+MutationSearchBox.Position = UDim2.new(0, 10, 0, 28)
 MutationSearchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 MutationSearchBox.BorderSizePixel = 0
 MutationSearchBox.Font = Enum.Font.Gotham
@@ -1352,20 +1365,9 @@ local UICornerMutationSearch = Instance.new("UICorner")
 UICornerMutationSearch.CornerRadius = UDim.new(0, 4)
 UICornerMutationSearch.Parent = MutationSearchBox
 
-local MutationListLabel = Instance.new("TextLabel")
-MutationListLabel.Size = UDim2.new(1, -20, 0, 16)
-MutationListLabel.Position = UDim2.new(0, 10, 0, 121)
-MutationListLabel.BackgroundTransparency = 1
-MutationListLabel.Font = Enum.Font.GothamBold
-MutationListLabel.Text = "❌ Mutasi tidak diinginkan:"
-MutationListLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
-MutationListLabel.TextSize = 9
-MutationListLabel.TextXAlignment = Enum.TextXAlignment.Left
-MutationListLabel.Parent = MutationSection
-
 local MutationListFrame = Instance.new("ScrollingFrame")
 MutationListFrame.Size = UDim2.new(1, -20, 0, 120)
-MutationListFrame.Position = UDim2.new(0, 10, 0, 142)
+MutationListFrame.Position = UDim2.new(0, 10, 0, 55)
 MutationListFrame.BackgroundTransparency = 1
 MutationListFrame.BorderSizePixel = 0
 MutationListFrame.ScrollBarThickness = 3
@@ -1381,7 +1383,7 @@ MutationListLayout.Parent = MutationListFrame
 -- SECTION: ADVANCED (DROPDOWN DINAMIS)
 -- ==================================================================
 local AdvancedSection = createSection(weightScroll, "🚀 Advanced")
-AdvancedSection.LayoutOrder = 7
+AdvancedSection.LayoutOrder = 9
 AdvancedSection.Size = UDim2.new(1, -10, 0, 120)
 
 local AdvancedToggleButton = Instance.new("TextButton")
@@ -1440,7 +1442,7 @@ local AdvancedPresetDropdown = createDynamicDropdown(
 -- SECTION: KONTROL
 -- ==================================================================
 local ButtonSection = createSection(weightScroll, "⚙️ Kontrol")
-ButtonSection.LayoutOrder = 8
+ButtonSection.LayoutOrder = 10
 ButtonSection.Size = UDim2.new(1, -10, 0, 75)
 
 local ToggleButton = Instance.new("TextButton")
@@ -1477,13 +1479,13 @@ updateStatus = function()
     local modeText = rainbowMode and "🌈" or "📊"
     
     StatusLabel.Text = string.format(
-        "%s T:%d | Total:%d | W:%s A:%s M:%s",
+        "%s Tim:%d | Total:%d | Weight:%s Advanced:%s Mutation:%s",
         modeText,
         teamCount,
         #allSelectedPets,
-        isAutoWeight and "✓" or "✗",
-        isAdvancedLeveling and "✓" or "✗",
-        isAutoMutation and "✓" or "✗"
+        isAutoWeight and "✓" or "X",
+        isAdvancedLeveling and "✓" or "X",
+        isAutoMutation and "✓" or "X"
     )
 end
 
@@ -1748,7 +1750,7 @@ local function populateMutationList()
             MutationButton.BackgroundColor3 = isSelected and C.danger or Color3.fromRGB(65, 65, 80)
             MutationButton.BorderSizePixel = 0
             MutationButton.Font = Enum.Font.Gotham
-            MutationButton.Text = isSelected and string.format("❌ %s", mutationName) or string.format("☐ %s", mutationName)
+            MutationButton.Text = mutationName
             MutationButton.TextColor3 = Color3.fromRGB(255, 255, 255)
             MutationButton.TextSize = 8
             MutationButton.Parent = MutationListFrame
