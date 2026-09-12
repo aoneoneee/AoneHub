@@ -1915,18 +1915,14 @@ local function populateMutationList()
         MutationButton.Text = mutationName
         MutationButton.TextColor3 = Color3.fromRGB(255, 255, 255)
         MutationButton.TextSize = 8
-        MutationButton.TextXAlignment = Enum.TextXAlignment.Left
+        MutationButton.TextXAlignment = Enum.TextXAlignment.Center
         MutationButton.LayoutOrder = i
         MutationButton.Parent = MutationListFrame
         
         local UICorner = Instance.new("UICorner")
         UICorner.CornerRadius = UDim.new(0, 3)
         UICorner.Parent = MutationButton
-        
-        local Padding = Instance.new("UIPadding")
-        Padding.PaddingLeft = UDim.new(0, 6)
-        Padding.Parent = MutationButton
-        
+                
         MutationButton.MouseButton1Click:Connect(function()
             local idx = table.find(unwantedMutations, mutationName)
             if idx then
