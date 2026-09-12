@@ -2970,6 +2970,7 @@ ToggleButton.MouseButton1Click:Connect(function()
         ToggleButton.BackgroundColor3 = C.success
         updateStatus()
     end)
+end)
 
 -- ==================================================================
 -- TAB SWITCHING
