@@ -61,6 +61,7 @@ local config = {
     isAutoMutation = false,
     isAdvancedLeveling = false,
     selectedPetTypes = {},
+    antiAfkToggle = false,
 }
 
 local function loadConfig()
@@ -84,6 +85,7 @@ local function loadConfig()
             if config.isAutoMutation == nil then config.isAutoMutation = false end
             if config.isAdvancedLeveling == nil then config.isAdvancedLeveling = false end
             if config.selectedPetTypes == nil then config.selectedPetTypes = {} end
+            if config.antiAfkToggle == nil then config.antiAfkToggle = false end
             
             return true
         end
@@ -2860,3 +2862,273 @@ end
 switchTab("Weight")
 
 print("✅ AoneHub Auto Leveling loaded! Config:", SAVE_FILE)
+
+-- Setup Extra Tab dengan Scroll
+local extraTab = tabFrames["Ekstra"]
+
+local extraScroll = Instance.new("ScrollingFrame")
+extraScroll.Size = UDim2.new(1, -10, 1, -10)
+extraScroll.Position = UDim2.new(0, 5, 0, 5)
+extraScroll.BackgroundTransparency = 1
+extraScroll.BorderSizePixel = 0
+extraScroll.ScrollBarThickness = 4
+extraScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+extraScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+extraScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y  -- Auto size
+extraScroll.Parent = extraTab
+
+local extraLayout = Instance.new("UIListLayout")
+extraLayout.Padding = UDim.new(0, 6)
+extraLayout.SortOrder = Enum.SortOrder.LayoutOrder
+extraLayout.Parent = extraScroll
+
+-- ==================================================================
+-- TOGGLE CREATOR (untuk Extra Tab)
+-- ==================================================================
+local function createToggle(title, description, configKey, layoutOrder, defaultColor)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -12, 0, 44)
+    container.LayoutOrder = layoutOrder
+    container.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+    container.BorderSizePixel = 0
+    container.Parent = extraScroll
+    
+    Instance.new("UICorner", container).CornerRadius = UDim.new(0, 6)
+    
+    -- Title
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -50, 0, 16)
+    titleLabel.Position = UDim2.new(0, 10, 0, 4)
+    titleLabel.Text = title
+    titleLabel.TextColor3 = C.text
+    titleLabel.Font = Enum.Font.GothamSemibold
+    titleLabel.TextSize = 10
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Parent = container
+    
+    -- Description
+    local descLabel = Instance.new("TextLabel")
+    descLabel.Size = UDim2.new(1, -50, 0, 14)
+    descLabel.Position = UDim2.new(0, 10, 0, 20)
+    descLabel.Text = description
+    descLabel.TextColor3 = C.textDim
+    descLabel.Font = Enum.Font.Gotham
+    descLabel.TextSize = 8
+    descLabel.TextXAlignment = Enum.TextXAlignment.Left
+    descLabel.BackgroundTransparency = 1
+    descLabel.Parent = container
+    
+    -- Toggle Button
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 36, 0, 18)
+    toggleBtn.Position = UDim2.new(1, -42, 0.5, -9)
+    toggleBtn.Text = ""
+    toggleBtn.BorderSizePixel = 0
+    toggleBtn.AutoButtonColor = false
+    toggleBtn.Parent = container
+    
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
+    
+    -- Toggle dot
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0, 12, 0, 12)
+    dot.Position = UDim2.new(0, 3, 0.5, -6)
+    dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    dot.BorderSizePixel = 0
+    dot.Parent = toggleBtn
+    
+    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+    
+    -- Status label
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(0, 34, 1, 0)
+    statusLabel.Position = UDim2.new(1, -82, 0, 0)
+    statusLabel.Text = config[configKey] and "ON" or "OFF"
+    statusLabel.TextColor3 = config[configKey] and C.success or C.danger
+    statusLabel.Font = Enum.Font.GothamBold
+    statusLabel.TextSize = 7
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Right
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Parent = container
+    
+    -- Update function
+    local function updateToggle()
+        local isOn = config[configKey]
+        
+        if isOn then
+            toggleBtn.BackgroundColor3 = C.success
+            dot.Position = UDim2.new(1, -15, 0.5, -6)
+            statusLabel.Text = "ON"
+            statusLabel.TextColor3 = C.success
+        else
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 75)
+            dot.Position = UDim2.new(0, 3, 0.5, -6)
+            statusLabel.Text = "OFF"
+            statusLabel.TextColor3 = C.danger
+        end
+    end
+    
+    toggleBtn.MouseButton1Click:Connect(function()
+        config[configKey] = not config[configKey]
+        saveConfig()
+        updateToggle()
+        
+        if configKey == "antiAfkToggle" then
+            if config[configKey] then
+                print("[AoneHub] ⏳ Anti-AFK: Delay 15 menit sebelum aktif...")
+            else
+                print("[AoneHub] ❌ Anti-AFK: OFF")
+            end
+        end
+    end)
+    
+    updateToggle()
+    return container
+end
+
+-- ⭐ TAMBAHKAN TOGGLE ANTI-AFK DI SINI
+createToggle("🛡️ Anti-AFK", "Tapi bikin bug gk bisa ganti item di hotbar", "antiAfkToggle", 2)
+
+-- ==================================================================
+-- ANTI-AFK SYSTEM
+-- ==================================================================
+do
+    local antiAFKEnabled = config.antiAfkToggle
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    local antiAFKActive = false
+    local antiAFKDelayActive = false
+    local antiAFKFirstRun = true
+    
+    -- Fungsi untuk menjalankan simulasi Anti-AFK
+    local function PerformAntiAFKAction()
+        -- Simulasi mouse movement
+        pcall(function()
+            VirtualInputManager:SendMouseMoveEvent(
+                math.random(100, 500), 
+                math.random(100, 500), 
+                nil
+            )
+        end)
+        
+        -- Simulasi key press
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, nil)
+            task.wait(0.1)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, nil)
+        end)
+        
+        -- Gerakin karakter dikit
+        pcall(function()
+            local char = player.Character
+            if char and char:FindFirstChild("Humanoid") then
+                char.Humanoid:Move(Vector3.new(math.random(-5, 5), 0, math.random(-5, 5)))
+            end
+        end)
+    end
+    
+    -- Fungsi untuk menjalankan Anti-AFK (dengan delay awal)
+    local function StartAntiAFK()
+        if antiAFKActive or antiAFKDelayActive then return end
+        
+        local initialDelay
+        
+        if antiAFKFirstRun then
+            initialDelay = 600  -- 10 menit (auto-start awal)
+            antiAFKFirstRun = false
+            print("[AoneHub] ⏳ Anti-AFK: Delay 10 menit (auto-start awal)")
+        else
+            initialDelay = 900  -- 15 menit (manual)
+            print("[AoneHub] ⏳ Anti-AFK: Delay 15 menit (di-on-kan manual)")
+        end
+        
+        antiAFKDelayActive = true
+        
+        task.spawn(function()
+            local remainingDelay = initialDelay
+            
+            while remainingDelay > 0 do
+                if not config.antiAfkToggle then
+                    antiAFKDelayActive = false
+                    print("[AoneHub] ❌ Anti-AFK: Dibatalkan saat delay")
+                    return
+                end
+                
+                if remainingDelay % 60 == 0 or remainingDelay <= 10 then
+                    local minutes = math.floor(remainingDelay / 60)
+                    local seconds = remainingDelay % 60
+                    if minutes > 0 then
+                        print("[AoneHub] ⏳ Anti-AFK aktif dalam: " .. minutes .. " menit " .. seconds .. " detik")
+                    else
+                        print("[AoneHub] ⏳ Anti-AFK aktif dalam: " .. seconds .. " detik")
+                    end
+                end
+                
+                task.wait(1)
+                remainingDelay = remainingDelay - 1
+            end
+            
+            if config.antiAfkToggle then
+                antiAFKDelayActive = false
+                antiAFKActive = true
+                print("[AoneHub] ✅ Anti-AFK: AKTIF!")
+                
+                while antiAFKActive and config.antiAfkToggle do
+                    PerformAntiAFKAction()
+                    
+                    local waitTime = 420 + math.random() * 180
+                    local waited = 0
+                    while waited < waitTime and antiAFKActive and config.antiAfkToggle do
+                        task.wait(1)
+                        waited = waited + 1
+                    end
+                end
+                
+                antiAFKActive = false
+            else
+                antiAFKDelayActive = false
+                print("[AoneHub] ❌ Anti-AFK: OFF (toggle dimatikan)")
+            end
+        end)
+    end
+    
+    -- Fungsi untuk menghentikan Anti-AFK
+    local function StopAntiAFK()
+        antiAFKActive = false
+        antiAFKDelayActive = false
+        print("[AoneHub] ❌ Anti-AFK: OFF")
+    end
+    
+    -- Monitor config.antiAfkToggle untuk perubahan
+    task.spawn(function()
+        local lastToggleState = config.antiAfkToggle
+        
+        while true do
+            task.wait(0.5)
+            
+            if config.antiAfkToggle ~= lastToggleState then
+                lastToggleState = config.antiAfkToggle
+                
+                if config.antiAfkToggle then
+                    if not antiAFKActive and not antiAFKDelayActive then
+                        antiAFKFirstRun = false
+                        StartAntiAFK()
+                    end
+                else
+                    StopAntiAFK()
+                end
+            end
+        end
+    end)
+    
+    -- Auto-start jika config true
+    if config.antiAfkToggle then
+        task.delay(1, function()
+            if config.antiAfkToggle then
+                StartAntiAFK()
+                print("[AoneHub] ✅ Anti-AFK auto-started dengan delay 10 menit!")
+            end
+        end)
+    end
+end
+
