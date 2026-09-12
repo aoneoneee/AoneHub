@@ -1912,7 +1912,7 @@ local function populateMutationList()
         MutationButton.BackgroundColor3 = isSelected and C.danger or Color3.fromRGB(65, 65, 80)
         MutationButton.BorderSizePixel = 0
         MutationButton.Font = Enum.Font.Gotham
-        MutationButton.Text = isSelected and string.format("❌ %s", mutationName) or string.format("☐ %s", mutationName)
+        MutationButton.Text = mutationName
         MutationButton.TextColor3 = Color3.fromRGB(255, 255, 255)
         MutationButton.TextSize = 8
         MutationButton.TextXAlignment = Enum.TextXAlignment.Left
