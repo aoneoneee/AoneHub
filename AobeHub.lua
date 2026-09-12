@@ -2841,12 +2841,13 @@ ToggleButton.MouseButton1Click:Connect(function()
                     wait(3)
                 end
             end
+        end
+        -- ⭐ Cek sebelum lanjut ke PRIORITAS 4
+        if not isAlive() then return end
 
-            -- ⭐ Cek sebelum lanjut ke PRIORITAS 4
-            if not isAlive() then return end
-
-            -- PRIORITAS 4: ADVANCED LEVELING
-            if isAdvancedLeveling and isAlive() then  -- ⭐ GANTI
+        -- PRIORITAS 4: ADVANCED LEVELING
+        if isAdvancedLeveling and isAlive() then  -- ⭐ GANTI
+            cleanupInvalidPets()
             
             local advancedPets = getPetsForAdvanced()
             
@@ -2854,6 +2855,8 @@ ToggleButton.MouseButton1Click:Connect(function()
                 StatusLabel.Text = string.format("🚀 Advanced leveling (%d pet)...", #advancedPets)
                 
                 unequipAllPets()
+                if not isAlive() then return end
+
                 wait(1)
                 
                 local advancedUUIDs = getPresetUUIDs(selectedAdvancedPreset)
@@ -2948,15 +2951,17 @@ ToggleButton.MouseButton1Click:Connect(function()
                             break
                         end
                     end
-                    
+
+                    if not isAlive() then return end
+                            
                     updateStatus()
                     wait(5)
                 end
             end
         end
         
-        -- ⭐ Cek sebelum selesai
-        if not isAlive() and isGuiDestroyed then return end
+        -- ⭐ Cek sebelum selesai (hanya jika GUI destroyed)
+        if isGuiDestroyed then return end
 
         -- SELESAI
         StatusLabel.Text = "🎉 Semua proses selesai!"
@@ -2964,7 +2969,7 @@ ToggleButton.MouseButton1Click:Connect(function()
         ToggleButton.Text = "▶️ Mulai"
         ToggleButton.BackgroundColor3 = C.success
         updateStatus()
-        end)
+    end)
 
 -- ==================================================================
 -- TAB SWITCHING
