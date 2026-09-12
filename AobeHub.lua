@@ -155,47 +155,6 @@ local rainbowColors = {
 }
 
 local colorIndex = 1
-
--- Semua GUI yang ingin mengikuti warna rainbow
-local rainbowTargets = {
-    RainbowModeButton,
-}
-
--- Fungsi untuk menerapkan warna ke semua target
-local function updateRainbowTargets()
-    for _, target in ipairs(rainbowTargets) do
-        if target and target:IsA("GuiObject") then
-            target.BackgroundColor3 = A.warning
-        end
-    end
-end
-
--- Memulai rainbow
-local function startRainbowUpdate()
-    if rainbowTask then return end
-
-    rainbowTask = task.spawn(function()
-        while rainbowMode do
-            -- Ambil warna berikutnya
-            A.warning = rainbowColors[colorIndex]
-
-            -- Terapkan ke semua GUI
-            updateRainbowTargets()
-
-            -- Ke warna berikutnya
-            colorIndex = colorIndex + 1
-
-            if colorIndex > #rainbowColors then
-                colorIndex = 1
-            end
-
-            -- Ganti warna setiap 1 detik
-            task.wait(1)
-        end
-
-        rainbowTask = nil
-    end)
-end
     
 -- ==================================================================
 -- PET DATA FUNCTIONS
@@ -1372,6 +1331,11 @@ local WeightPresetDropdown = createDynamicDropdown(
     weightScroll
 )
 
+-- Semua GUI yang ingin mengikuti warna rainbow
+local rainbowTargets = {
+    RainbowModeButton,
+}
+
 -- ==================================================================
 -- SECTION: AUTO MUTATION (DROPDOWN DINAMIS)
 -- ==================================================================
@@ -1983,6 +1947,42 @@ local function populateTargetDropdown()
         end
     end
     TargetListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22, 50))
+end
+
+-- Fungsi untuk menerapkan warna ke semua target
+local function updateRainbowTargets()
+    for _, target in ipairs(rainbowTargets) do
+        if target and target:IsA("GuiObject") then
+            target.BackgroundColor3 = A.warning
+        end
+    end
+end
+
+-- Memulai rainbow
+local function startRainbowUpdate()
+    if rainbowTask then return end
+
+    rainbowTask = task.spawn(function()
+        while rainbowMode do
+            -- Ambil warna berikutnya
+            A.warning = rainbowColors[colorIndex]
+
+            -- Terapkan ke semua GUI
+            updateRainbowTargets()
+
+            -- Ke warna berikutnya
+            colorIndex = colorIndex + 1
+
+            if colorIndex > #rainbowColors then
+                colorIndex = 1
+            end
+
+            -- Ganti warna setiap 1 detik
+            task.wait(1)
+        end
+
+        rainbowTask = nil
+    end)
 end
 
 -- ==================================================================
