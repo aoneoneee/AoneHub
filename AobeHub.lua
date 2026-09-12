@@ -2407,6 +2407,9 @@ ToggleButton.MouseButton1Click:Connect(function()
                 if not isAlive() then return end
 
                 if #allSelectedPets == 0 then
+                    StatusLabel.Text = "⚠️ Semua pet target hilang!"
+                    break
+                end
                 
                 local weightTarget = getWeightTarget()
                 local levelTargetForWeight = getLevelTargetForWeight()
