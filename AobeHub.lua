@@ -1864,7 +1864,7 @@ local function populateEditPresetDropdown()
     EditPresetDropdown.UpdateSize()
 end
 
--- Populate mutation list (unwanted)
+-- Populate mutation list - DENGAN SELECTED DI ATAS + AUTO CLEAR SEARCH
 local function populateMutationList()
     for _, child in pairs(MutationListFrame:GetChildren()) do
         if child:IsA("TextButton") then
@@ -1872,45 +1872,82 @@ local function populateMutationList()
         end
     end
     
+    -- ⭐ Kumpulkan mutations dalam 2 kategori
+    local selectedMutations = {}
+    local unselectedMutations = {}
+    
     for _, mutationName in ipairs(availableMutations) do
+        -- Filter berdasarkan search text
         if mutationSearchText == "" or mutationName:lower():find(mutationSearchText:lower()) then
             local isSelected = table.find(unwantedMutations, mutationName) ~= nil
             
-            local MutationButton = Instance.new("TextButton")
-            MutationButton.Size = UDim2.new(1, 0, 0, 20)
-            MutationButton.BackgroundColor3 = isSelected and C.danger or Color3.fromRGB(65, 65, 80)
-            MutationButton.BorderSizePixel = 0
-            MutationButton.Font = Enum.Font.Gotham
-            MutationButton.Text = mutationName
-            MutationButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-            MutationButton.TextSize = 8
-            MutationButton.Parent = MutationListFrame
-            
-            local UICorner = Instance.new("UICorner")
-            UICorner.CornerRadius = UDim.new(0, 3)
-            UICorner.Parent = MutationButton
-            
-            MutationButton.MouseButton1Click:Connect(function()
-                local idx = table.find(unwantedMutations, mutationName)
-                if idx then
-                    table.remove(unwantedMutations, idx)
-                else
-                    table.insert(unwantedMutations, mutationName)
-                end
-                config.unwantedMutations = unwantedMutations
-                saveConfig()
-                populateMutationList()
-            end)
+            if isSelected then
+                table.insert(selectedMutations, mutationName)
+            else
+                table.insert(unselectedMutations, mutationName)
+            end
         end
     end
     
-    -- Update canvas
-    local count = 0
-    for _, child in pairs(MutationListFrame:GetChildren()) do
-        if child:IsA("TextButton") then
-            count = count + 1
-        end
+    -- ⭐ Sort masing-masing kategori alphabetically
+    table.sort(selectedMutations)
+    table.sort(unselectedMutations)
+    
+    -- ⭐ Gabungkan: selected dulu, lalu unselected
+    local allMutations = {}
+    for _, name in ipairs(selectedMutations) do
+        table.insert(allMutations, {Name = name, IsSelected = true})
     end
+    for _, name in ipairs(unselectedMutations) do
+        table.insert(allMutations, {Name = name, IsSelected = false})
+    end
+    
+    -- Buat button untuk setiap mutation
+    for i, mutationInfo in ipairs(allMutations) do
+        local mutationName = mutationInfo.Name
+        local isSelected = mutationInfo.IsSelected
+        
+        local MutationButton = Instance.new("TextButton")
+        MutationButton.Size = UDim2.new(1, 0, 0, 20)
+        MutationButton.BackgroundColor3 = isSelected and C.danger or Color3.fromRGB(65, 65, 80)
+        MutationButton.BorderSizePixel = 0
+        MutationButton.Font = Enum.Font.Gotham
+        MutationButton.Text = isSelected and string.format("❌ %s", mutationName) or string.format("☐ %s", mutationName)
+        MutationButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        MutationButton.TextSize = 8
+        MutationButton.TextXAlignment = Enum.TextXAlignment.Left
+        MutationButton.LayoutOrder = i
+        MutationButton.Parent = MutationListFrame
+        
+        local UICorner = Instance.new("UICorner")
+        UICorner.CornerRadius = UDim.new(0, 3)
+        UICorner.Parent = MutationButton
+        
+        local Padding = Instance.new("UIPadding")
+        Padding.PaddingLeft = UDim.new(0, 6)
+        Padding.Parent = MutationButton
+        
+        MutationButton.MouseButton1Click:Connect(function()
+            local idx = table.find(unwantedMutations, mutationName)
+            if idx then
+                table.remove(unwantedMutations, idx)
+            else
+                table.insert(unwantedMutations, mutationName)
+            end
+            config.unwantedMutations = unwantedMutations
+            saveConfig()
+            
+            -- ⭐ AUTO CLEAR SEARCH BAR
+            mutationSearchText = ""
+            MutationSearchBox.Text = ""
+            
+            -- ⭐ Refresh list (selected akan naik ke atas)
+            populateMutationList()
+        end)
+    end
+    
+    -- Update canvas
+    local count = #allMutations
     MutationListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22, 50))
 end
 
