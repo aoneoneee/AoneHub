@@ -135,11 +135,17 @@ local tempPresetPets = {}
 local unwantedMutations = config.unwantedMutations or {}
 local availableMutations = {}
 local editingPresetName = nil
+local isGuiDestroyed = false  -- ⭐ TAMBAHKAN INI
 
 -- Forward declarations
 local StatusLabel
 local updateStatus
 local rainbowTask = nil
+
+-- ⭐ Helper function untuk cek apakah masih alive
+local function isAlive()
+    return not isGuiDestroyed and isLeveling
+end
 
 -- Warna yang digunakan
 local A = {
@@ -607,6 +613,8 @@ screenGui.Parent = playerGui
 screenGui.ResetOnSpawn = false
 
 screenGui.Destroying:Connect(function()
+    isGuiDestroyed = true
+    isLeveling = false
     config.selectedTeamPreset = selectedTeamPreset
     config.selectedWeightPreset = selectedWeightPreset
     config.selectedAdvancedPreset = selectedAdvancedPreset
@@ -737,6 +745,8 @@ minimizedCircle.MouseButton1Click:Connect(function()
 end)
 
 closeBtn.MouseButton1Click:Connect(function()
+    isGuiDestroyed = true
+    isLeveling = false
     screenGui:Destroy()
 end)
 
@@ -2334,30 +2344,39 @@ ToggleButton.MouseButton1Click:Connect(function()
         StatusLabel.Text = "🔄 Membersihkan semua slot..."
         local maxAttempts = 3
         local attempt = 0
-        
-        while attempt < maxAttempts and isLeveling do
+    
+        while attempt < maxAttempts and isAlive() do  -- ⭐ GANTI isLeveling → isAlive()
             local equippedPets = getEquippedPets()
-            
+        
             if #equippedPets == 0 then
                 return true
             end
-            
+        
             for _, petUUID in ipairs(equippedPets) do
+                -- ⭐ Cek sebelum unequip
+                if not isAlive() then return false end
+            
                 pcall(function()
                     unequipPet(petUUID)
                 end)
                 wait(0.5)
-            end
             
+                -- ⭐ Cek setelah unequip
+                if not isAlive() then return false end
+            end
+        
             attempt = attempt + 1
             wait(2)
         end
-        
+    
         return #getEquippedPets() == 0
     end
     
     local function equipPetList(petList, label)
         for _, petUUID in ipairs(petList) do
+            -- ⭐ Cek di setiap iterasi
+            if not isAlive() then return end
+        
             if isPetValid(petUUID) then
                 equipPet(petUUID)
             end
@@ -2368,19 +2387,26 @@ ToggleButton.MouseButton1Click:Connect(function()
     spawn(function()
         unequipAllPets()
         wait(2)
+    
+        -- ⭐ Cek setelah wait
+        if not isAlive() then return end
+    
         cleanupInvalidPets()
         
         -- PRIORITAS 1: AUTO WEIGHT
         if isAutoWeight then
             local weightLoopActive = true
-            
-            while isLeveling and weightLoopActive do
+    
+            while isAlive() and weightLoopActive do  -- ⭐ GANTI
+                -- ⭐ Cek di awal loop
+                if not isAlive() then return end
+        
                 cleanupInvalidPets()
                 
+                -- ⭐ Cek alive
+                if not isAlive() then return end
+
                 if #allSelectedPets == 0 then
-                    StatusLabel.Text = "⚠️ Semua pet target hilang!"
-                    break
-                end
                 
                 local weightTarget = getWeightTarget()
                 local levelTargetForWeight = getLevelTargetForWeight()
@@ -2409,8 +2435,12 @@ ToggleButton.MouseButton1Click:Connect(function()
                 
                 if #levelTargets > 0 then
                     unequipAllPets()
+    
+                    -- ⭐ Cek setelah unequip
+                    if not isAlive() then return end
+    
                     wait(1)
-                    
+    
                     local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
                     equipPetList(teamUUIDs, "Tim:")
                     wait(2)
@@ -2437,8 +2467,11 @@ ToggleButton.MouseButton1Click:Connect(function()
                         end
                     end
                     
-                    while isLeveling and #levelingEquippedPets > 0 do
+                    while isAlive() and #levelingEquippedPets > 0 do  -- ⭐ GANTI
                         for i = #levelingEquippedPets, 1, -1 do
+                            -- ⭐ Cek di setiap iterasi for
+                            if not isAlive() then return end
+        
                             local petUUID = levelingEquippedPets[i]
                             
                             if not isPetValid(petUUID) then
@@ -2473,6 +2506,9 @@ ToggleButton.MouseButton1Click:Connect(function()
                         if allLeveled then break end
                         if #levelingEquippedPets == 0 and #pendingLevelTargets == 0 then break end
                         
+                            -- ⭐ Cek sebelum update status
+                        if not isAlive() then return end
+    
                         updateStatus()
                         wait(5)
                     end
@@ -2516,8 +2552,10 @@ ToggleButton.MouseButton1Click:Connect(function()
                         end
                     end
                     
-                    while isLeveling and #weightEquippedPets > 0 do
+                    while isAlive() and #weightEquippedPets > 0 do  -- ⭐ GANTI
                         for i = #weightEquippedPets, 1, -1 do
+                            -- ⭐ Cek
+                            if not isAlive() then return end
                             local petUUID = weightEquippedPets[i]
                             
                             if not isPetValid(petUUID) then
@@ -2585,12 +2623,18 @@ ToggleButton.MouseButton1Click:Connect(function()
                 wait(3)
             end
         end
-        
+
+        -- ⭐ Cek sebelum lanjut ke PRIORITAS 2
+        if not isAlive() then return end
+
         -- PRIORITAS 2: AUTO MUTATION
-        if isAutoMutation and isLeveling then
+        if isAutoMutation and isAlive() then  -- ⭐ GANTI
             local mutationLoopActive = true
-            
-            while isLeveling and mutationLoopActive do
+
+            while isAlive() and mutationLoopActive do  -- ⭐ GANTI
+                -- ⭐ Cek
+                if not isAlive() then return end
+    
                 cleanupInvalidPets()
                 
                 if #allSelectedPets == 0 then
@@ -2644,8 +2688,10 @@ ToggleButton.MouseButton1Click:Connect(function()
                 
                 wait(2)
                 
-                while isLeveling and #equippedForMutation > 0 do
+                while isAlive() and #equippedForMutation > 0 do  -- ⭐ GANTI
                     for i = #equippedForMutation, 1, -1 do
+                        -- ⭐ Cek
+                        if not isAlive() then return end
                         local petUUID = equippedForMutation[i]
                         
                         if not isPetValid(petUUID) then
@@ -2708,9 +2754,12 @@ ToggleButton.MouseButton1Click:Connect(function()
                 wait(3)
             end
         end
-        
+
+        -- ⭐ Cek sebelum lanjut ke PRIORITAS 3
+        if not isAlive() then return end
+
         -- PRIORITAS 3: NORMAL LEVELING
-        if isLeveling then
+        if isAlive() then  -- ⭐ GANTI
             cleanupInvalidPets()
             
             local normalPets = getPetsForNormalLeveling()
@@ -2747,8 +2796,10 @@ ToggleButton.MouseButton1Click:Connect(function()
                     end
                 end
                 
-                while isLeveling and #normalEquippedPets > 0 do
+                while isAlive() and #normalEquippedPets > 0 do  -- ⭐ GANTI
                     for i = #normalEquippedPets, 1, -1 do
+                        -- ⭐ Cek
+                        if not isAlive() then return end
                         local petUUID = normalEquippedPets[i]
                         
                         if not isPetValid(petUUID) then
@@ -2784,14 +2835,15 @@ ToggleButton.MouseButton1Click:Connect(function()
                     if #normalEquippedPets == 0 and #pendingNormalList == 0 then break end
                     
                     updateStatus()
-                    wait(5)
+                    wait(3)
                 end
             end
-        end
-        
-        -- PRIORITAS 4: ADVANCED LEVELING
-        if isAdvancedLeveling and isLeveling then
-            cleanupInvalidPets()
+
+            -- ⭐ Cek sebelum lanjut ke PRIORITAS 4
+            if not isAlive() then return end
+
+            -- PRIORITAS 4: ADVANCED LEVELING
+            if isAdvancedLeveling and isAlive() then  -- ⭐ GANTI
             
             local advancedPets = getPetsForAdvanced()
             
@@ -2827,8 +2879,10 @@ ToggleButton.MouseButton1Click:Connect(function()
                     end
                 end
                 
-                while isLeveling and #advancedEquippedPets > 0 do
+                while isAlive() and #advancedEquippedPets > 0 do  -- ⭐ GANTI
                     for i = #advancedEquippedPets, 1, -1 do
+                        -- ⭐ Cek
+                        if not isAlive() then return end
                         local petUUID = advancedEquippedPets[i]
                         
                         if not isPetValid(petUUID) then
@@ -2898,14 +2952,16 @@ ToggleButton.MouseButton1Click:Connect(function()
             end
         end
         
+        -- ⭐ Cek sebelum selesai
+        if not isAlive() and isGuiDestroyed then return end
+
         -- SELESAI
         StatusLabel.Text = "🎉 Semua proses selesai!"
         isLeveling = false
         ToggleButton.Text = "▶️ Mulai"
         ToggleButton.BackgroundColor3 = C.success
         updateStatus()
-    end)
-end)
+        end)
 
 -- ==================================================================
 -- TAB SWITCHING
@@ -3166,11 +3222,12 @@ do
         
         task.spawn(function()
             local remainingDelay = initialDelay
-            
+    
             while remainingDelay > 0 do
-                if not config.antiAfkToggle then
+                -- ⭐ Cek GUI destroyed atau toggle OFF
+                if isGuiDestroyed or not config.antiAfkToggle then
                     antiAFKDelayActive = false
-                    print("[AoneHub] ❌ Anti-AFK: Dibatalkan saat delay")
+                    print("[AoneHub] ❌ Anti-AFK: Dibatalkan (destroyed atau OFF)")
                     return
                 end
                 
@@ -3188,17 +3245,17 @@ do
                 remainingDelay = remainingDelay - 1
             end
             
-            if config.antiAfkToggle then
+            if config.antiAfkToggle and not isGuiDestroyed then
                 antiAFKDelayActive = false
                 antiAFKActive = true
                 print("[AoneHub] ✅ Anti-AFK: AKTIF!")
-                
-                while antiAFKActive and config.antiAfkToggle do
+    
+                while antiAFKActive and config.antiAfkToggle and not isGuiDestroyed do  -- ⭐ GANTI
                     PerformAntiAFKAction()
-                    
+        
                     local waitTime = 420 + math.random() * 180
                     local waited = 0
-                    while waited < waitTime and antiAFKActive and config.antiAfkToggle do
+                    while waited < waitTime and antiAFKActive and config.antiAfkToggle and not isGuiDestroyed do  -- ⭐ GANTI
                         task.wait(1)
                         waited = waited + 1
                     end
@@ -3222,9 +3279,12 @@ do
     -- Monitor config.antiAfkToggle untuk perubahan
     task.spawn(function()
         local lastToggleState = config.antiAfkToggle
-        
-        while true do
+    
+        while not isGuiDestroyed do  -- ⭐ GANTI
             task.wait(0.5)
+        
+            -- ⭐ Cek
+            if isGuiDestroyed then break end
             
             if config.antiAfkToggle ~= lastToggleState then
                 lastToggleState = config.antiAfkToggle
