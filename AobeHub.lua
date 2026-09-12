@@ -1168,42 +1168,9 @@ UICornerDelete.Parent = DeletePresetButton
 -- ==================================================================
 -- SECTION: PILIH TIM (DROPDOWN DINAMIS)
 -- ==================================================================
-local TeamSelectSection = createSection(weightScroll, "👥 Pilih Tim Leveling")
+local TeamSelectSection = createSection(weightScroll, "📈 Auto Leveling")
 TeamSelectSection.LayoutOrder = 3
-TeamSelectSection.Size = UDim2.new(1, -10, 0, 106)
-
-local SelectedTeamLabel = Instance.new("TextLabel")
-SelectedTeamLabel.Size = UDim2.new(1, -20, 0, 35)
-SelectedTeamLabel.Position = UDim2.new(0, 10, 0, 28)
-SelectedTeamLabel.BackgroundColor3 = Color3.fromRGB(50, 80, 50)
-SelectedTeamLabel.BorderSizePixel = 0
-SelectedTeamLabel.Font = Enum.Font.GothamBold
-SelectedTeamLabel.Text = selectedTeamPreset and string.format("Tim: %s", selectedTeamPreset) or "Tim Leveling: Belum dipilih"
-SelectedTeamLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-SelectedTeamLabel.TextSize = 9
-SelectedTeamLabel.TextWrapped = true
-SelectedTeamLabel.Parent = TeamSelectSection
-
-local UICornerSelectedTeam = Instance.new("UICorner")
-UICornerSelectedTeam.CornerRadius = UDim.new(0, 4)
-UICornerSelectedTeam.Parent = SelectedTeamLabel
-
--- Dropdown Tim Leveling
-local TeamPresetDropdown = createDynamicDropdown(
-    TeamSelectSection,
-    UDim2.new(0, 10, 0, 68),
-    selectedTeamPreset and string.format("📂 %s", selectedTeamPreset) or "📂 Pilih Preset Tim Leveling",
-    TeamSelectSection,
-    106,
-    weightScroll
-)
-
--- ==================================================================
--- SECTION: TARGET LEVEL
--- ==================================================================
-local LevelSection = createSection(weightScroll, "🎯 Target Level")
-LevelSection.LayoutOrder = 4
-LevelSection.Size = UDim2.new(1, -10, 0, 60)
+TeamSelectSection.Size = UDim2.new(1, -10, 0, 93)
 
 local LevelInput = Instance.new("TextBox")
 LevelInput.Size = UDim2.new(1, -20, 0, 22)
@@ -1215,11 +1182,11 @@ LevelInput.PlaceholderText = "Target Level"
 LevelInput.Text = tostring(targetLevel)
 LevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
 LevelInput.TextSize = 9
-LevelInput.Parent = LevelSection
+LevelInput.Parent = TeamSelectSection
 
 local UICornerLevelInput = Instance.new("UICorner")
 UICornerLevelInput.CornerRadius = UDim.new(0, 4)
-UICornerLevelInput.Parent = LevelInput
+UICornerLevelInput.Parent = TeamSelectSection
 
 LevelInput.FocusLost:Connect(function()
     local newLevel = tonumber(LevelInput.Text)
@@ -1232,11 +1199,21 @@ LevelInput.FocusLost:Connect(function()
     end
 end)
 
+-- Dropdown Tim Leveling
+local TeamPresetDropdown = createDynamicDropdown(
+    TeamSelectSection,
+    UDim2.new(0, 10, 0, 55),
+    selectedTeamPreset and string.format("📂 %s", selectedTeamPreset) or "📂 Pilih Preset Tim Leveling",
+    TeamSelectSection,
+    93,
+    weightScroll
+)
+
 -- ==================================================================
 -- SECTION: PET TARGET
 -- ==================================================================
 local TargetSection = createSection(weightScroll, "🎯 Pet Target")
-TargetSection.LayoutOrder = 5
+TargetSection.LayoutOrder = 4
 TargetSection.Size = UDim2.new(1, -10, 0, 172)
 
 local TargetSearchBox = Instance.new("TextBox")
@@ -1288,7 +1265,7 @@ UICornerScan.Parent = ScanButton
 -- SECTION: AUTO WEIGHT (DROPDOWN DINAMIS)
 -- ==================================================================
 local WeightSection = createSection(weightScroll, "⚖️ Auto Weight")
-WeightSection.LayoutOrder = 6
+WeightSection.LayoutOrder = 5
 WeightSection.Size = UDim2.new(1, -10, 0, 129)
 
 local WeightToggleButton = Instance.new("TextButton")
@@ -1340,7 +1317,7 @@ local rainbowTargets = {
 -- SECTION: AUTO MUTATION (DROPDOWN DINAMIS)
 -- ==================================================================
 local MutationSection = createSection(weightScroll, "🧬 Auto Mutation")
-MutationSection.LayoutOrder = 7
+MutationSection.LayoutOrder = 6
 MutationSection.Size = UDim2.new(1, -10, 0, 99)
 
 local MutationToggleButton = Instance.new("TextButton")
@@ -1369,7 +1346,7 @@ local MutationPresetDropdown = createDynamicDropdown(
 )
 
 local MutationListSection = createSection(weightScroll, "❌ Mutasi yg tidak diinginkan:")
-MutationListSection.LayoutOrder = 8
+MutationListSection.LayoutOrder = 7
 MutationListSection.Size = UDim2.new(1, -10, 0, 185)
 
 local MutationSearchBox = Instance.new("TextBox")
@@ -1406,8 +1383,8 @@ MutationListLayout.Parent = MutationListFrame
 -- SECTION: ADVANCED (DROPDOWN DINAMIS)
 -- ==================================================================
 local AdvancedSection = createSection(weightScroll, "🚀 Advanced")
-AdvancedSection.LayoutOrder = 9
-AdvancedSection.Size = UDim2.new(1, -10, 0, 120)
+AdvancedSection.LayoutOrder = 8
+AdvancedSection.Size = UDim2.new(1, -10, 0, 123)
 
 local AdvancedToggleButton = Instance.new("TextButton")
 AdvancedToggleButton.Size = UDim2.new(1, -20, 0, 25)
@@ -1426,7 +1403,7 @@ UICornerAdvancedToggle.Parent = AdvancedToggleButton
 
 local AdvancedLevelInput = Instance.new("TextBox")
 AdvancedLevelInput.Size = UDim2.new(1, -20, 0, 22)
-AdvancedLevelInput.Position = UDim2.new(0, 10, 0, 55)
+AdvancedLevelInput.Position = UDim2.new(0, 10, 0, 58)
 AdvancedLevelInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 AdvancedLevelInput.BorderSizePixel = 0
 AdvancedLevelInput.Font = Enum.Font.Gotham
@@ -1454,23 +1431,23 @@ end)
 -- Dropdown Advanced Preset
 local AdvancedPresetDropdown = createDynamicDropdown(
     AdvancedSection,
-    UDim2.new(0, 10, 0, 82),
+    UDim2.new(0, 10, 0, 85),
     selectedAdvancedPreset and string.format("📂 %s", selectedAdvancedPreset) or "📂 Pilih Preset Advanced",
     AdvancedSection,
-    120,
+    123,
     weightScroll
 )
 
 -- ==================================================================
 -- SECTION: KONTROL
 -- ==================================================================
-local ButtonSection = createSection(weightScroll, "⚙️ Kontrol")
-ButtonSection.LayoutOrder = 10
-ButtonSection.Size = UDim2.new(1, -10, 0, 75)
+local ButtonSection = createSection(weightScroll)
+ButtonSection.LayoutOrder = 9
+ButtonSection.Size = UDim2.new(1, -10, 0, 69)
 
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Size = UDim2.new(1, -20, 0, 30)
-ToggleButton.Position = UDim2.new(0, 10, 0, 25)
+ToggleButton.Position = UDim2.new(0, 10, 0, 10)
 ToggleButton.BackgroundColor3 = C.success
 ToggleButton.BorderSizePixel = 0
 ToggleButton.Font = Enum.Font.GothamBold
@@ -1485,7 +1462,7 @@ UICornerToggle.Parent = ToggleButton
 
 StatusLabel = Instance.new("TextLabel")
 StatusLabel.Size = UDim2.new(1, -20, 0, 14)
-StatusLabel.Position = UDim2.new(0, 10, 0, 58)
+StatusLabel.Position = UDim2.new(0, 10, 0, 45)
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Font = Enum.Font.Gotham
 StatusLabel.Text = "Status: Idle"
@@ -1593,7 +1570,6 @@ local function populateTeamPresetDropdown()
         selectedTeamPreset = name
         config.selectedTeamPreset = name
         saveConfig()
-        SelectedTeamLabel.Text = string.format("Tim: %s", name)
         TeamPresetDropdown.HeaderButton.Text = string.format("📂 %s", name)
     end)
 end
@@ -1901,7 +1877,7 @@ local function populateTargetDropdown()
     for i, petInfo in ipairs(allPetTypes) do
         local PetButton = Instance.new("TextButton")
         PetButton.Size = UDim2.new(1, 0, 0, 20)
-        PetButton.BackgroundColor3 = petInfo.IsSelected and C.warning or Color3.fromRGB(65, 65, 80)
+        PetButton.BackgroundColor3 = petInfo.IsSelected and C.success or Color3.fromRGB(65, 65, 80)
         PetButton.BorderSizePixel = 0
         PetButton.Font = Enum.Font.Gotham
         PetButton.Text = petInfo.IsSelected and string.format("✓ %s (x%d)", petInfo.PetType, petInfo.Count) or string.format("%s (x%d)", petInfo.PetType, petInfo.Count)
