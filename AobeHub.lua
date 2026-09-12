@@ -595,6 +595,12 @@ end
 -- ==================================================================
 -- GUI SKELETON
 -- ==================================================================
+local oldGui = playerGui:FindFirstChild("AoneHub")
+
+if oldGui then
+    oldGui:Destroy()
+end
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AoneHub"
 screenGui.Parent = playerGui
