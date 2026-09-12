@@ -33,16 +33,6 @@ local C = {
     warning = Color3.fromRGB(255, 200, 0),
 }
 
--- Sumber warna
-local UIStroke = player.PlayerGui
-    .Seed_Shop
-    .Frame
-    .ScrollingFrame
-    ["Elder Strawberry"]
-    .Main_Frame
-    .Rarity_Text
-    .UIStroke
-
 -- ==================================================================
 -- CONFIG
 -- ==================================================================
@@ -149,17 +139,57 @@ local StatusLabel
 local updateStatus
 local rainbowTask = nil
 
+-- Warna yang digunakan
 local A = {
-    warning = UIStroke.Color,
+    warning = Color3.fromRGB(255, 200, 0),
     danger = Color3.fromRGB(255, 60, 60),
 }
 
+-- Daftar warna rainbow
+local rainbowColors = {
+    Color3.fromRGB(255, 60, 60),   -- 🔴 Merah
+    Color3.fromRGB(255, 200, 0),   -- 🟡 Kuning
+    Color3.fromRGB(60, 200, 80),   -- 🟢 Hijau
+    Color3.fromRGB(30, 100, 220),  -- 🔵 Biru
+    Color3.fromRGB(150, 60, 220),  -- 🟣 Ungu
+}
+
+local colorIndex = 1
+
+-- Semua GUI yang ingin mengikuti warna rainbow
+local rainbowTargets = {
+    RainbowModeButton,
+}
+
+-- Fungsi untuk menerapkan warna ke semua target
+local function updateRainbowTargets()
+    for _, target in ipairs(rainbowTargets) do
+        if target and target:IsA("GuiObject") then
+            target.BackgroundColor3 = A.warning
+        end
+    end
+end
+
+-- Memulai rainbow
 local function startRainbowUpdate()
     if rainbowTask then return end
 
     rainbowTask = task.spawn(function()
         while rainbowMode do
-            A.warning = UIStroke.Color
+            -- Ambil warna berikutnya
+            A.warning = rainbowColors[colorIndex]
+
+            -- Terapkan ke semua GUI
+            updateRainbowTargets()
+
+            -- Ke warna berikutnya
+            colorIndex = colorIndex + 1
+
+            if colorIndex > #rainbowColors then
+                colorIndex = 1
+            end
+
+            -- Ganti warna setiap 1 detik
             task.wait(1)
         end
 
@@ -2098,21 +2128,41 @@ MutationToggleButton.MouseButton1Click:Connect(function()
     updateStatus()
 end)
 
+-- Tombol Rainbow Mode
 RainbowModeButton.MouseButton1Click:Connect(function()
     rainbowMode = not rainbowMode
     config.rainbowMode = rainbowMode
     saveConfig()
-    
+
     if rainbowMode then
         RainbowModeButton.Text = "☑ Rainbow Elephant"
-        RainbowModeButton.BackgroundColor3 = A.warning
+
+        -- Terapkan warna sekarang
+        A.warning = rainbowColors[colorIndex]
+        updateRainbowTargets()
+
+        -- Mulai loop
         startRainbowUpdate()
     else
         RainbowModeButton.Text = "☐ Rainbow Elephant"
-        RainbowModeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+
+        -- Kembalikan warna semua target
+        for _, target in ipairs(rainbowTargets) do
+            if target and target:IsA("GuiObject") then
+                target.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+            end
+        end
     end
+
     updateStatus()
 end)
+
+-- Jika Rainbow Mode sudah aktif dari config saat script dijalankan
+if rainbowMode then
+    A.warning = rainbowColors[colorIndex]
+    updateRainbowTargets()
+    startRainbowUpdate()
+end
 
 PetSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
     petSearchText = PetSearchBox.Text
