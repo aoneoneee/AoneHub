@@ -124,13 +124,12 @@ minimizedCircle.BackgroundTransparency = 1
 minimizedCircle.BorderSizePixel = 0
 minimizedCircle.Visible = false
 minimizedCircle.AutoButtonColor = false
-minimizedCircle.Draggable = true
 minimizedCircle.Parent = screenGui
 Instance.new("UICorner", minimizedCircle).CornerRadius = UDim.new(0, 15) -- Rounded square
     
     local mainFrame = Instance.new("Frame"); mainFrame.Size = UDim2.new(0, 580, 0, 300); mainFrame.Position = UDim2.new(0.5, -290, 0.5, -150)
     mainFrame.BackgroundColor3 = C.bg; mainFrame.BorderSizePixel = 0; mainFrame.ClipsDescendants = true
-    mainFrame.Active = true; mainFrame.Draggable = true; mainFrame.Parent = screenGui
+    mainFrame.Active = true; mainFrame.Parent = screenGui
     Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
     local titleBar = Instance.new("Frame"); titleBar.Size = UDim2.new(1, 0, 0, 28); titleBar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
@@ -148,16 +147,100 @@ Instance.new("UICorner", minimizedCircle).CornerRadius = UDim.new(0, 15) -- Roun
     closeBtn.Text = "✕"; closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120); closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 11
     closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55); closeBtn.BorderSizePixel = 0; closeBtn.AutoButtonColor = false; closeBtn.Parent = titleBar
     Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
-    minimizeBtn.MouseButton1Click:Connect(function()
-        minimizedCircle.Position = UDim2.new(0, mainFrame.AbsolutePosition.X, 0, mainFrame.AbsolutePosition.Y)
-        mainFrame.Visible = false; minimizedCircle.Visible = true
-    end)
-    minimizedCircle.MouseButton1Click:Connect(function()
-        mainFrame.Position = UDim2.new(0, minimizedCircle.AbsolutePosition.X, 0, minimizedCircle.AbsolutePosition.Y)
-        minimizedCircle.Visible = false; mainFrame.Visible = true
-    end)
+    --==================================================
+-- MINIMIZE / RESTORE
+--==================================================
+
+local lastMainPosition = mainFrame.Position
+local circlePosition = nil
+
+minimizeBtn.MouseButton1Click:Connect(function()
+
+    -- Simpan posisi MainFrame
+    lastMainPosition = mainFrame.Position
+
+    -- Jika circle belum pernah diposisikan,
+    -- letakkan di posisi MainFrame
+    if not circlePosition then
+        circlePosition = UDim2.new(
+            0,
+            mainFrame.AbsolutePosition.X,
+            0,
+            mainFrame.AbsolutePosition.Y
+        )
+    end
+
+    minimizedCircle.Position = circlePosition
+
+    mainFrame.Visible = false
+    minimizedCircle.Visible = true
+end)
+
+minimizedCircle.MouseButton1Click:Connect(function()
+
+    -- Simpan posisi circle setelah kemungkinan digeser
+    circlePosition = minimizedCircle.Position
+
+    -- Kembalikan MainFrame ke posisi terakhir
+    mainFrame.Position = lastMainPosition
+
+    minimizedCircle.Visible = false
+    mainFrame.Visible = true
+end)
+    
     closeBtn.MouseButton1Click:Connect(function() config.isRunningBuy=isRunningBuy; config.isRunningSell=isRunningSell; saveConfig(); screenGui:Destroy() end)
 
+--==================================================
+-- DRAG FUNCTION
+--==================================================
+
+local function makeDraggable(handle, target)
+    local dragging = false
+    local dragStart
+    local startPos
+    local dragInput
+
+    handle.Active = true
+
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+
+            dragging = true
+            dragStart = input.Position
+            startPos = target.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            local delta = input.Position - dragStart
+
+            target.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    end
+    
     local sidebar = Instance.new("Frame"); sidebar.Size = UDim2.new(0.2, 0, 1, -28); sidebar.Position = UDim2.new(0, 0, 0, 28)
     sidebar.BackgroundColor3 = C.sidebar; sidebar.BorderSizePixel = 0; sidebar.Parent = mainFrame; Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 10)
     local sidebarFill = Instance.new("Frame"); sidebarFill.Size = UDim2.new(1, 0, 0.3, 0); sidebarFill.Position = UDim2.new(0, 0, 0.85, 0)
@@ -187,6 +270,10 @@ Instance.new("UICorner", minimizedCircle).CornerRadius = UDim.new(0, 15) -- Roun
     logoLabel.Text = "AoneHub"; logoLabel.TextColor3 = C.accent; logoLabel.Font = Enum.Font.GothamBlack; logoLabel.TextSize = 24; logoLabel.BackgroundTransparency = 1; logoLabel.Parent = defaultView
     local subLabel = Instance.new("TextLabel"); subLabel.Size = UDim2.new(1, 0, 0, 14); subLabel.Position = UDim2.new(0, 0, 0.5, 0)
     subLabel.Text = "Pilih menu di samping"; subLabel.TextColor3 = C.textDim; subLabel.Font = Enum.Font.Gotham; subLabel.TextSize = 10; subLabel.BackgroundTransparency = 1; subLabel.Parent = defaultView
+    
+    makeDraggable(titleBar, mainFrame)
+    makeDraggable(minimizedCircle, minimizedCircle)
+    
     local tabFrames = {}
     for _, tab in ipairs(tabs) do local f = Instance.new("Frame"); f.Size = UDim2.new(1, 0, 1, 0); f.BackgroundTransparency = 1; f.Visible = false; f.Parent = contentArea; tabFrames[tab.name] = f end
     local function switchTab(tabName)
