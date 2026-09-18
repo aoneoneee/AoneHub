@@ -31,8 +31,9 @@ local C = {
     success = Color3.fromRGB(50, 180, 50),
     danger = Color3.fromRGB(200, 50, 50),
     warning = Color3.fromRGB(255, 200, 0),
+    green = Color3.fromRGB(50, 180, 50),  -- ⭐ TAMBAHKAN
+    red = Color3.fromRGB(200, 50, 50),     -- ⭐ TAMBAHKAN
 }
-
 -- ==================================================================
 -- CONFIG
 -- ==================================================================
@@ -114,6 +115,43 @@ local function safeRequire(path)
     end)
     if s then return r end
     return nil
+end
+
+-- ==================================================================
+-- STATE VARIABLES (PINDAHKAN KE ATAS SEBELUM WEBHOOK)
+-- ==================================================================
+local selectedTeamPreset = config.selectedTeamPreset
+local selectedWeightPreset = config.selectedWeightPreset
+local selectedAdvancedPreset = config.selectedAdvancedPreset
+local selectedMutationPreset = config.selectedMutationPreset
+local selectedPetTypes = config.selectedPetTypes or {}
+local queuedPets = {}
+local allSelectedPets = {}
+local equippedTargetPets = {}
+local targetLevel = config.targetLevel or 50
+local advancedTargetLevel = config.advancedTargetLevel or 500
+local isLeveling = false
+local isAutoWeight = config.isAutoWeight or false
+local isAdvancedLeveling = config.isAdvancedLeveling or false
+local isAutoMutation = config.isAutoMutation or false
+local rainbowMode = config.rainbowMode or false
+local targetSearchText = ""
+local petSearchText = ""
+local mutationSearchText = ""
+local tempPresetPets = {}
+local unwantedMutations = config.unwantedMutations or {}
+local availableMutations = {}
+local editingPresetName = nil
+local isGuiDestroyed = false
+
+-- Forward declarations
+local StatusLabel
+local updateStatus
+local rainbowTask = nil
+
+-- Helper function
+local function isAlive()
+    return not isGuiDestroyed and isLeveling
 end
 
 -- ⭐ WEBHOOK TRACKING (dengan UUID untuk unique count)
@@ -505,43 +543,6 @@ local function sendFinalSummary()
     }
     
     sendWebhookMessage(embed)
-end
-
--- ==================================================================
--- AUTO LEVELING STATE
--- ==================================================================
-local selectedTeamPreset = config.selectedTeamPreset
-local selectedWeightPreset = config.selectedWeightPreset
-local selectedAdvancedPreset = config.selectedAdvancedPreset
-local selectedMutationPreset = config.selectedMutationPreset
-local selectedPetTypes = config.selectedPetTypes or {}
-local queuedPets = {}
-local allSelectedPets = {}
-local equippedTargetPets = {}
-local targetLevel = config.targetLevel or 50
-local advancedTargetLevel = config.advancedTargetLevel or 500
-local isLeveling = false
-local isAutoWeight = config.isAutoWeight or false
-local isAdvancedLeveling = config.isAdvancedLeveling or false
-local isAutoMutation = config.isAutoMutation or false
-local rainbowMode = config.rainbowMode or false
-local targetSearchText = ""
-local petSearchText = ""
-local mutationSearchText = ""
-local tempPresetPets = {}
-local unwantedMutations = config.unwantedMutations or {}
-local availableMutations = {}
-local editingPresetName = nil
-local isGuiDestroyed = false  -- ⭐ TAMBAHKAN INI
-
--- Forward declarations
-local StatusLabel
-local updateStatus
-local rainbowTask = nil
-
--- ⭐ Helper function untuk cek apakah masih alive
-local function isAlive()
-    return not isGuiDestroyed and isLeveling
 end
 
 -- Warna yang digunakan
@@ -3589,6 +3590,111 @@ extraLayout.Padding = UDim.new(0, 6)
 extraLayout.SortOrder = Enum.SortOrder.LayoutOrder
 extraLayout.Parent = extraScroll
 
+-- ==================================================================
+-- TOGGLE CREATOR (untuk Extra Tab)
+-- ==================================================================
+local function createToggle(title, description, configKey, layoutOrder, defaultColor)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -12, 0, 44)
+    container.LayoutOrder = layoutOrder
+    container.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+    container.BorderSizePixel = 0
+    container.Parent = extraScroll
+    
+    Instance.new("UICorner", container).CornerRadius = UDim.new(0, 6)
+    
+    -- Title
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -50, 0, 16)
+    titleLabel.Position = UDim2.new(0, 10, 0, 4)
+    titleLabel.Text = title
+    titleLabel.TextColor3 = C.text
+    titleLabel.Font = Enum.Font.GothamSemibold
+    titleLabel.TextSize = 10
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Parent = container
+    
+    -- Description
+    local descLabel = Instance.new("TextLabel")
+    descLabel.Size = UDim2.new(1, -50, 0, 14)
+    descLabel.Position = UDim2.new(0, 10, 0, 20)
+    descLabel.Text = description
+    descLabel.TextColor3 = C.textDim
+    descLabel.Font = Enum.Font.Gotham
+    descLabel.TextSize = 8
+    descLabel.TextXAlignment = Enum.TextXAlignment.Left
+    descLabel.BackgroundTransparency = 1
+    descLabel.Parent = container
+    
+    -- Toggle Button
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 36, 0, 18)
+    toggleBtn.Position = UDim2.new(1, -42, 0.5, -9)
+    toggleBtn.Text = ""
+    toggleBtn.BorderSizePixel = 0
+    toggleBtn.AutoButtonColor = false
+    toggleBtn.Parent = container
+    
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
+    
+    -- Toggle dot
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0, 12, 0, 12)
+    dot.Position = UDim2.new(0, 3, 0.5, -6)
+    dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    dot.BorderSizePixel = 0
+    dot.Parent = toggleBtn
+    
+    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+    
+    -- Status label
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(0, 34, 1, 0)
+    statusLabel.Position = UDim2.new(1, -82, 0, 0)
+    statusLabel.Text = config[configKey] and "ON" or "OFF"
+    statusLabel.TextColor3 = config[configKey] and C.success or C.danger
+    statusLabel.Font = Enum.Font.GothamBold
+    statusLabel.TextSize = 7
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Right
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Parent = container
+    
+    -- Update function
+    local function updateToggle()
+        local isOn = config[configKey]
+        
+        if isOn then
+            toggleBtn.BackgroundColor3 = C.success
+            dot.Position = UDim2.new(1, -15, 0.5, -6)
+            statusLabel.Text = "ON"
+            statusLabel.TextColor3 = C.success
+        else
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 75)
+            dot.Position = UDim2.new(0, 3, 0.5, -6)
+            statusLabel.Text = "OFF"
+            statusLabel.TextColor3 = C.danger
+        end
+    end
+    
+    toggleBtn.MouseButton1Click:Connect(function()
+        config[configKey] = not config[configKey]
+        saveConfig()
+        updateToggle()
+        
+        if configKey == "antiAfkToggle" then
+            if config[configKey] then
+                print("[AoneHub] ⏳ Anti-AFK: Delay 15 menit sebelum aktif...")
+            else
+                print("[AoneHub] ❌ Anti-AFK: OFF")
+            end
+        end
+    end)
+    
+    updateToggle()
+    return container
+end
+
 -- ⭐ WEBHOOK SECTION
 local webhookSection = Instance.new("Frame")
 webhookSection.Size = UDim2.new(1, -12, 0, 130)
@@ -3798,111 +3904,6 @@ end)
 
 updateWebhookToggle()
 updatePerStageToggle()
-
--- ==================================================================
--- TOGGLE CREATOR (untuk Extra Tab)
--- ==================================================================
-local function createToggle(title, description, configKey, layoutOrder, defaultColor)
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, -12, 0, 44)
-    container.LayoutOrder = layoutOrder
-    container.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
-    container.BorderSizePixel = 0
-    container.Parent = extraScroll
-    
-    Instance.new("UICorner", container).CornerRadius = UDim.new(0, 6)
-    
-    -- Title
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Size = UDim2.new(1, -50, 0, 16)
-    titleLabel.Position = UDim2.new(0, 10, 0, 4)
-    titleLabel.Text = title
-    titleLabel.TextColor3 = C.text
-    titleLabel.Font = Enum.Font.GothamSemibold
-    titleLabel.TextSize = 10
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Parent = container
-    
-    -- Description
-    local descLabel = Instance.new("TextLabel")
-    descLabel.Size = UDim2.new(1, -50, 0, 14)
-    descLabel.Position = UDim2.new(0, 10, 0, 20)
-    descLabel.Text = description
-    descLabel.TextColor3 = C.textDim
-    descLabel.Font = Enum.Font.Gotham
-    descLabel.TextSize = 8
-    descLabel.TextXAlignment = Enum.TextXAlignment.Left
-    descLabel.BackgroundTransparency = 1
-    descLabel.Parent = container
-    
-    -- Toggle Button
-    local toggleBtn = Instance.new("TextButton")
-    toggleBtn.Size = UDim2.new(0, 36, 0, 18)
-    toggleBtn.Position = UDim2.new(1, -42, 0.5, -9)
-    toggleBtn.Text = ""
-    toggleBtn.BorderSizePixel = 0
-    toggleBtn.AutoButtonColor = false
-    toggleBtn.Parent = container
-    
-    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
-    
-    -- Toggle dot
-    local dot = Instance.new("Frame")
-    dot.Size = UDim2.new(0, 12, 0, 12)
-    dot.Position = UDim2.new(0, 3, 0.5, -6)
-    dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    dot.BorderSizePixel = 0
-    dot.Parent = toggleBtn
-    
-    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-    
-    -- Status label
-    local statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(0, 34, 1, 0)
-    statusLabel.Position = UDim2.new(1, -82, 0, 0)
-    statusLabel.Text = config[configKey] and "ON" or "OFF"
-    statusLabel.TextColor3 = config[configKey] and C.success or C.danger
-    statusLabel.Font = Enum.Font.GothamBold
-    statusLabel.TextSize = 7
-    statusLabel.TextXAlignment = Enum.TextXAlignment.Right
-    statusLabel.BackgroundTransparency = 1
-    statusLabel.Parent = container
-    
-    -- Update function
-    local function updateToggle()
-        local isOn = config[configKey]
-        
-        if isOn then
-            toggleBtn.BackgroundColor3 = C.success
-            dot.Position = UDim2.new(1, -15, 0.5, -6)
-            statusLabel.Text = "ON"
-            statusLabel.TextColor3 = C.success
-        else
-            toggleBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 75)
-            dot.Position = UDim2.new(0, 3, 0.5, -6)
-            statusLabel.Text = "OFF"
-            statusLabel.TextColor3 = C.danger
-        end
-    end
-    
-    toggleBtn.MouseButton1Click:Connect(function()
-        config[configKey] = not config[configKey]
-        saveConfig()
-        updateToggle()
-        
-        if configKey == "antiAfkToggle" then
-            if config[configKey] then
-                print("[AoneHub] ⏳ Anti-AFK: Delay 15 menit sebelum aktif...")
-            else
-                print("[AoneHub] ❌ Anti-AFK: OFF")
-            end
-        end
-    end)
-    
-    updateToggle()
-    return container
-end
 
 -- ⭐ TAMBAHKAN TOGGLE ANTI-AFK DI SINI
 createToggle("🛡️ Anti-AFK", "Tapi bikin bug gk bisa ganti item di hotbar", "antiAfkToggle", 2)
