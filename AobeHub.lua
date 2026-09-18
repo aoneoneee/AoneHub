@@ -116,6 +116,38 @@ local function safeRequire(path)
     return nil
 end
 
+-- ⭐ WEBHOOK TRACKING (dengan UUID untuk unique count)
+local webhookStats = {
+    leveling = {},
+    levelingStartTime = 0,
+    levelingEndTime = 0,
+    levelingTarget = 50,
+    levelingRainbow = false,
+    levelingUniqueUUIDs = {},  -- ⭐ Untuk unique count
+    
+    weight = {},
+    weightStartTime = 0,
+    weightEndTime = 0,
+    weightTarget = 3.5,
+    weightRainbow = false,
+    weightUniqueUUIDs = {},  -- ⭐
+    
+    mutation = {},
+    mutationStartTime = 0,
+    mutationEndTime = 0,
+    mutationUniqueUUIDs = {},  -- ⭐
+    
+    advanced = {},
+    advancedStartTime = 0,
+    advancedEndTime = 0,
+    advancedTarget = 500,
+    advancedUniqueUUIDs = {},  -- ⭐
+    
+    overallStartTime = 0,
+    overallEndTime = 0,
+    overallUniqueUUIDs = {},  -- ⭐ Semua UUID unik dari semua tahap
+}
+
 -- ==================================================================
 -- DISCORD WEBHOOK SYSTEM
 -- ==================================================================
@@ -501,38 +533,6 @@ local unwantedMutations = config.unwantedMutations or {}
 local availableMutations = {}
 local editingPresetName = nil
 local isGuiDestroyed = false  -- ⭐ TAMBAHKAN INI
-
--- ⭐ WEBHOOK TRACKING (dengan UUID untuk unique count)
-local webhookStats = {
-    leveling = {},
-    levelingStartTime = 0,
-    levelingEndTime = 0,
-    levelingTarget = 50,
-    levelingRainbow = false,
-    levelingUniqueUUIDs = {},  -- ⭐ Untuk unique count
-    
-    weight = {},
-    weightStartTime = 0,
-    weightEndTime = 0,
-    weightTarget = 3.5,
-    weightRainbow = false,
-    weightUniqueUUIDs = {},  -- ⭐
-    
-    mutation = {},
-    mutationStartTime = 0,
-    mutationEndTime = 0,
-    mutationUniqueUUIDs = {},  -- ⭐
-    
-    advanced = {},
-    advancedStartTime = 0,
-    advancedEndTime = 0,
-    advancedTarget = 500,
-    advancedUniqueUUIDs = {},  -- ⭐
-    
-    overallStartTime = 0,
-    overallEndTime = 0,
-    overallUniqueUUIDs = {},  -- ⭐ Semua UUID unik dari semua tahap
-}
 
 -- Forward declarations
 local StatusLabel
@@ -2692,7 +2692,7 @@ ScanButton.MouseButton1Click:Connect(function()
 end)
 
 -- ==================================================================
--- MAIN LOGIC - AUTO LEVELING
+-- MAIN LOGIC - AUTO LEVELING (FIXED)
 -- ==================================================================
 ToggleButton.MouseButton1Click:Connect(function()
     if isLeveling then
@@ -2736,7 +2736,7 @@ ToggleButton.MouseButton1Click:Connect(function()
     isLeveling = true
     ToggleButton.Text = "⏹️ Stop"
     ToggleButton.BackgroundColor3 = C.danger
-
+    
     -- ⭐ Reset webhook stats
     resetWebhookStats()
     webhookStats.overallStartTime = os.time()
@@ -2745,39 +2745,36 @@ ToggleButton.MouseButton1Click:Connect(function()
         StatusLabel.Text = "🔄 Membersihkan semua slot..."
         local maxAttempts = 3
         local attempt = 0
-    
-        while attempt < maxAttempts and isAlive() do  -- ⭐ GANTI isLeveling → isAlive()
-            local equippedPets = getEquippedPets()
         
+        while attempt < maxAttempts and isAlive() do
+            local equippedPets = getEquippedPets()
+            
             if #equippedPets == 0 then
                 return true
             end
-        
-            for _, petUUID in ipairs(equippedPets) do
-                -- ⭐ Cek sebelum unequip
-                if not isAlive() then return false end
             
+            for _, petUUID in ipairs(equippedPets) do
+                if not isAlive() then return false end
+                
                 pcall(function()
                     unequipPet(petUUID)
                 end)
                 wait(0.5)
-            
-                -- ⭐ Cek setelah unequip
+                
                 if not isAlive() then return false end
             end
-        
+            
             attempt = attempt + 1
             wait(2)
         end
-    
+        
         return #getEquippedPets() == 0
     end
     
     local function equipPetList(petList, label)
         for _, petUUID in ipairs(petList) do
-            -- ⭐ Cek di setiap iterasi
             if not isAlive() then return end
-        
+            
             if isPetValid(petUUID) then
                 equipPet(petUUID)
             end
@@ -2788,28 +2785,25 @@ ToggleButton.MouseButton1Click:Connect(function()
     spawn(function()
         unequipAllPets()
         wait(2)
-    
-        -- ⭐ Cek setelah wait
+        
         if not isAlive() then return end
-    
+        
         cleanupInvalidPets()
         
+        -- ==========================================
         -- PRIORITAS 1: AUTO WEIGHT
+        -- ==========================================
         if isAutoWeight then
-            -- ⭐ Set start time
             webhookStats.weightStartTime = os.time()
-    
             local weightLoopActive = true
-    
+            
             while isAlive() and weightLoopActive do
-                -- ⭐ Cek di awal loop
                 if not isAlive() then return end
-        
+                
                 cleanupInvalidPets()
                 
-                -- ⭐ Cek alive
                 if not isAlive() then return end
-
+                
                 if #allSelectedPets == 0 then
                     StatusLabel.Text = "⚠️ Semua pet target hilang!"
                     break
@@ -2825,14 +2819,31 @@ ToggleButton.MouseButton1Click:Connect(function()
                     isAutoWeight = false
                     config.isAutoWeight = false
                     saveConfig()
-                    WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
+                    WeightToggleButton.Text = "🐘 Auto Weight: OFF"
                     WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
                     weightLoopActive = false
+                    
+                    -- ⭐ Set end time + kirim webhook
+                    webhookStats.weightEndTime = os.time()
+                    task.spawn(function()
+                        sendStageReport(
+                            "🐘 Auto Weight",  -- ⭐ FIX: Emoji yang benar
+                            webhookStats.weight,
+                            webhookStats.weightUniqueUUIDs,
+                            webhookStats.weightStartTime,
+                            webhookStats.weightEndTime,
+                            string.format("**Target BW:** %.1f\n**Mode:** %s",
+                                webhookStats.weightTarget,
+                                webhookStats.weightRainbow and "🌈 Rainbow" or "📊 Normal"
+                            )
+                        )
+                    end)
                     break
                 end
                 
                 StatusLabel.Text = string.format("⚖️ %d pet butuh weight", #weightPets)
                 
+                -- Leveling ke 40/50
                 local levelTargets = {}
                 for _, petUUID in ipairs(weightPets) do
                     if getPetLevel(petUUID) < levelTargetForWeight then
@@ -2842,12 +2853,11 @@ ToggleButton.MouseButton1Click:Connect(function()
                 
                 if #levelTargets > 0 then
                     unequipAllPets()
-    
-                    -- ⭐ Cek setelah unequip
+                    
                     if not isAlive() then return end
-    
+                    
                     wait(1)
-    
+                    
                     local teamUUIDs = getPresetUUIDs(selectedTeamPreset)
                     equipPetList(teamUUIDs, "Tim:")
                     wait(2)
@@ -2866,6 +2876,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                         if #pendingLevelTargets > 0 then
                             local petUUID = pendingLevelTargets[1]
                             table.remove(pendingLevelTargets, 1)
+                            
                             if isPetValid(petUUID) then
                                 equipPet(petUUID)
                                 table.insert(levelingEquippedPets, petUUID)
@@ -2874,11 +2885,10 @@ ToggleButton.MouseButton1Click:Connect(function()
                         end
                     end
                     
-                    while isAlive() and #levelingEquippedPets > 0 do  -- ⭐ GANTI
+                    while isAlive() and #levelingEquippedPets > 0 do
                         for i = #levelingEquippedPets, 1, -1 do
-                            -- ⭐ Cek di setiap iterasi for
                             if not isAlive() then return end
-        
+                            
                             local petUUID = levelingEquippedPets[i]
                             
                             if not isPetValid(petUUID) then
@@ -2893,6 +2903,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                                 if #pendingLevelTargets > 0 then
                                     local nextPet = pendingLevelTargets[1]
                                     table.remove(pendingLevelTargets, 1)
+                                    
                                     if isPetValid(nextPet) and getPetLevel(nextPet) < levelTargetForWeight then
                                         equipPet(nextPet)
                                         table.insert(levelingEquippedPets, nextPet)
@@ -2913,15 +2924,16 @@ ToggleButton.MouseButton1Click:Connect(function()
                         if allLeveled then break end
                         if #levelingEquippedPets == 0 and #pendingLevelTargets == 0 then break end
                         
-                            -- ⭐ Cek sebelum update status
                         if not isAlive() then return end
-    
+                        
                         updateStatus()
                         wait(5)
                     end
                 end
                 
-                -- Proses Weight
+                -- ==========================================
+                -- PROSES WEIGHT
+                -- ==========================================
                 unequipAllPets()
                 wait(1)
                 
@@ -2951,6 +2963,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                         if #pendingWeightPets > 0 then
                             local petUUID = pendingWeightPets[1]
                             table.remove(pendingWeightPets, 1)
+                            
                             if isPetValid(petUUID) then
                                 equipPet(petUUID)
                                 table.insert(weightEquippedPets, petUUID)
@@ -2959,10 +2972,10 @@ ToggleButton.MouseButton1Click:Connect(function()
                         end
                     end
                     
-                    while isAlive() and #weightEquippedPets > 0 do  -- ⭐ GANTI
+                    while isAlive() and #weightEquippedPets > 0 do
                         for i = #weightEquippedPets, 1, -1 do
-                            -- ⭐ Cek
                             if not isAlive() then return end
+                            
                             local petUUID = weightEquippedPets[i]
                             
                             if not isPetValid(petUUID) then
@@ -2973,13 +2986,14 @@ ToggleButton.MouseButton1Click:Connect(function()
                             if getPetWeight(petUUID) >= weightTarget then
                                 -- ⭐ TRACK PET
                                 trackPetProcessed("weight", getPetType(petUUID), petUUID)
-    
+                                
                                 pcall(function() unequipPet(petUUID) end)
                                 table.remove(weightEquippedPets, i)
                                 
                                 if #pendingWeightPets > 0 then
                                     local nextPet = pendingWeightPets[1]
                                     table.remove(pendingWeightPets, 1)
+                                    
                                     if isPetValid(nextPet) and getPetLevel(nextPet) >= levelTargetForWeight then
                                         equipPet(nextPet)
                                         table.insert(weightEquippedPets, nextPet)
@@ -2993,6 +3007,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                                 if #pendingWeightPets > 0 then
                                     local nextPet = pendingWeightPets[1]
                                     table.remove(pendingWeightPets, 1)
+                                    
                                     if isPetValid(nextPet) and getPetLevel(nextPet) >= levelTargetForWeight then
                                         equipPet(nextPet)
                                         table.insert(weightEquippedPets, nextPet)
@@ -3010,19 +3025,18 @@ ToggleButton.MouseButton1Click:Connect(function()
                             end
                         end
                         
-                        if allWeightDone == 0 then
+                        -- ⭐ FIX: Ganti `allWeightDone == 0` jadi `allWeightDone`
+                        if allWeightDone then
                             StatusLabel.Text = "✅ Semua base weight tercapai!"
                             isAutoWeight = false
                             config.isAutoWeight = false
                             saveConfig()
-                            WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
+                            WeightToggleButton.Text = "🐘 Auto Weight: OFF"
                             WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
                             weightLoopActive = false
-    
-                            -- ⭐ Set end time
+                            
+                            -- ⭐ Set end time + kirim webhook
                             webhookStats.weightEndTime = os.time()
-    
-                            -- ⭐ KIRIM WEBHOOK PER TAHAP
                             task.spawn(function()
                                 sendStageReport(
                                     "🐘 Auto Weight",
@@ -3036,7 +3050,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                                     )
                                 )
                             end)
-    
                             break
                         end
                         
@@ -3052,21 +3065,19 @@ ToggleButton.MouseButton1Click:Connect(function()
                 wait(3)
             end
         end
-
-        -- ⭐ Cek sebelum lanjut ke PRIORITAS 2
-        if not isAlive() then return end
-
+        
+        -- ==========================================
         -- PRIORITAS 2: AUTO MUTATION
+        -- ==========================================
+        if not isAlive() then return end
+        
         if isAutoMutation and isAlive() then
-            -- ⭐ Set start time
             webhookStats.mutationStartTime = os.time()
-    
             local mutationLoopActive = true
-
-            while isAlive() and mutationLoopActive do  -- ⭐ GANTI
-                -- ⭐ Cek
+            
+            while isAlive() and mutationLoopActive do
                 if not isAlive() then return end
-    
+                
                 cleanupInvalidPets()
                 
                 if #allSelectedPets == 0 then
@@ -3084,11 +3095,9 @@ ToggleButton.MouseButton1Click:Connect(function()
                     MutationToggleButton.Text = "🧬 Auto Mutation: OFF"
                     MutationToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
                     mutationLoopActive = false
-    
-                    -- ⭐ Set end time
+                    
+                    -- ⭐ Set end time + kirim webhook
                     webhookStats.mutationEndTime = os.time()
-    
-                    -- ⭐ KIRIM WEBHOOK PER TAHAP
                     task.spawn(function()
                         sendStageReport(
                             "🧬 Auto Mutation",
@@ -3099,7 +3108,6 @@ ToggleButton.MouseButton1Click:Connect(function()
                             string.format("**Unwanted Mutations:** %d jenis", #unwantedMutations)
                         )
                     end)
-    
                     break
                 end
                 
@@ -3126,6 +3134,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                     if #pendingMutationList > 0 then
                         local petUUID = pendingMutationList[1]
                         table.remove(pendingMutationList, 1)
+                        
                         if isPetValid(petUUID) then
                             equipPet(petUUID)
                             table.insert(equippedForMutation, petUUID)
@@ -3136,17 +3145,19 @@ ToggleButton.MouseButton1Click:Connect(function()
                 
                 wait(2)
                 
-                while isAlive() and #equippedForMutation > 0 do  -- ⭐ GANTI
+                while isAlive() and #equippedForMutation > 0 do
                     for i = #equippedForMutation, 1, -1 do
-                        -- ⭐ Cek
                         if not isAlive() then return end
+                        
                         local petUUID = equippedForMutation[i]
                         
                         if not isPetValid(petUUID) then
                             table.remove(equippedForMutation, i)
+                            
                             if #pendingMutationList > 0 then
                                 local nextPet = pendingMutationList[1]
                                 table.remove(pendingMutationList, 1)
+                                
                                 if isPetValid(nextPet) then
                                     equipPet(nextPet)
                                     table.insert(equippedForMutation, nextPet)
@@ -3160,10 +3171,10 @@ ToggleButton.MouseButton1Click:Connect(function()
                         
                         if status == "desired" then
                             StatusLabel.Text = string.format("✅ %s dapat %s!", petType, mutationName)
-    
+                            
                             -- ⭐ TRACK PET
                             trackPetProcessed("mutation", petType, petUUID)
-    
+                            
                             pcall(function() unequipPet(petUUID) end)
                             table.remove(equippedForMutation, i)
                             wait(1)
@@ -3171,6 +3182,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                             if #pendingMutationList > 0 then
                                 local nextPet = pendingMutationList[1]
                                 table.remove(pendingMutationList, 1)
+                                
                                 if isPetValid(nextPet) then
                                     equipPet(nextPet)
                                     table.insert(equippedForMutation, nextPet)
@@ -3206,21 +3218,23 @@ ToggleButton.MouseButton1Click:Connect(function()
                 wait(3)
             end
         end
-
-        -- ⭐ Cek sebelum lanjut ke PRIORITAS 3
-        if not isAlive() then return end
-
+        
+        -- ==========================================
         -- PRIORITAS 3: NORMAL LEVELING
+        -- ==========================================
+        if not isAlive() then return end
+        
         if isAlive() then
             cleanupInvalidPets()
+            
             local normalPets = getPetsForNormalLeveling()
-    
+            
             if #normalPets > 0 then
                 -- ⭐ Set start time
                 webhookStats.levelingStartTime = os.time()
                 webhookStats.levelingTarget = targetLevel
                 webhookStats.levelingRainbow = rainbowMode
-        
+                
                 StatusLabel.Text = string.format("📈 Leveling normal (%d pet)...", #normalPets)
                 
                 unequipAllPets()
@@ -3244,6 +3258,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                     if #pendingNormalList > 0 then
                         local petUUID = pendingNormalList[1]
                         table.remove(pendingNormalList, 1)
+                        
                         if isPetValid(petUUID) then
                             equipPet(petUUID)
                             table.insert(normalEquippedPets, petUUID)
@@ -3252,10 +3267,10 @@ ToggleButton.MouseButton1Click:Connect(function()
                     end
                 end
                 
-                while isAlive() and #normalEquippedPets > 0 do  -- ⭐ GANTI
+                while isAlive() and #normalEquippedPets > 0 do
                     for i = #normalEquippedPets, 1, -1 do
-                        -- ⭐ Cek
                         if not isAlive() then return end
+                        
                         local petUUID = normalEquippedPets[i]
                         
                         if not isPetValid(petUUID) then
@@ -3266,13 +3281,14 @@ ToggleButton.MouseButton1Click:Connect(function()
                         if getPetLevel(petUUID) >= targetLevel then
                             -- ⭐ TRACK PET
                             trackPetProcessed("leveling", getPetType(petUUID), petUUID)
-    
+                            
                             pcall(function() unequipPet(petUUID) end)
                             table.remove(normalEquippedPets, i)
                             
                             if #pendingNormalList > 0 then
                                 local nextPet = pendingNormalList[1]
                                 table.remove(pendingNormalList, 1)
+                                
                                 if isPetValid(nextPet) and getPetLevel(nextPet) < targetLevel then
                                     equipPet(nextPet)
                                     table.insert(normalEquippedPets, nextPet)
@@ -3281,7 +3297,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                             end
                         end
                     end
-                            
+                    
                     local allNormalDone = true
                     for _, petUUID in ipairs(normalPets) do
                         if isPetValid(petUUID) and getPetLevel(petUUID) < targetLevel then
@@ -3294,12 +3310,12 @@ ToggleButton.MouseButton1Click:Connect(function()
                     if #normalEquippedPets == 0 and #pendingNormalList == 0 then break end
                     
                     updateStatus()
-                    wait(3)
+                    wait(5)  -- ⭐ FIX: Konsisten dengan yang lain (wait 5, bukan 3)
                 end
+                
                 -- ⭐ Set end time + kirim report
                 if #normalPets > 0 then
                     webhookStats.levelingEndTime = os.time()
-    
                     task.spawn(function()
                         sendStageReport(
                             "📈 Auto Leveling",
@@ -3313,27 +3329,29 @@ ToggleButton.MouseButton1Click:Connect(function()
                             )
                         )
                     end)
-                end        
+                end
             end
         end
-        -- ⭐ Cek sebelum lanjut ke PRIORITAS 4
-        if not isAlive() then return end
-
+        
+        -- ==========================================
         -- PRIORITAS 4: ADVANCED LEVELING
+        -- ==========================================
+        if not isAlive() then return end
+        
         if isAdvancedLeveling and isAlive() then
             cleanupInvalidPets()
+            
             local advancedPets = getPetsForAdvanced()
-    
+            
             if #advancedPets > 0 then
                 -- ⭐ Set start time
                 webhookStats.advancedStartTime = os.time()
                 webhookStats.advancedTarget = advancedTargetLevel
-        
+                
                 StatusLabel.Text = string.format("🚀 Advanced leveling (%d pet)...", #advancedPets)
                 
                 unequipAllPets()
                 if not isAlive() then return end
-
                 wait(1)
                 
                 local advancedUUIDs = getPresetUUIDs(selectedAdvancedPreset)
@@ -3354,6 +3372,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                     if #pendingAdvancedList > 0 then
                         local petUUID = pendingAdvancedList[1]
                         table.remove(pendingAdvancedList, 1)
+                        
                         if isPetValid(petUUID) then
                             equipPet(petUUID)
                             table.insert(advancedEquippedPets, petUUID)
@@ -3362,10 +3381,10 @@ ToggleButton.MouseButton1Click:Connect(function()
                     end
                 end
                 
-                while isAlive() and #advancedEquippedPets > 0 do  -- ⭐ GANTI
+                while isAlive() and #advancedEquippedPets > 0 do
                     for i = #advancedEquippedPets, 1, -1 do
-                        -- ⭐ Cek
                         if not isAlive() then return end
+                        
                         local petUUID = advancedEquippedPets[i]
                         
                         if not isPetValid(petUUID) then
@@ -3376,13 +3395,14 @@ ToggleButton.MouseButton1Click:Connect(function()
                         if getPetLevel(petUUID) >= advancedTargetLevel then
                             -- ⭐ TRACK PET
                             trackPetProcessed("advanced", getPetType(petUUID), petUUID)
-    
+                            
                             pcall(function() unequipPet(petUUID) end)
                             table.remove(advancedEquippedPets, i)
                             
                             if #pendingAdvancedList > 0 then
                                 local nextPet = pendingAdvancedList[1]
                                 table.remove(pendingAdvancedList, 1)
+                                
                                 if isPetValid(nextPet) and getPetLevel(nextPet) < advancedTargetLevel then
                                     equipPet(nextPet)
                                     table.insert(advancedEquippedPets, nextPet)
@@ -3420,6 +3440,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                                 if #pendingAdvancedList > 0 then
                                     local petUUID = pendingAdvancedList[1]
                                     table.remove(pendingAdvancedList, 1)
+                                    
                                     if isPetValid(petUUID) then
                                         equipPet(petUUID)
                                         table.insert(advancedEquippedPets, petUUID)
@@ -3431,16 +3452,16 @@ ToggleButton.MouseButton1Click:Connect(function()
                             break
                         end
                     end
-
+                    
                     if not isAlive() then return end
-                            
+                    
                     updateStatus()
                     wait(5)
                 end
+                
                 -- ⭐ Set end time + kirim report
                 if #advancedPets > 0 then
                     webhookStats.advancedEndTime = os.time()
-    
                     task.spawn(function()
                         sendStageReport(
                             "🚀 Advanced Leveling",
@@ -3455,16 +3476,17 @@ ToggleButton.MouseButton1Click:Connect(function()
             end
         end
         
-        -- ⭐ Cek destroy
-        if not isAlive() and isGuiDestroyed then return end
-
+        -- ==========================================
         -- SELESAI
+        -- ==========================================
+        if not isAlive() and isGuiDestroyed then return end
+        
         StatusLabel.Text = "🎉 Semua proses selesai!"
         isLeveling = false
         ToggleButton.Text = "▶️ Mulai"
         ToggleButton.BackgroundColor3 = C.success
         updateStatus()
-
+        
         -- ⭐ KIRIM FINAL SUMMARY
         task.spawn(function()
             sendFinalSummary()
