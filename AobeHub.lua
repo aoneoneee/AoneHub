@@ -62,6 +62,9 @@ local config = {
     isAdvancedLeveling = false,
     selectedPetTypes = {},
     antiAfkToggle = false,
+    webhookEnabled = false,
+    webhookUrl = "",
+    webhookPerStage = true,
 }
 
 local function loadConfig()
@@ -86,6 +89,9 @@ local function loadConfig()
             if config.isAdvancedLeveling == nil then config.isAdvancedLeveling = false end
             if config.selectedPetTypes == nil then config.selectedPetTypes = {} end
             if config.antiAfkToggle == nil then config.antiAfkToggle = false end
+            if config.webhookEnabled == nil then config.webhookEnabled = false end
+            if config.webhookUrl == nil then config.webhookUrl = "" end
+            if config.webhookPerStage == nil then config.webhookPerStage = true end
             
             return true
         end
@@ -108,6 +114,365 @@ local function safeRequire(path)
     end)
     if s then return r end
     return nil
+end
+
+-- ==================================================================
+-- DISCORD WEBHOOK SYSTEM
+-- ==================================================================
+
+-- Fungsi kirim pesan ke Discord
+local function sendWebhookMessage(embed)
+    if not config.webhookEnabled then return end
+    if config.webhookUrl == "" or config.webhookUrl == nil then return end
+    
+    local payload = {
+        embeds = {embed},
+        username = "AoneHub Auto Leveling",
+    }
+    
+    local success, err = pcall(function()
+        local response = request({
+            Url = config.webhookUrl,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json"
+            },
+            Body = HttpService:JSONEncode(payload)
+        })
+        
+        if response.StatusCode ~= 200 and response.StatusCode ~= 204 then
+            warn("[Webhook] Failed:", response.StatusCode, response.Body)
+        end
+    end)
+    
+    if not success then
+        warn("[Webhook] Error:", err)
+    end
+end
+
+-- ⭐ Format durasi
+local function formatDuration(seconds)
+    if seconds <= 0 then return "0 detik" end
+    seconds = math.floor(seconds)
+    local hours = math.floor(seconds / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    local secs = seconds % 60
+    local parts = {}
+    if hours > 0 then table.insert(parts, hours .. " jam") end
+    if minutes > 0 then table.insert(parts, minutes .. " menit") end
+    if secs > 0 or #parts == 0 then table.insert(parts, secs .. " detik") end
+    return table.concat(parts, " ")
+end
+
+local function formatDurationShort(seconds)
+    if seconds <= 0 then return "0s" end
+    seconds = math.floor(seconds)
+    local hours = math.floor(seconds / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    local secs = seconds % 60
+    if hours > 0 then
+        return string.format("%dh %dm %ds", hours, minutes, secs)
+    elseif minutes > 0 then
+        return string.format("%dm %ds", minutes, secs)
+    else
+        return string.format("%ds", secs)
+    end
+end
+
+-- ⭐ Track pet processed (dengan UUID tracking)
+local function trackPetProcessed(category, petType, petUUID)
+    -- Increment count per petType
+    if not webhookStats[category][petType] then
+        webhookStats[category][petType] = 0
+    end
+    webhookStats[category][petType] = webhookStats[category][petType] + 1
+    
+    -- ⭐ Track unique UUIDs per category
+    local uniqueKey = category .. "UniqueUUIDs"
+    if not webhookStats[uniqueKey] then
+        webhookStats[uniqueKey] = {}
+    end
+    if petUUID then
+        webhookStats[uniqueKey][petUUID] = true
+    end
+    
+    -- ⭐ Track overall unique UUIDs
+    if not webhookStats.overallUniqueUUIDs then
+        webhookStats.overallUniqueUUIDs = {}
+    end
+    if petUUID then
+        webhookStats.overallUniqueUUIDs[petUUID] = true
+    end
+end
+
+-- ⭐ Count unique
+local function countUnique(uuidTable)
+    if not uuidTable then return 0 end
+    local count = 0
+    for _ in pairs(uuidTable) do
+        count = count + 1
+    end
+    return count
+end
+
+-- ⭐ Reset stats
+local function resetWebhookStats()
+    webhookStats = {
+        leveling = {},
+        levelingStartTime = 0,
+        levelingEndTime = 0,
+        levelingTarget = targetLevel,
+        levelingRainbow = rainbowMode,
+        levelingUniqueUUIDs = {},
+        
+        weight = {},
+        weightStartTime = 0,
+        weightEndTime = 0,
+        weightTarget = rainbowMode and BASE_WEIGHT_RAINBOW or BASE_WEIGHT_NORMAL,
+        weightRainbow = rainbowMode,
+        weightUniqueUUIDs = {},
+        
+        mutation = {},
+        mutationStartTime = 0,
+        mutationEndTime = 0,
+        mutationUniqueUUIDs = {},
+        
+        advanced = {},
+        advancedStartTime = 0,
+        advancedEndTime = 0,
+        advancedTarget = advancedTargetLevel,
+        advancedUniqueUUIDs = {},
+        
+        overallStartTime = os.time(),
+        overallEndTime = 0,
+        overallUniqueUUIDs = {},
+    }
+end
+
+-- ⭐ Format stats untuk embed (dengan total proses + unique)
+local function formatStats(statsTable, uuidTable, startTime, endTime)
+    local lines = {}
+    local keys = {}
+    
+    for petType in pairs(statsTable) do
+        table.insert(keys, petType)
+    end
+    table.sort(keys)
+    
+    local totalProses = 0
+    
+    for _, petType in ipairs(keys) do
+        local count = statsTable[petType]
+        totalProses = totalProses + count
+        table.insert(lines, string.format("`%s` x%d", petType, count))
+    end
+    
+    if #lines == 0 then
+        return "*Tidak ada pet yang diproses*"
+    end
+    
+    local result = table.concat(lines, "\n")
+    result = result .. "\n**Total Proses: " .. totalProses .. "x**"
+    
+    -- ⭐ Unique count
+    local uniqueCount = countUnique(uuidTable)
+    if uniqueCount > 0 and uniqueCount ~= totalProses then
+        result = result .. " | **" .. uniqueCount .. " pet unik**"
+    end
+    
+    if startTime and endTime and endTime > startTime then
+        local duration = endTime - startTime
+        result = result .. "\n⏱️ **" .. formatDurationShort(duration) .. "**"
+    end
+    
+    return result
+end
+
+-- ⭐ WEBHOOK PER TAHAP
+local function sendStageReport(stageName, statsTable, uuidTable, startTime, endTime, extraInfo)
+    if not config.webhookEnabled then return end
+    if not config.webhookPerStage then return end  -- Skip kalau opsi B di-disable
+    if config.webhookUrl == "" or config.webhookUrl == nil then return end
+    
+    local lines = {}
+    local keys = {}
+    
+    for petType in pairs(statsTable) do
+        table.insert(keys, petType)
+    end
+    table.sort(keys)
+    
+    local totalProses = 0
+    
+    for _, petType in ipairs(keys) do
+        local count = statsTable[petType]
+        totalProses = totalProses + count
+        table.insert(lines, string.format("`%s` x%d", petType, count))
+    end
+    
+    if #lines == 0 then
+        return
+    end
+    
+    local duration = endTime - startTime
+    local statsText = table.concat(lines, "\n")
+    local uniqueCount = countUnique(uuidTable)
+    
+    local infoText = extraInfo or ""
+    
+    -- Build field value
+    local fieldValue = statsText
+    fieldValue = fieldValue .. "\n\n**Total Proses:** " .. totalProses .. "x"
+    if uniqueCount > 0 and uniqueCount ~= totalProses then
+        fieldValue = fieldValue .. "\n**Pet Unik:** " .. uniqueCount
+    end
+    fieldValue = fieldValue .. "\n**Durasi:** " .. formatDurationShort(duration)
+    
+    local embed = {
+        title = string.format("✅ %s Selesai", stageName),
+        description = string.format(
+            "**Player:** %s\n%s",
+            player.Name,
+            infoText
+        ),
+        color = 5763719,
+        fields = {
+            {
+                name = "📊 Hasil Proses",
+                value = fieldValue,
+                inline = false
+            }
+        },
+        footer = {
+            text = "AoneHub • Stage Report"
+        },
+        timestamp = DateTime.now():ToIsoDate()
+    }
+    
+    sendWebhookMessage(embed)
+end
+
+-- ⭐ SUMMARY DI AKHIR
+local function sendFinalSummary()
+    if not config.webhookEnabled then return end
+    if config.webhookUrl == "" or config.webhookUrl == nil then return end
+    
+    webhookStats.overallEndTime = os.time()
+    local overallDuration = webhookStats.overallEndTime - webhookStats.overallStartTime
+    
+    local fields = {}
+    local totalAllProses = 0
+    
+    -- Leveling Normal
+    if next(webhookStats.leveling) then
+        local totalProses = 0
+        for _, count in pairs(webhookStats.leveling) do totalProses = totalProses + count end
+        totalAllProses = totalAllProses + totalProses
+        
+        local uniqueCount = countUnique(webhookStats.levelingUniqueUUIDs)
+        local mode = webhookStats.levelingRainbow and "🌈 Rainbow" or "📊 Normal"
+        
+        table.insert(fields, {
+            name = string.format("📈 Auto Leveling (Target: %d, %s)", webhookStats.levelingTarget, mode),
+            value = formatStats(
+                webhookStats.leveling,
+                webhookStats.levelingUniqueUUIDs,
+                webhookStats.levelingStartTime,
+                webhookStats.levelingEndTime
+            ),
+            inline = false
+        })
+    end
+    
+    -- Auto Weight
+    if next(webhookStats.weight) then
+        local totalProses = 0
+        for _, count in pairs(webhookStats.weight) do totalProses = totalProses + count end
+        totalAllProses = totalAllProses + totalProses
+        
+        local uniqueCount = countUnique(webhookStats.weightUniqueUUIDs)
+        local mode = webhookStats.weightRainbow and "🌈 Rainbow" or "📊 Normal"
+        
+        table.insert(fields, {
+            name = string.format("⚖️ Auto Weight (%s, BW: %.1f)", mode, webhookStats.weightTarget),
+            value = formatStats(
+                webhookStats.weight,
+                webhookStats.weightUniqueUUIDs,
+                webhookStats.weightStartTime,
+                webhookStats.weightEndTime
+            ),
+            inline = false
+        })
+    end
+    
+    -- Auto Mutation
+    if next(webhookStats.mutation) then
+        local totalProses = 0
+        for _, count in pairs(webhookStats.mutation) do totalProses = totalProses + count end
+        totalAllProses = totalAllProses + totalProses
+        
+        table.insert(fields, {
+            name = "🧬 Auto Mutation",
+            value = formatStats(
+                webhookStats.mutation,
+                webhookStats.mutationUniqueUUIDs,
+                webhookStats.mutationStartTime,
+                webhookStats.mutationEndTime
+            ),
+            inline = false
+        })
+    end
+    
+    -- Advanced Leveling
+    if next(webhookStats.advanced) then
+        local totalProses = 0
+        for _, count in pairs(webhookStats.advanced) do totalProses = totalProses + count end
+        totalAllProses = totalAllProses + totalProses
+        
+        table.insert(fields, {
+            name = string.format("🚀 Advanced Leveling (Target: %d)", webhookStats.advancedTarget),
+            value = formatStats(
+                webhookStats.advanced,
+                webhookStats.advancedUniqueUUIDs,
+                webhookStats.advancedStartTime,
+                webhookStats.advancedEndTime
+            ),
+            inline = false
+        })
+    end
+    
+    -- ⭐ Summary
+    local overallUnique = countUnique(webhookStats.overallUniqueUUIDs)
+    
+    table.insert(fields, {
+        name = "📊 Summary",
+        value = string.format(
+            "**Total Proses:** %d\n**Total Pet:** %d pet\n**Total Durasi:** %s\n**Rata-rata:** %.2f proses/menit",
+            totalAllProses,
+            overallUnique,
+            formatDurationShort(overallDuration),
+            overallDuration > 0 and (totalAllProses / (overallDuration / 60)) or 0
+        ),
+        inline = false
+    })
+    
+    local embed = {
+        title = "🐾 AoneHub Auto Leveling Report",
+        description = string.format(
+            "**Player:** %s\n**Waktu:** <t>%d</t>\n**Total Durasi:** %s",
+            player.Name,
+            os.time(),
+            formatDuration(overallDuration)
+        ),
+        color = 3447003,
+        fields = fields,
+        footer = {
+            text = "AoneHub • Final Summary"
+        },
+        timestamp = DateTime.now():ToIsoDate()
+    }
+    
+    sendWebhookMessage(embed)
 end
 
 -- ==================================================================
@@ -136,6 +501,38 @@ local unwantedMutations = config.unwantedMutations or {}
 local availableMutations = {}
 local editingPresetName = nil
 local isGuiDestroyed = false  -- ⭐ TAMBAHKAN INI
+
+-- ⭐ WEBHOOK TRACKING (dengan UUID untuk unique count)
+local webhookStats = {
+    leveling = {},
+    levelingStartTime = 0,
+    levelingEndTime = 0,
+    levelingTarget = 50,
+    levelingRainbow = false,
+    levelingUniqueUUIDs = {},  -- ⭐ Untuk unique count
+    
+    weight = {},
+    weightStartTime = 0,
+    weightEndTime = 0,
+    weightTarget = 3.5,
+    weightRainbow = false,
+    weightUniqueUUIDs = {},  -- ⭐
+    
+    mutation = {},
+    mutationStartTime = 0,
+    mutationEndTime = 0,
+    mutationUniqueUUIDs = {},  -- ⭐
+    
+    advanced = {},
+    advancedStartTime = 0,
+    advancedEndTime = 0,
+    advancedTarget = 500,
+    advancedUniqueUUIDs = {},  -- ⭐
+    
+    overallStartTime = 0,
+    overallEndTime = 0,
+    overallUniqueUUIDs = {},  -- ⭐ Semua UUID unik dari semua tahap
+}
 
 -- Forward declarations
 local StatusLabel
@@ -2339,6 +2736,10 @@ ToggleButton.MouseButton1Click:Connect(function()
     isLeveling = true
     ToggleButton.Text = "⏹️ Stop"
     ToggleButton.BackgroundColor3 = C.danger
+
+    -- ⭐ Reset webhook stats
+    resetWebhookStats()
+    webhookStats.overallStartTime = os.time()
     
     local function unequipAllPets()
         StatusLabel.Text = "🔄 Membersihkan semua slot..."
@@ -2395,9 +2796,12 @@ ToggleButton.MouseButton1Click:Connect(function()
         
         -- PRIORITAS 1: AUTO WEIGHT
         if isAutoWeight then
+            -- ⭐ Set start time
+            webhookStats.weightStartTime = os.time()
+    
             local weightLoopActive = true
     
-            while isAlive() and weightLoopActive do  -- ⭐ GANTI
+            while isAlive() and weightLoopActive do
                 -- ⭐ Cek di awal loop
                 if not isAlive() then return end
         
@@ -2567,6 +2971,9 @@ ToggleButton.MouseButton1Click:Connect(function()
                             end
                             
                             if getPetWeight(petUUID) >= weightTarget then
+                                -- ⭐ TRACK PET
+                                trackPetProcessed("weight", getPetType(petUUID), petUUID)
+    
                                 pcall(function() unequipPet(petUUID) end)
                                 table.remove(weightEquippedPets, i)
                                 
@@ -2603,7 +3010,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                             end
                         end
                         
-                        if allWeightDone then
+                        if allWeightDone == 0 then
                             StatusLabel.Text = "✅ Semua base weight tercapai!"
                             isAutoWeight = false
                             config.isAutoWeight = false
@@ -2611,6 +3018,25 @@ ToggleButton.MouseButton1Click:Connect(function()
                             WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
                             WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
                             weightLoopActive = false
+    
+                            -- ⭐ Set end time
+                            webhookStats.weightEndTime = os.time()
+    
+                            -- ⭐ KIRIM WEBHOOK PER TAHAP
+                            task.spawn(function()
+                                sendStageReport(
+                                    "🐘 Auto Weight",
+                                    webhookStats.weight,
+                                    webhookStats.weightUniqueUUIDs,
+                                    webhookStats.weightStartTime,
+                                    webhookStats.weightEndTime,
+                                    string.format("**Target BW:** %.1f\n**Mode:** %s",
+                                        webhookStats.weightTarget,
+                                        webhookStats.weightRainbow and "🌈 Rainbow" or "📊 Normal"
+                                    )
+                                )
+                            end)
+    
                             break
                         end
                         
@@ -2631,7 +3057,10 @@ ToggleButton.MouseButton1Click:Connect(function()
         if not isAlive() then return end
 
         -- PRIORITAS 2: AUTO MUTATION
-        if isAutoMutation and isAlive() then  -- ⭐ GANTI
+        if isAutoMutation and isAlive() then
+            -- ⭐ Set start time
+            webhookStats.mutationStartTime = os.time()
+    
             local mutationLoopActive = true
 
             while isAlive() and mutationLoopActive do  -- ⭐ GANTI
@@ -2655,6 +3084,22 @@ ToggleButton.MouseButton1Click:Connect(function()
                     MutationToggleButton.Text = "🧬 Auto Mutation: OFF"
                     MutationToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
                     mutationLoopActive = false
+    
+                    -- ⭐ Set end time
+                    webhookStats.mutationEndTime = os.time()
+    
+                    -- ⭐ KIRIM WEBHOOK PER TAHAP
+                    task.spawn(function()
+                        sendStageReport(
+                            "🧬 Auto Mutation",
+                            webhookStats.mutation,
+                            webhookStats.mutationUniqueUUIDs,
+                            webhookStats.mutationStartTime,
+                            webhookStats.mutationEndTime,
+                            string.format("**Unwanted Mutations:** %d jenis", #unwantedMutations)
+                        )
+                    end)
+    
                     break
                 end
                 
@@ -2715,6 +3160,10 @@ ToggleButton.MouseButton1Click:Connect(function()
                         
                         if status == "desired" then
                             StatusLabel.Text = string.format("✅ %s dapat %s!", petType, mutationName)
+    
+                            -- ⭐ TRACK PET
+                            trackPetProcessed("mutation", petType, petUUID)
+    
                             pcall(function() unequipPet(petUUID) end)
                             table.remove(equippedForMutation, i)
                             wait(1)
@@ -2762,12 +3211,16 @@ ToggleButton.MouseButton1Click:Connect(function()
         if not isAlive() then return end
 
         -- PRIORITAS 3: NORMAL LEVELING
-        if isAlive() then  -- ⭐ GANTI
+        if isAlive() then
             cleanupInvalidPets()
-            
             local normalPets = getPetsForNormalLeveling()
-            
+    
             if #normalPets > 0 then
+                -- ⭐ Set start time
+                webhookStats.levelingStartTime = os.time()
+                webhookStats.levelingTarget = targetLevel
+                webhookStats.levelingRainbow = rainbowMode
+        
                 StatusLabel.Text = string.format("📈 Leveling normal (%d pet)...", #normalPets)
                 
                 unequipAllPets()
@@ -2811,6 +3264,9 @@ ToggleButton.MouseButton1Click:Connect(function()
                         end
                         
                         if getPetLevel(petUUID) >= targetLevel then
+                            -- ⭐ TRACK PET
+                            trackPetProcessed("leveling", getPetType(petUUID), petUUID)
+    
                             pcall(function() unequipPet(petUUID) end)
                             table.remove(normalEquippedPets, i)
                             
@@ -2825,7 +3281,7 @@ ToggleButton.MouseButton1Click:Connect(function()
                             end
                         end
                     end
-                    
+                            
                     local allNormalDone = true
                     for _, petUUID in ipairs(normalPets) do
                         if isPetValid(petUUID) and getPetLevel(petUUID) < targetLevel then
@@ -2840,18 +3296,39 @@ ToggleButton.MouseButton1Click:Connect(function()
                     updateStatus()
                     wait(3)
                 end
+                -- ⭐ Set end time + kirim report
+                if #normalPets > 0 then
+                    webhookStats.levelingEndTime = os.time()
+    
+                    task.spawn(function()
+                        sendStageReport(
+                            "📈 Auto Leveling",
+                            webhookStats.leveling,
+                            webhookStats.levelingUniqueUUIDs,
+                            webhookStats.levelingStartTime,
+                            webhookStats.levelingEndTime,
+                            string.format("**Target:** Lv.%d\n**Mode:** %s",
+                                webhookStats.levelingTarget,
+                                webhookStats.levelingRainbow and "🌈 Rainbow" or "📊 Normal"
+                            )
+                        )
+                    end)
+                end        
             end
         end
         -- ⭐ Cek sebelum lanjut ke PRIORITAS 4
         if not isAlive() then return end
 
         -- PRIORITAS 4: ADVANCED LEVELING
-        if isAdvancedLeveling and isAlive() then  -- ⭐ GANTI
+        if isAdvancedLeveling and isAlive() then
             cleanupInvalidPets()
-            
             local advancedPets = getPetsForAdvanced()
-            
+    
             if #advancedPets > 0 then
+                -- ⭐ Set start time
+                webhookStats.advancedStartTime = os.time()
+                webhookStats.advancedTarget = advancedTargetLevel
+        
                 StatusLabel.Text = string.format("🚀 Advanced leveling (%d pet)...", #advancedPets)
                 
                 unequipAllPets()
@@ -2897,6 +3374,9 @@ ToggleButton.MouseButton1Click:Connect(function()
                         end
                         
                         if getPetLevel(petUUID) >= advancedTargetLevel then
+                            -- ⭐ TRACK PET
+                            trackPetProcessed("advanced", getPetType(petUUID), petUUID)
+    
                             pcall(function() unequipPet(petUUID) end)
                             table.remove(advancedEquippedPets, i)
                             
@@ -2957,11 +3437,26 @@ ToggleButton.MouseButton1Click:Connect(function()
                     updateStatus()
                     wait(5)
                 end
+                -- ⭐ Set end time + kirim report
+                if #advancedPets > 0 then
+                    webhookStats.advancedEndTime = os.time()
+    
+                    task.spawn(function()
+                        sendStageReport(
+                            "🚀 Advanced Leveling",
+                            webhookStats.advanced,
+                            webhookStats.advancedUniqueUUIDs,
+                            webhookStats.advancedStartTime,
+                            webhookStats.advancedEndTime,
+                            string.format("**Target:** Lv.%d", webhookStats.advancedTarget)
+                        )
+                    end)
+                end
             end
         end
         
-        -- ⭐ Cek sebelum selesai (hanya jika GUI destroyed)
-        if isGuiDestroyed then return end
+        -- ⭐ Cek destroy
+        if not isAlive() and isGuiDestroyed then return end
 
         -- SELESAI
         StatusLabel.Text = "🎉 Semua proses selesai!"
@@ -2969,6 +3464,11 @@ ToggleButton.MouseButton1Click:Connect(function()
         ToggleButton.Text = "▶️ Mulai"
         ToggleButton.BackgroundColor3 = C.success
         updateStatus()
+
+        -- ⭐ KIRIM FINAL SUMMARY
+        task.spawn(function()
+            sendFinalSummary()
+        end)
     end)
 end)
 
@@ -3066,6 +3566,216 @@ local extraLayout = Instance.new("UIListLayout")
 extraLayout.Padding = UDim.new(0, 6)
 extraLayout.SortOrder = Enum.SortOrder.LayoutOrder
 extraLayout.Parent = extraScroll
+
+-- ⭐ WEBHOOK SECTION
+local webhookSection = Instance.new("Frame")
+webhookSection.Size = UDim2.new(1, -12, 0, 130)
+webhookSection.LayoutOrder = 1
+webhookSection.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
+webhookSection.BorderSizePixel = 0
+webhookSection.Parent = extraScroll
+
+Instance.new("UICorner", webhookSection).CornerRadius = UDim.new(0, 6)
+
+-- Title
+local webhookTitle = Instance.new("TextLabel")
+webhookTitle.Size = UDim2.new(1, -20, 0, 16)
+webhookTitle.Position = UDim2.new(0, 10, 0, 6)
+webhookTitle.Text = "📡 Discord Webhook"
+webhookTitle.TextColor3 = C.text
+webhookTitle.Font = Enum.Font.GothamBold
+webhookTitle.TextSize = 10
+webhookTitle.TextXAlignment = Enum.TextXAlignment.Left
+webhookTitle.BackgroundTransparency = 1
+webhookTitle.Parent = webhookSection
+
+-- URL Textbox
+local webhookUrlBox = Instance.new("TextBox")
+webhookUrlBox.Size = UDim2.new(1, -20, 0, 24)
+webhookUrlBox.Position = UDim2.new(0, 10, 0, 28)
+webhookUrlBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+webhookUrlBox.BorderSizePixel = 0
+webhookUrlBox.Font = Enum.Font.Gotham
+webhookUrlBox.PlaceholderText = "Paste Discord Webhook URL..."
+webhookUrlBox.Text = config.webhookUrl or ""
+webhookUrlBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+webhookUrlBox.TextSize = 9
+webhookUrlBox.TextXAlignment = Enum.TextXAlignment.Left
+webhookUrlBox.ClearTextOnFocus = false
+webhookUrlBox.Parent = webhookSection
+
+Instance.new("UICorner", webhookUrlBox).CornerRadius = UDim.new(0, 4)
+local urlPadding = Instance.new("UIPadding")
+urlPadding.PaddingLeft = UDim.new(0, 6)
+urlPadding.Parent = webhookUrlBox
+
+webhookUrlBox.FocusLost:Connect(function()
+    config.webhookUrl = webhookUrlBox.Text
+    saveConfig()
+end)
+
+-- Main Toggle
+local webhookToggleBtn = Instance.new("TextButton")
+webhookToggleBtn.Size = UDim2.new(0, 36, 0, 18)
+webhookToggleBtn.Position = UDim2.new(1, -46, 0, 60)
+webhookToggleBtn.Text = ""
+webhookToggleBtn.BorderSizePixel = 0
+webhookToggleBtn.AutoButtonColor = false
+webhookToggleBtn.Parent = webhookSection
+
+Instance.new("UICorner", webhookToggleBtn).CornerRadius = UDim.new(1, 0)
+
+local webhookDot = Instance.new("Frame")
+webhookDot.Size = UDim2.new(0, 12, 0, 12)
+webhookDot.Position = UDim2.new(0, 3, 0.5, -6)
+webhookDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+webhookDot.BorderSizePixel = 0
+webhookDot.Parent = webhookToggleBtn
+
+Instance.new("UICorner", webhookDot).CornerRadius = UDim.new(1, 0)
+
+-- Toggle Label
+local webhookToggleLabel = Instance.new("TextLabel")
+webhookToggleLabel.Size = UDim2.new(1, -100, 0, 18)
+webhookToggleLabel.Position = UDim2.new(0, 10, 0, 60)
+webhookToggleLabel.Text = "Enable Webhook"
+webhookToggleLabel.TextColor3 = C.text
+webhookToggleLabel.Font = Enum.Font.GothamSemibold
+webhookToggleLabel.TextSize = 9
+webhookToggleLabel.TextXAlignment = Enum.TextXAlignment.Left
+webhookToggleLabel.BackgroundTransparency = 1
+webhookToggleLabel.Parent = webhookSection
+
+local webhookStatusLabel = Instance.new("TextLabel")
+webhookStatusLabel.Size = UDim2.new(0, 34, 1, 0)
+webhookStatusLabel.Position = UDim2.new(1, -86, 0, 60)
+webhookStatusLabel.Text = config.webhookEnabled and "ON" or "OFF"
+webhookStatusLabel.TextColor3 = config.webhookEnabled and C.green or C.red
+webhookStatusLabel.Font = Enum.Font.GothamBold
+webhookStatusLabel.TextSize = 7
+webhookStatusLabel.TextXAlignment = Enum.TextXAlignment.Right
+webhookStatusLabel.BackgroundTransparency = 1
+webhookStatusLabel.Parent = webhookSection
+
+-- ⭐ Per Stage Toggle
+local perStageToggleBtn = Instance.new("TextButton")
+perStageToggleBtn.Size = UDim2.new(0, 36, 0, 18)
+perStageToggleBtn.Position = UDim2.new(1, -46, 0, 82)
+perStageToggleBtn.Text = ""
+perStageToggleBtn.BorderSizePixel = 0
+perStageToggleBtn.AutoButtonColor = false
+perStageToggleBtn.Parent = webhookSection
+
+Instance.new("UICorner", perStageToggleBtn).CornerRadius = UDim.new(1, 0)
+
+local perStageDot = Instance.new("Frame")
+perStageDot.Size = UDim2.new(0, 12, 0, 12)
+perStageDot.Position = UDim2.new(0, 3, 0.5, -6)
+perStageDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+perStageDot.BorderSizePixel = 0
+perStageDot.Parent = perStageToggleBtn
+
+Instance.new("UICorner", perStageDot).CornerRadius = UDim.new(1, 0)
+
+local perStageLabel = Instance.new("TextLabel")
+perStageLabel.Size = UDim2.new(1, -100, 0, 18)
+perStageLabel.Position = UDim2.new(0, 10, 0, 82)
+perStageLabel.Text = "Report Per Tahap"
+perStageLabel.TextColor3 = C.text
+perStageLabel.Font = Enum.Font.GothamSemibold
+perStageLabel.TextSize = 9
+perStageLabel.TextXAlignment = Enum.TextXAlignment.Left
+perStageLabel.BackgroundTransparency = 1
+perStageLabel.Parent = webhookSection
+
+local perStageStatusLabel = Instance.new("TextLabel")
+perStageStatusLabel.Size = UDim2.new(0, 34, 1, 0)
+perStageStatusLabel.Position = UDim2.new(1, -86, 0, 82)
+perStageStatusLabel.Text = config.webhookPerStage and "ON" or "OFF"
+perStageStatusLabel.TextColor3 = config.webhookPerStage and C.green or C.red
+perStageStatusLabel.Font = Enum.Font.GothamBold
+perStageStatusLabel.TextSize = 7
+perStageStatusLabel.TextXAlignment = Enum.TextXAlignment.Right
+perStageStatusLabel.BackgroundTransparency = 1
+perStageStatusLabel.Parent = webhookSection
+
+-- ⭐ Test Button
+local testWebhookBtn = Instance.new("TextButton")
+testWebhookBtn.Size = UDim2.new(0, 80, 0, 18)
+testWebhookBtn.Position = UDim2.new(1, -90, 0, 104)
+testWebhookBtn.BackgroundColor3 = C.accent
+testWebhookBtn.BorderSizePixel = 0
+testWebhookBtn.Font = Enum.Font.GothamBold
+testWebhookBtn.Text = "Test Webhook"
+testWebhookBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+testWebhookBtn.TextSize = 8
+testWebhookBtn.Parent = webhookSection
+
+Instance.new("UICorner", testWebhookBtn).CornerRadius = UDim.new(0, 4)
+
+-- Update functions
+local function updateWebhookToggle()
+    if config.webhookEnabled then
+        webhookToggleBtn.BackgroundColor3 = C.green
+        webhookDot.Position = UDim2.new(1, -15, 0.5, -6)
+        webhookStatusLabel.Text = "ON"
+        webhookStatusLabel.TextColor3 = C.green
+    else
+        webhookToggleBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 75)
+        webhookDot.Position = UDim2.new(0, 3, 0.5, -6)
+        webhookStatusLabel.Text = "OFF"
+        webhookStatusLabel.TextColor3 = C.red
+    end
+end
+
+local function updatePerStageToggle()
+    if config.webhookPerStage then
+        perStageToggleBtn.BackgroundColor3 = C.green
+        perStageDot.Position = UDim2.new(1, -15, 0.5, -6)
+        perStageStatusLabel.Text = "ON"
+        perStageStatusLabel.TextColor3 = C.green
+    else
+        perStageToggleBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 75)
+        perStageDot.Position = UDim2.new(0, 3, 0.5, -6)
+        perStageStatusLabel.Text = "OFF"
+        perStageStatusLabel.TextColor3 = C.red
+    end
+end
+
+webhookToggleBtn.MouseButton1Click:Connect(function()
+    config.webhookEnabled = not config.webhookEnabled
+    saveConfig()
+    updateWebhookToggle()
+end)
+
+perStageToggleBtn.MouseButton1Click:Connect(function()
+    config.webhookPerStage = not config.webhookPerStage
+    saveConfig()
+    updatePerStageToggle()
+end)
+
+testWebhookBtn.MouseButton1Click:Connect(function()
+    if config.webhookUrl == "" then
+        print("[Webhook] URL kosong!")
+        return
+    end
+    
+    local testEmbed = {
+        title = "🐾 AoneHub Webhook Test",
+        description = "✅ Webhook berfungsi dengan baik!",
+        color = 3447003,
+        footer = {
+            text = "AoneHub • Test Message"
+        },
+        timestamp = DateTime.now():ToIsoDate()
+    }
+    
+    sendWebhookMessage(testEmbed)
+    print("[Webhook] Test message sent!")
+end)
+
+updateWebhookToggle()
+updatePerStageToggle()
 
 -- ==================================================================
 -- TOGGLE CREATOR (untuk Extra Tab)
