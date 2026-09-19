@@ -858,6 +858,18 @@ screenGui.ResetOnSpawn = false
 screenGui.Destroying:Connect(function()
     isGuiDestroyed = true
     isLeveling = false
+    
+    rainbowMode = false
+    if rainbowTask then
+        task.cancel(rainbowTask)
+        rainbowTask = nil
+    end
+    
+    -- ⭐ Finish Discord session jika masih aktif
+    if sessionStats.active then
+        finishDiscordSession("stopped")
+    end
+    
     config.selectedTeamPreset = selectedTeamPreset
     config.selectedWeightPreset = selectedWeightPreset
     config.selectedAdvancedPreset = selectedAdvancedPreset
@@ -1527,7 +1539,7 @@ LevelInput.Parent = TeamSelectSection
 
 local UICornerLevelInput = Instance.new("UICorner")
 UICornerLevelInput.CornerRadius = UDim.new(0, 4)
-UICornerLevelInput.Parent = TeamSelectSection
+UICornerLevelInput.Parent = LevelInput
 
 LevelInput.FocusLost:Connect(function()
     local newLevel = tonumber(LevelInput.Text)
@@ -2313,7 +2325,7 @@ local function startRainbowUpdate()
     if rainbowTask then return end
 
     rainbowTask = task.spawn(function()
-        while rainbowMode do
+        while rainbowMode and not isGuiDestroyed do
             -- Ambil warna berikutnya
             A.warning = rainbowColors[colorIndex]
 
@@ -3418,7 +3430,7 @@ local function createToggle(title, description, configKey, layoutOrder, defaultC
 end
 
 -- ⭐ TAMBAHKAN TOGGLE ANTI-AFK DI SINI
-createToggle("🛡️ Anti-AFK", "Tapi bikin bug gk bisa ganti item di hotbar", "antiAfkToggle", 2)
+createToggle("🛡️ Anti-AFK", "Mencegah Idle", "antiAfkToggle", 2)
 
 -- ==================================================================
 -- DISCORD WEBHOOK SETTINGS
