@@ -39,7 +39,7 @@ local C = {
 local function getConfigPath()
     local basePath = "AoneHub"
     pcall(function() makefolder(basePath) end)
-    return basePath .. "/AoneHub_AutoLeveling.json"
+    return basePath .. "/AoneHub_Gag1.json"
 end
 
 local SAVE_FILE = getConfigPath()
@@ -1080,12 +1080,11 @@ sep.Parent = sidebar
 local tabs = {
     {name="Farm", label="🌾 Farm"},
     {name="Weight", label="🐘 Weight"},
-    {name="Mutation", label="🧬 Mutation"},
+    {name="Hatch", label="🥚 Hatch"},
     {name="Event", label="🔥 Event"},
-    {name="Tools", label="🔧 Tools"},
+    {name="Mutation", label="🧬 Mutation"},
     {name="AutoBuy", label="🛒 Buy"},
-    {name="AutoSell", label="💰 Sell"},
-    {name="Trade", label="📧 Trade"},
+    {name="Gift", label="🎁 Gift"},
     {name="Ekstra", label="⚙️ Extra"}
 }
 
