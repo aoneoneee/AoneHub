@@ -3026,31 +3026,14 @@ ToggleButton.MouseButton1Click:Connect(function()
                             end
                         end
                         
-                        -- ⭐ FIX: Ganti `allWeightDone == 0` jadi `allWeightDone`
                         if allWeightDone then
                             StatusLabel.Text = "✅ Semua base weight tercapai!"
                             isAutoWeight = false
                             config.isAutoWeight = false
                             saveConfig()
-                            WeightToggleButton.Text = "🐘 Auto Weight: OFF"
+                            WeightToggleButton.Text = "⚖️ Auto Weight: OFF"
                             WeightToggleButton.BackgroundColor3 = Color3.fromRGB(70, 70, 85)
                             weightLoopActive = false
-                            
-                            -- ⭐ Set end time + kirim webhook
-                            webhookStats.weightEndTime = os.time()
-                            task.spawn(function()
-                                sendStageReport(
-                                    "🐘 Auto Weight",
-                                    webhookStats.weight,
-                                    webhookStats.weightUniqueUUIDs,
-                                    webhookStats.weightStartTime,
-                                    webhookStats.weightEndTime,
-                                    string.format("**Target BW:** %.1f\n**Mode:** %s",
-                                        webhookStats.weightTarget,
-                                        webhookStats.weightRainbow and "🌈 Rainbow" or "📊 Normal"
-                                    )
-                                )
-                            end)
                             break
                         end
                         
@@ -3315,22 +3298,19 @@ ToggleButton.MouseButton1Click:Connect(function()
                 end
                 
                 -- ⭐ Set end time + kirim report
-                if #normalPets > 0 then
-                    webhookStats.levelingEndTime = os.time()
-                    task.spawn(function()
-                        sendStageReport(
-                            "📈 Auto Leveling",
-                            webhookStats.leveling,
-                            webhookStats.levelingUniqueUUIDs,
-                            webhookStats.levelingStartTime,
-                            webhookStats.levelingEndTime,
-                            string.format("**Target:** Lv.%d\n**Mode:** %s",
-                                webhookStats.levelingTarget,
-                                webhookStats.levelingRainbow and "🌈 Rainbow" or "📊 Normal"
-                            )
+                task.spawn(function()
+                    sendStageReport(
+                        "📈 Auto Leveling",
+                        webhookStats.leveling,
+                        webhookStats.levelingUniqueUUIDs,
+                        webhookStats.levelingStartTime,
+                        webhookStats.levelingEndTime,
+                        string.format("**Target:** Lv.%d\n**Mode:** %s",
+                            webhookStats.levelingTarget,
+                            webhookStats.levelingRainbow and "🌈 Rainbow" or "📊 Normal"
                         )
-                    end)
-                end
+                    )
+                end)
             end
         end
         
@@ -3461,19 +3441,16 @@ ToggleButton.MouseButton1Click:Connect(function()
                 end
                 
                 -- ⭐ Set end time + kirim report
-                if #advancedPets > 0 then
-                    webhookStats.advancedEndTime = os.time()
-                    task.spawn(function()
-                        sendStageReport(
-                            "🚀 Advanced Leveling",
-                            webhookStats.advanced,
-                            webhookStats.advancedUniqueUUIDs,
-                            webhookStats.advancedStartTime,
-                            webhookStats.advancedEndTime,
-                            string.format("**Target:** Lv.%d", webhookStats.advancedTarget)
-                        )
-                    end)
-                end
+                task.spawn(function()
+                    sendStageReport(
+                        "🚀 Advanced Leveling",
+                        webhookStats.advanced,
+                        webhookStats.advancedUniqueUUIDs,
+                        webhookStats.advancedStartTime,
+                        webhookStats.advancedEndTime,
+                        string.format("**Target:** Lv.%d", webhookStats.advancedTarget)
+                    )
+                end)
             end
         end
         
