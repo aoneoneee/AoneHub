@@ -480,23 +480,16 @@ end
 local function placeEggsFromBackpack()
     local totalSlots = #CONFIG.eggGridOffsets
     
-    -- =========================================
-    -- STEP 1: Tunggu server settle
-    -- =========================================
     task.wait(CONFIG.scanSettleDelay)
     
     -- =========================================
-    -- STEP 2: SCAN slot — snapshot keadaan garden
+    -- SCAN SLOT
     -- =========================================
     local emptySlots, occupied = getEmptySlots()
     
     print("[Place] === SCAN SLOT ===")
     for i = 1, totalSlots do
-        if occupied[i] then
-            print(string.format("[Place]   Slot %d: TERISI", i))
-        else
-            print(string.format("[Place]   Slot %d: KOSONG", i))
-        end
+        print(string.format("[Place] Slot %d: %s", i, occupied[i] and "TERISI" or "KOSONG"))
     end
     
     if #emptySlots == 0 then
@@ -507,68 +500,100 @@ local function placeEggsFromBackpack()
     updateStatus(string.format("📦 %d slot kosong", #emptySlots))
     
     -- =========================================
-    -- STEP 3: Cek egg tool
+    -- Cari egg tool (backpack + tangan)
     -- =========================================
     local backpack = player:FindFirstChild("Backpack")
-    if not backpack then return 0 end
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     
     local function findEggTool()
-        for _, tool in ipairs(backpack:GetChildren()) do
-            if isEggTool(tool) then
-                local eggName = tool:GetAttribute("h")
-                local count = tool:GetAttribute("e") or 0
-                if count > 0 and (next(CONFIG.selectedEggs) == nil or CONFIG.selectedEggs[eggName]) then
-                    return tool
+        local locations = {}
+        if backpack then table.insert(locations, {name="BP", container=backpack}) end
+        if character then table.insert(locations, {name="TGN", container=character}) end
+        
+        for _, loc in ipairs(locations) do
+            for _, tool in ipairs(loc.container:GetChildren()) do
+                if isEggTool(tool) then
+                    local eggName = tool:GetAttribute("h")
+                    local count = tool:GetAttribute("e") or 0
+                    
+                    local isSelected = false
+                    if next(CONFIG.selectedEggs) == nil then
+                        isSelected = true
+                    else
+                        for name, val in pairs(CONFIG.selectedEggs) do
+                            if name == eggName and val then
+                                isSelected = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    if count > 0 and isSelected then
+                        return tool
+                    end
                 end
             end
         end
         return nil
     end
     
+    -- =========================================
+    -- Cek egg tool
+    -- =========================================
     local eggTool = findEggTool()
     if not eggTool then
-        updateStatus("⚠️ Tidak ada egg")
+        updateStatus("⚠️ Tidak ada egg yang dipilih")
         return 0
     end
     
-    -- =========================================
-    -- STEP 4: Equip egg tool
-    -- =========================================
-    local character = player.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return 0 end
-    
-    pcall(function() humanoid:EquipTool(eggTool) end)
-    task.wait(0.5)
+    print(string.format("[Place] Egg: %s | e=%d | Lokasi: %s",
+        eggTool:GetAttribute("h"),
+        eggTool:GetAttribute("e"),
+        eggTool.Parent and eggTool.Parent.Name or "?"))
     
     -- =========================================
-    -- STEP 5: Place HANYA ke slot kosong
+    -- Equip kalau egg di backpack
+    -- =========================================
+    if eggTool.Parent == backpack and humanoid then
+        print("[Place] Equip egg dari backpack...")
+        pcall(function() humanoid:EquipTool(eggTool) end)
+        task.wait(0.5)
+    else
+        print("[Place] Egg sudah di tangan")
+    end
+    
+    -- =========================================
+    -- Place ke slot kosong
     -- =========================================
     local center = getCenterPoint()
     if not center then return 0 end
     
     local placed = 0
+    print("[Place] === PLACE ===")
     
-    print("[Place] === PLACE KE SLOT KOSONG ===")
     for _, slotIndex in ipairs(emptySlots) do
         if not isRunning then break end
         
+        -- Cek egg tool masih ada
         local currentEggTool = findEggTool()
         if not currentEggTool then
             print("[Place] Egg habis")
             break
         end
         
-        -- Equip kalau belum
-        local equippedTool = character:FindFirstChild(currentEggTool.Name)
-        if not equippedTool then
+        -- Kalau tool beda & di backpack, equip
+        if currentEggTool.Parent == backpack and humanoid then
             pcall(function() humanoid:EquipTool(currentEggTool) end)
             task.wait(0.5)
         end
         
         -- Place
         local pos = center.Position + CONFIG.eggGridOffsets[slotIndex]
-        print(string.format("[Place] Place slot %d: %s", slotIndex, tostring(pos)))
+        print(string.format("[Place] Slot %d | Egg: %s (e=%d)",
+            slotIndex,
+            currentEggTool:GetAttribute("h"),
+            currentEggTool:GetAttribute("e")))
         
         local ok = pcall(function()
             PetEggService:FireServer("CreateEgg", pos)
@@ -583,7 +608,7 @@ local function placeEggsFromBackpack()
         end
     end
     
-    print(string.format("[Place] Total: %d egg", placed))
+    print(string.format("[Place] Total place: %d", placed))
     return placed
 end
 
