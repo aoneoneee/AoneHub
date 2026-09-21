@@ -1,6 +1,5 @@
 -- ==================================================================
--- AUTO HATCH GUI v6.0 — FINAL
--- Alur: Place → Speed → Hatch → (N cycle) → Filter → Sell → Loop
+-- AUTO HATCH GUI v7.0 — LOADOUT SWAP SYSTEM
 -- ==================================================================
 
 local Players = game:GetService("Players")
@@ -14,6 +13,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 -- Remotes
 local PetEggService = RS.GameEvents:WaitForChild("PetEggService")
+local PetsServiceRE = RS.GameEvents:WaitForChild("PetsService")
 local FavoriteItemRE = RS.GameEvents:WaitForChild("Favorite_Item")
 local SellAllRE = RS.GameEvents:WaitForChild("SellAllPets_RE")
 
@@ -43,10 +43,17 @@ local CONFIG = {
         Vector3.new(27.13, -4.97, -16.24),
     },
     
-    selectedEggs = {},
+    -- Loadout mapping
+    speedLoadout = 1,
+    hatchLoadout = 2,
+    sellLoadout = 3,
+    
+    -- Preset (untuk verifikasi)
     speedPreset = nil,
     hatchPreset = nil,
     sellPreset = nil,
+    
+    selectedEggs = {},
     cycleCount = 1,
     autoSkip = true,
     autoSell = true,
@@ -56,9 +63,12 @@ local CONFIG = {
     delayAfterHatch = 3.0,
     delayAfterSell = 2.0,
     delayBeforeSell = 3.0,
+    delayAfterLoadout = 6.0,
     hatchDelay = 1.5,
     skipDelay = 0.8,
     placeDelay = 1.5,
+    equipDelay = 0.4,
+    syncWaitTime = 2.0,
     
     -- Filter
     maxWeight = 3.5,
@@ -174,15 +184,38 @@ local function getNextFreeSlot()
     return nil
 end
 
-local function placeEggAtSlot(slotIndex)
+local function placeEggAtSlot(slotIndex, eggTool)
     local center = getCenterPoint()
     if not center then return false end
     local offset = CONFIG.eggGridOffsets[slotIndex]
     if not offset then return false end
     local pos = center.Position + offset
-    local ok = pcall(function()
-        PetEggService:FireServer("CreateEgg", pos)
+    
+    if not eggTool then return false end
+    
+    -- Equip egg tool dulu
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    
+    pcall(function()
+        humanoid:EquipTool(eggTool)
     end)
+    task.wait(0.5)
+    
+    -- Coba PetEggToolLocal dulu, fallback ke PetEggService
+    local PetEggToolLocal = player:FindFirstChild("PetEggToolLocal")
+    local ok
+    if PetEggToolLocal then
+        ok = pcall(function()
+            PetEggToolLocal:FireServer("CreateEgg", pos)
+        end)
+    else
+        ok = pcall(function()
+            PetEggService:FireServer("CreateEgg", pos)
+        end)
+    end
+    
     task.wait(CONFIG.placeDelay)
     return ok
 end
@@ -291,35 +324,6 @@ local function getEquippedPets()
 end
 
 -- ==================================================================
--- HELPER: EQUIP (dengan skip re-equip)
--- ==================================================================
-local lastEquippedPreset = nil
-
-local function equipPet(uuid)
-    if not isPetUUIDValid(uuid) then return false end
-    pcall(function()
-        PetsService:EquipPet(uuid, CFrame.new(0, 10, 0))
-    end)
-    task.wait(0.4)
-    return true
-end
-
-local function unequipPet(uuid)
-    pcall(function()
-        PetsService:UnequipPet(uuid)
-    end)
-    task.wait(0.4)
-end
-
-local function unequipAll()
-    for _, uuid in ipairs(getEquippedPets()) do
-        unequipPet(uuid)
-    end
-    task.wait(1)
-    lastEquippedPreset = nil  -- Reset karena unequip semua
-end
-
--- ==================================================================
 -- HELPER: PRESET
 -- ==================================================================
 local function getPresetNames()
@@ -355,7 +359,6 @@ local function getPresetUUIDs(presetName)
     return uuids
 end
 
--- Cek apakah pet (by display name) ada di salah satu preset
 local function isPetInPreset(petDisplayName)
     for _, presetName in ipairs({CONFIG.speedPreset, CONFIG.hatchPreset, CONFIG.sellPreset}) do
         if presetName then
@@ -377,36 +380,123 @@ local function isPetInPreset(petDisplayName)
     return false
 end
 
-local function equipTeamByPreset(presetName, forceRefresh)
-    if not presetName then return false end
+-- ==================================================================
+-- HELPER: LOADOUT SWAP
+-- ==================================================================
+local lastLoadoutSlot = nil
+
+local function swapLoadout(slotNumber)
+    if not slotNumber then return false end
     
-    -- ⭐ SKIP RE-EQUIP kalau preset sama & masih terpasang
-    if not forceRefresh and lastEquippedPreset == presetName then
-        local equipped = getEquippedPets()
-        if #equipped > 0 then
-            print("[Equip] Skip re-equip — preset " .. presetName .. " masih terpasang")
+    print("[Loadout] Swap ke slot " .. slotNumber)
+    pcall(function()
+        PetsServiceRE:FireServer("SwapPetLoadout", slotNumber)
+    end)
+    
+    -- Tunggu server load
+    task.wait(CONFIG.delayAfterLoadout)
+    return true
+end
+
+-- Cek apakah equipped pet sesuai preset
+local function verifyEquippedMatchesPreset(presetName)
+    if not presetName then return true, {}, {} end
+    
+    local expectedUUIDs = getPresetUUIDs(presetName)
+    local equippedUUIDs = getEquippedPets()
+    
+    local equippedSet = {}
+    for _, uuid in ipairs(equippedUUIDs) do
+        equippedSet[uuid] = true
+    end
+    
+    local presetSet = {}
+    for _, uuid in ipairs(expectedUUIDs) do
+        presetSet[uuid] = true
+    end
+    
+    local toUnequip = {}
+    for _, uuid in ipairs(equippedUUIDs) do
+        if not presetSet[uuid] then
+            table.insert(toUnequip, uuid)
+        end
+    end
+    
+    local toEquip = {}
+    for _, uuid in ipairs(expectedUUIDs) do
+        if not equippedSet[uuid] then
+            table.insert(toEquip, uuid)
+        end
+    end
+    
+    local isMatch = (#toUnequip == 0 and #toEquip == 0)
+    return isMatch, toUnequip, toEquip
+end
+
+-- Fix equipped supaya sesuai preset
+local function fixEquippedToMatchPreset(presetName)
+    local isMatch, toUnequip, toEquip = verifyEquippedMatchesPreset(presetName)
+    
+    if isMatch then
+        print("[Fix] ✅ Equipped sudah sesuai")
+        return true
+    end
+    
+    print(string.format("[Fix] %d unequip, %d equip", #toUnequip, #toEquip))
+    
+    -- Unequip yang tidak sesuai
+    for _, uuid in ipairs(toUnequip) do
+        pcall(function() PetsService:UnequipPet(uuid) end)
+        task.wait(CONFIG.equipDelay)
+    end
+    
+    -- Equip yang belum
+    for _, uuid in ipairs(toEquip) do
+        if isPetUUIDValid(uuid) then
+            pcall(function() PetsService:EquipPet(uuid, CFrame.new(0, 10, 0)) end)
+            task.wait(CONFIG.equipDelay)
+        end
+    end
+    
+    task.wait(CONFIG.syncWaitTime)
+    
+    local isMatch2 = verifyEquippedMatchesPreset(presetName)
+    return isMatch2
+end
+
+-- Fungsi utama: equip team via loadout swap
+local function equipTeamByPreset(presetName, loadoutSlot, forceRefresh)
+    if not presetName then return false end
+    if not loadoutSlot then
+        warn("[Equip] loadoutSlot tidak ada")
+        return false
+    end
+    
+    -- Skip kalau loadout sama
+    if not forceRefresh and lastLoadoutSlot == loadoutSlot then
+        local isMatch = verifyEquippedMatchesPreset(presetName)
+        if isMatch then
+            print("[Loadout] Skip — sudah di slot " .. loadoutSlot)
             return true
         end
     end
     
-    -- Unequip semua
-    print("[Equip] Unequip semua...")
-    for _, uuid in ipairs(getEquippedPets()) do
-        unequipPet(uuid)
-    end
-    task.wait(1)
+    -- Swap loadout
+    swapLoadout(loadoutSlot)
+    lastLoadoutSlot = loadoutSlot
     
-    -- Equip preset baru
-    print("[Equip] Equip preset: " .. presetName)
-    local uuids = getPresetUUIDs(presetName)
-    for _, uuid in ipairs(uuids) do
-        if isPetUUIDValid(uuid) then
-            equipPet(uuid)
-        end
-    end
-    task.wait(1)
+    -- Verifikasi
+    local isMatch, toUnequip, toEquip = verifyEquippedMatchesPreset(presetName)
     
-    lastEquippedPreset = presetName
+    if isMatch then
+        print("[Loadout] ✅ Cocok dengan preset " .. presetName)
+        return true
+    end
+    
+    print(string.format("[Loadout] ⚠️ Mismatch: %d unequip, %d equip", 
+        #toUnequip, #toEquip))
+    fixEquippedToMatchPreset(presetName)
+    
     return true
 end
 
@@ -455,7 +545,7 @@ local function updateStatus(text)
 end
 
 -- ==================================================================
--- FASE 1: PLACE EGGS
+-- FASE 1: PLACE EGG
 -- ==================================================================
 local function placeEggsFromBackpack()
     local placed = 0
@@ -490,7 +580,7 @@ local function placeEggsFromBackpack()
             break
         end
         
-        if placeEggAtSlot(nextSlot) then
+        if placeEggAtSlot(nextSlot, foundTool) then
             placed = placed + 1
             updateStatus(string.format("📦 Place %d egg...", placed))
             task.wait(0.5)
@@ -503,29 +593,24 @@ local function placeEggsFromBackpack()
 end
 
 -- ==================================================================
--- CORE: SATU CYCLE (dengan smart garden-penuh check)
+-- FASE 2: SATU CYCLE
 -- ==================================================================
 local function runOneCycle(cycleNum, totalCycles)
-    -- =========================================
-    -- FASE 1: PLACE EGG
-    -- =========================================
+    -- FASE 1: Place
     updateStatus(string.format("[%d/%d] 📦 Place egg...", cycleNum, totalCycles))
     local placed = placeEggsFromBackpack()
     
-    -- Cek kondisi garden
-    local allReady = false
     local existingEggs = getMyGardenEggs()
+    local allReady = false
     
     if placed == 0 then
-        -- Garden penuh — cek kondisi egg
         updateStatus(string.format("[%d/%d] ⚠️ Garden penuh, cek timer...", cycleNum, totalCycles))
         
         if #existingEggs == 0 then
-            updateStatus(string.format("[%d/%d] ⚠️ Tidak ada egg sama sekali", cycleNum, totalCycles))
+            updateStatus(string.format("[%d/%d] ⚠️ Tidak ada egg", cycleNum, totalCycles))
             return false
         end
         
-        -- Cek apakah semua egg ready (timer ≤ 0)
         allReady = true
         local readyCount = 0
         for _, egg in ipairs(existingEggs) do
@@ -538,11 +623,9 @@ local function runOneCycle(cycleNum, totalCycles)
         end
         
         if allReady then
-            updateStatus(string.format("[%d/%d] ✅ %d egg semua ready, skip Speed!", 
-                cycleNum, totalCycles, readyCount))
+            updateStatus(string.format("[%d/%d] ✅ %d egg ready, skip Speed", cycleNum, totalCycles, readyCount))
         else
-            updateStatus(string.format("[%d/%d] ⏳ %d/%d ready, perlu Speed", 
-                cycleNum, totalCycles, readyCount, #existingEggs))
+            updateStatus(string.format("[%d/%d] ⏳ %d/%d ready, perlu Speed", cycleNum, totalCycles, readyCount, #existingEggs))
         end
     else
         updateStatus(string.format("[%d/%d] ✅ %d egg di-place", cycleNum, totalCycles, placed))
@@ -550,15 +633,12 @@ local function runOneCycle(cycleNum, totalCycles)
     
     task.wait(2)
     
-    -- =========================================
-    -- FASE 2: TIM SPEED (skip kalau semua sudah ready)
-    -- =========================================
+    -- FASE 2: Tim Speed (skip kalau semua ready)
     if not allReady then
         updateStatus(string.format("[%d/%d] ⚡ Tim Speed...", cycleNum, totalCycles))
-        equipTeamByPreset(CONFIG.speedPreset)
+        equipTeamByPreset(CONFIG.speedPreset, CONFIG.speedLoadout)
         task.wait(CONFIG.delayAfterSpeed)
         
-        -- Tunggu semua egg ready
         updateStatus(string.format("[%d/%d] ⏳ Menunggu ready...", cycleNum, totalCycles))
         local waitStart = os.clock()
         local maxWait = 900
@@ -591,18 +671,15 @@ local function runOneCycle(cycleNum, totalCycles)
         updateStatus(string.format("[%d/%d] ✅ Semua ready!", cycleNum, totalCycles))
         task.wait(1)
     else
-        -- Sudah ready dari awal, skip Speed
-        updateStatus(string.format("[%d/%d] ⏭️ Skip Speed (semua ready)", cycleNum, totalCycles))
+        updateStatus(string.format("[%d/%d] ⏭️ Skip Speed", cycleNum, totalCycles))
     end
     
-    -- =========================================
-    -- FASE 3: TIM HATCH
-    -- =========================================
+    -- FASE 3: Tim Hatch
     updateStatus(string.format("[%d/%d] 🥚 Tim Hatch...", cycleNum, totalCycles))
-    equipTeamByPreset(CONFIG.hatchPreset)
+    equipTeamByPreset(CONFIG.hatchPreset, CONFIG.hatchLoadout)
     task.wait(CONFIG.delayAfterHatch)
     
-    -- Hatch semua egg yang timer ≤ 0
+    -- Hatch
     updateStatus(string.format("[%d/%d] 🥚 Hatch...", cycleNum, totalCycles))
     local eggsToHatch = {}
     for _, egg in ipairs(getMyGardenEggs()) do
@@ -618,7 +695,7 @@ local function runOneCycle(cycleNum, totalCycles)
         task.wait(CONFIG.hatchDelay)
     end
     
-    -- Tunggu sampai tidak ada egg timer ≤ 0 (abaikan auto-spawn)
+    -- Tunggu tidak ada egg timer ≤ 0
     local timeout = os.clock() + 60
     while isRunning and os.clock() < timeout do
         local hasReadyEgg = false
@@ -639,17 +716,17 @@ local function runOneCycle(cycleNum, totalCycles)
 end
 
 -- ==================================================================
--- FASE 3: FILTER + SELL
+-- FASE 4: FILTER + SELL
 -- ==================================================================
 local function runFilterAndSell()
     if not CONFIG.autoSell then return end
     
-    -- STEP 1: EQUIP TIM SELL DULU
-    updateStatus("💸 Equip Tim Sell...")
-    equipTeamByPreset(CONFIG.sellPreset)
+    -- STEP 1: Tim Sell (via loadout)
+    updateStatus("💸 Tim Sell...")
+    equipTeamByPreset(CONFIG.sellPreset, CONFIG.sellLoadout)
     task.wait(CONFIG.delayAfterSell)
     
-    -- STEP 2: FILTER PET
+    -- STEP 2: Filter
     updateStatus("⭐ Filter pet...")
     local favCount = 0
     local unfavCount = 0
@@ -659,31 +736,24 @@ local function runFilterAndSell()
     for _, pet in ipairs(getBackpackPets()) do
         if not isRunning then return end
         
-        -- PRIORITAS 1: Pet preset (speed/hatch/sell) — amankan dengan favorit
         if isPetInPreset(pet.name) then
             if not pet.isFavorited then
                 toggleFavorit(pet.tool)
                 presetProtectCount = presetProtectCount + 1
             end
-            -- Kalau sudah favorit → abaikan
         else
-            -- PRIORITAS 2: Logic unwanted
             local unwanted = isUnwantedPet(pet)
             
             if not unwanted then
-                -- Bukan unwanted & belum fav → Favorit
                 if not pet.isFavorited then
                     toggleFavorit(pet.tool)
                     favCount = favCount + 1
                 end
-                -- Bukan unwanted & sudah fav → abaikan
             else
-                -- Unwanted & sudah fav → Unfavorit
                 if pet.isFavorited then
                     toggleFavorit(pet.tool)
                     unfavCount = unfavCount + 1
                 end
-                -- Unwanted & belum fav → abaikan (biar dijual)
                 skipCount = skipCount + 1
             end
         end
@@ -693,14 +763,13 @@ local function runFilterAndSell()
         presetProtectCount, favCount, unfavCount, skipCount))
     task.wait(2)
     
-    -- STEP 3: DOUBLE CHECK
-    updateStatus("🔍 Verifikasi filter...")
+    -- STEP 3: Double check
+    updateStatus("🔍 Verifikasi...")
     task.wait(1)
     
     local verifyFail = 0
     for _, pet in ipairs(getBackpackPets()) do
         if isPetInPreset(pet.name) then
-            -- Pet preset harus favorit
             if not pet.isFavorited then
                 verifyFail = verifyFail + 1
                 toggleFavorit(pet.tool)
@@ -708,13 +777,11 @@ local function runFilterAndSell()
         else
             local unwanted = isUnwantedPet(pet)
             if not unwanted then
-                -- Bukan unwanted harus favorit
                 if not pet.isFavorited then
                     verifyFail = verifyFail + 1
                     toggleFavorit(pet.tool)
                 end
             else
-                -- Unwanted tidak boleh favorit
                 if pet.isFavorited then
                     verifyFail = verifyFail + 1
                     toggleFavorit(pet.tool)
@@ -730,11 +797,11 @@ local function runFilterAndSell()
         updateStatus("✅ Verifikasi OK")
     end
     
-    -- STEP 4: DELAY SEBELUM SELL
+    -- STEP 4: Delay
     updateStatus("⏳ Delay sebelum sell...")
     task.wait(CONFIG.delayBeforeSell)
     
-    -- STEP 5: SELL ALL (1x)
+    -- STEP 5: Sell
     updateStatus("💰 Sell all...")
     sellAll()
     task.wait(2)
@@ -751,23 +818,16 @@ local function startAutoHatch()
     
     task.spawn(function()
         while isRunning and not guiDestroyed do
-            -- Loop cycle hatch (N kali)
             for cycle = 1, CONFIG.cycleCount do
                 if not isRunning or guiDestroyed then break end
                 runOneCycle(cycle, CONFIG.cycleCount)
             end
             
             if not isRunning or guiDestroyed then break end
-            
-            -- Filter + Sell (1x per sesi)
             runFilterAndSell()
             
             if not isRunning or guiDestroyed then break end
-            
-            -- Reset preset cache biar bisa ganti tim lagi di cycle baru
-            lastEquippedPreset = nil
-            
-            updateStatus("🔄 Sesi selesai, mulai cycle baru...")
+            updateStatus("🔄 Cycle baru...")
             task.wait(5)
         end
         
@@ -784,7 +844,7 @@ local function stopAutoHatch()
 end
 
 -- ==================================================================
--- GUI (sama seperti v5.0)
+-- GUI
 -- ==================================================================
 local oldGui = playerGui:FindFirstChild("AutoHatchGUI")
 if oldGui then oldGui:Destroy() end
@@ -800,7 +860,6 @@ screenGui.Destroying:Connect(function()
     saveConfig()
 end)
 
--- Main frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 580, 0, 400)
 mainFrame.Position = UDim2.new(0.5, -290, 0.5, -200)
@@ -810,7 +869,6 @@ mainFrame.Active = true
 mainFrame.Parent = screenGui
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
--- Title bar
 local titleBar = Instance.new("Frame")
 titleBar.Size = UDim2.new(1, 0, 0, 28)
 titleBar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
@@ -821,7 +879,7 @@ Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
 titleLabel.Position = UDim2.new(0, 12, 0, 0)
-titleLabel.Text = "🥚 Auto Hatch v6.0"
+titleLabel.Text = "🥚 Auto Hatch v7.0"
 titleLabel.TextColor3 = C.text
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 11
@@ -845,7 +903,6 @@ closeBtn.MouseButton1Click:Connect(function()
     screenGui:Destroy()
 end)
 
--- Draggable
 local function makeDraggable(handle, target)
     local dragging, dragStart, startPos, dragInput
     handle.InputBegan:Connect(function(input)
@@ -979,7 +1036,6 @@ for _, tab in ipairs(tabs) do
     end)
 end
 
--- Section helper
 local function makeSection(parent, title, height, order)
     local section = Instance.new("Frame")
     section.Size = UDim2.new(1, -10, 0, height)
@@ -1034,9 +1090,6 @@ local function makeInputRow(parent, yPos, label, configKey, isNumber, min, max)
                 CONFIG[configKey] = n
                 saveConfig()
             end
-        else
-            CONFIG[configKey] = input.Text
-            saveConfig()
         end
         input.Text = tostring(CONFIG[configKey])
     end)
@@ -1067,11 +1120,8 @@ local function makeToggle(parent, yPos, onText, offText, configKey)
     return btn
 end
 
--- ==================================================================
 -- TAB: MAIN
--- ==================================================================
 local mainTab = tabFrames["Main"]
-
 local mainScroll = Instance.new("ScrollingFrame")
 mainScroll.Size = UDim2.new(1, -10, 1, -10)
 mainScroll.Position = UDim2.new(0, 5, 0, 5)
@@ -1088,7 +1138,8 @@ mainLayout.Padding = UDim.new(0, 6)
 mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
 mainLayout.Parent = mainScroll
 
-local presetSection = makeSection(mainScroll, "🐾 Preset Tim", 145, 1)
+-- Preset Section (untuk verifikasi)
+local presetSection = makeSection(mainScroll, "🐾 Preset Tim (Verifikasi)", 145, 1)
 
 local function makeDropdown(parent, yPos, label, configKey)
     local lbl = Instance.new("TextLabel")
@@ -1144,15 +1195,17 @@ local function makeDropdown(parent, yPos, label, configKey)
     return btn
 end
 
-makeDropdown(presetSection, 26, "⚡ Speed", "speedPreset")
-makeDropdown(presetSection, 68, "🥚 Hatch", "hatchPreset")
-makeDropdown(presetSection, 110, "💸 Sell", "sellPreset")
+makeDropdown(presetSection, 26, "⚡ Speed (Loadout 1)", "speedPreset")
+makeDropdown(presetSection, 68, "🥚 Hatch (Loadout 2)", "hatchPreset")
+makeDropdown(presetSection, 110, "💸 Sell (Loadout 3)", "sellPreset")
 
+-- Cycle Section
 local cycleSection = makeSection(mainScroll, "🔁 Cycle", 100, 2)
 makeInputRow(cycleSection, 26, "Jumlah cycle:", "cycleCount", true, 1, 50)
 makeToggle(cycleSection, 50, "⚡ Auto Skip: ON", "⚡ Auto Skip: OFF", "autoSkip")
 makeToggle(cycleSection, 74, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
 
+-- Control Section
 local controlSection = makeSection(mainScroll, nil, 60, 3)
 
 local startBtn = Instance.new("TextButton")
@@ -1193,30 +1246,27 @@ startBtn.MouseButton1Click:Connect(function()
             return
         end
         if not CONFIG.speedPreset then
-            statusLabel.Text = "⚠️ Pilih Tim Speed!"
+            statusLabel.Text = "⚠️ Pilih preset Speed!"
             return
         end
         if not CONFIG.hatchPreset then
-            statusLabel.Text = "⚠️ Pilih Tim Hatch!"
+            statusLabel.Text = "⚠️ Pilih preset Hatch!"
             return
         end
         if CONFIG.autoSell and not CONFIG.sellPreset then
-            statusLabel.Text = "⚠️ Pilih Tim Sell!"
+            statusLabel.Text = "⚠️ Pilih preset Sell!"
             return
         end
         
-        lastEquippedPreset = nil
+        lastLoadoutSlot = nil
         startAutoHatch()
         startBtn.Text = "⏹️ STOP"
         startBtn.BackgroundColor3 = C.danger
     end
 end)
 
--- ==================================================================
 -- TAB: EGG
--- ==================================================================
 local eggTab = tabFrames["Egg"]
-
 local eggScrollOuter = Instance.new("ScrollingFrame")
 eggScrollOuter.Size = UDim2.new(1, -10, 1, -10)
 eggScrollOuter.Position = UDim2.new(0, 5, 0, 5)
@@ -1232,7 +1282,7 @@ local eggOuterLayout = Instance.new("UIListLayout")
 eggOuterLayout.Padding = UDim.new(0, 6)
 eggOuterLayout.Parent = eggScrollOuter
 
-local eggSection = makeSection(eggScrollOuter, "📦 Pilih Egg (dari backpack)", 240, 1)
+local eggSection = makeSection(eggScrollOuter, "📦 Pilih Egg", 240, 1)
 
 local eggRefreshBtn = Instance.new("TextButton")
 eggRefreshBtn.Size = UDim2.new(1, -20, 0, 20)
@@ -1264,12 +1314,10 @@ local function refreshEggList()
     for _, c in ipairs(eggScroll:GetChildren()) do
         if c:IsA("TextButton") then c:Destroy() end
     end
-    
     local eggData = {}
     for _, eggInfo in ipairs(getBackpackEggs()) do
         eggData[eggInfo.name] = (eggData[eggInfo.name] or 0) + eggInfo.count
     end
-    
     local i = 0
     for eggName, count in pairs(eggData) do
         i = i + 1
@@ -1299,11 +1347,10 @@ local function refreshEggList()
             refreshEggList()
         end)
     end
-    
     if i == 0 then
         local lbl = Instance.new("TextLabel")
         lbl.Size = UDim2.new(1, -4, 0, 30)
-        lbl.Text = "(Tidak ada egg di backpack)"
+        lbl.Text = "(Tidak ada egg)"
         lbl.TextColor3 = C.textDim
         lbl.Font = Enum.Font.Gotham
         lbl.TextSize = 9
@@ -1314,11 +1361,8 @@ end
 
 eggRefreshBtn.MouseButton1Click:Connect(refreshEggList)
 
--- ==================================================================
 -- TAB: DELAY
--- ==================================================================
 local delayTab = tabFrames["Delay"]
-
 local delayScroll = Instance.new("ScrollingFrame")
 delayScroll.Size = UDim2.new(1, -10, 1, -10)
 delayScroll.Position = UDim2.new(0, 5, 0, 5)
@@ -1334,31 +1378,31 @@ local delayLayout = Instance.new("UIListLayout")
 delayLayout.Padding = UDim.new(0, 6)
 delayLayout.Parent = delayScroll
 
-local delaySection = makeSection(delayScroll, "⏱️ Delay Settings (detik)", 220, 1)
-makeInputRow(delaySection, 26, "Setelah Tim Speed:", "delayAfterSpeed", true, 0, 60)
-makeInputRow(delaySection, 50, "Setelah Tim Hatch:", "delayAfterHatch", true, 0, 60)
-makeInputRow(delaySection, 74, "Setelah Tim Sell:", "delayAfterSell", true, 0, 60)
-makeInputRow(delaySection, 98, "Sebelum Sell All:", "delayBeforeSell", true, 0, 60)
-makeInputRow(delaySection, 122, "Antar Hatch:", "hatchDelay", true, 0, 60)
-makeInputRow(delaySection, 146, "Antar Skip:", "skipDelay", true, 0, 60)
-makeInputRow(delaySection, 170, "Place Egg:", "placeDelay", true, 0, 60)
+local delaySection = makeSection(delayScroll, "⏱️ Delay Settings (detik)", 270, 1)
+makeInputRow(delaySection, 26, "Setelah Loadout Swap:", "delayAfterLoadout", true, 0, 30)
+makeInputRow(delaySection, 50, "Setelah Tim Speed:", "delayAfterSpeed", true, 0, 30)
+makeInputRow(delaySection, 74, "Setelah Tim Hatch:", "delayAfterHatch", true, 0, 30)
+makeInputRow(delaySection, 98, "Setelah Tim Sell:", "delayAfterSell", true, 0, 30)
+makeInputRow(delaySection, 122, "Sebelum Sell All:", "delayBeforeSell", true, 0, 30)
+makeInputRow(delaySection, 146, "Antar Hatch:", "hatchDelay", true, 0, 30)
+makeInputRow(delaySection, 170, "Antar Skip:", "skipDelay", true, 0, 30)
+makeInputRow(delaySection, 194, "Place Egg:", "placeDelay", true, 0, 30)
+makeInputRow(delaySection, 218, "Equip/Unequip Fix:", "equipDelay", true, 0, 10)
 
 local delayInfo = Instance.new("TextLabel")
-delayInfo.Size = UDim2.new(1, -20, 0, 20)
-delayInfo.Position = UDim2.new(0, 10, 0, 194)
-delayInfo.Text = "💡 Naikkan delay kalau server lag"
+delayInfo.Size = UDim2.new(1, -20, 0, 24)
+delayInfo.Position = UDim2.new(0, 10, 0, 242)
+delayInfo.Text = "💡 Loadout Swap = 6 detik, naikkan kalau server lag"
 delayInfo.TextColor3 = C.textDim
 delayInfo.Font = Enum.Font.Gotham
 delayInfo.TextSize = 7
+delayInfo.TextWrapped = true
 delayInfo.TextXAlignment = Enum.TextXAlignment.Left
 delayInfo.BackgroundTransparency = 1
 delayInfo.Parent = delaySection
 
--- ==================================================================
 -- TAB: UNWANTED
--- ==================================================================
 local unwantedTab = tabFrames["Unwanted"]
-
 local unwantedScrollOuter = Instance.new("ScrollingFrame")
 unwantedScrollOuter.Size = UDim2.new(1, -10, 1, -10)
 unwantedScrollOuter.Position = UDim2.new(0, 5, 0, 5)
@@ -1434,18 +1478,15 @@ local function refreshUnwantedList()
     for _, c in ipairs(listFrame:GetChildren()) do
         if c:IsA("TextButton") then c:Destroy() end
     end
-    
     local search = searchBox.Text:lower()
     local petTypes = getAllPetTypesFromRegistry()
     local i = 0
     local selectedCount = 0
-    
     for _, petType in ipairs(petTypes) do
         if search == "" or petType:lower():find(search) then
             i = i + 1
             local isSelected = CONFIG.unwantedPetTypes[petType] == true
             if isSelected then selectedCount = selectedCount + 1 end
-            
             local btn = Instance.new("TextButton")
             btn.Size = UDim2.new(1, -4, 0, 20)
             btn.BackgroundColor3 = isSelected and C.danger or Color3.fromRGB(65, 65, 80)
@@ -1461,7 +1502,6 @@ local function refreshUnwantedList()
             local pad = Instance.new("UIPadding")
             pad.PaddingLeft = UDim.new(0, 6)
             pad.Parent = btn
-            
             btn.MouseButton1Click:Connect(function()
                 if CONFIG.unwantedPetTypes[petType] then
                     CONFIG.unwantedPetTypes[petType] = nil
@@ -1473,20 +1513,16 @@ local function refreshUnwantedList()
             end)
         end
     end
-    
     countLabel.Text = string.format("Total: %d pet | Terpilih: %d", i, selectedCount)
 end
 
 searchBox:GetPropertyChangedSignal("Text"):Connect(refreshUnwantedList)
 
--- ==================================================================
 -- INIT
--- ==================================================================
 refreshEggList()
 refreshUnwantedList()
 switchTab("Main")
 
-print("✅ Auto Hatch GUI v6.0 loaded!")
-print("   • Alur: Place → Speed → Hatch → (N cycle) → Filter → Sell → Loop")
-print("   • Skip re-equip kalau preset sama")
-print("   • Double-check filter sebelum sell")
+print("✅ Auto Hatch GUI v7.0 loaded!")
+print("   • Sistem: Swap Loadout (1=Speed, 2=Hatch, 3=Sell)")
+print("   • Delay loadout: " .. CONFIG.delayAfterLoadout .. "s")
