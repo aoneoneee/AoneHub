@@ -1,5 +1,6 @@
 -- ==================================================================
--- AUTO HATCH GUI v7.0 — LOADOUT SWAP SYSTEM
+-- AUTO HATCH GUI v8.0 — FINAL
+-- Sistem: Scan slot → Place ke slot kosong → Loadout Swap → Hatch → Filter → Sell
 -- ==================================================================
 
 local Players = game:GetService("Players")
@@ -69,6 +70,7 @@ local CONFIG = {
     placeDelay = 1.5,
     equipDelay = 0.4,
     syncWaitTime = 2.0,
+    scanSettleDelay = 1.5,
     
     -- Filter
     maxWeight = 3.5,
@@ -159,65 +161,40 @@ local function getMyGardenEggs()
     return eggs
 end
 
+-- ⭐ SCAN SLOT — cek slot mana yang terisi
 local function getOccupiedSlots()
     local center = getCenterPoint()
     if not center then return {} end
+    
     local occupied = {}
     local centerPos = center.Position
+    local THRESHOLD = 3
+    
     for _, egg in ipairs(getMyGardenEggs()) do
-        local offset = egg:GetPivot().Position - centerPos
+        local eggPos = egg:GetPivot().Position
+        local offset = eggPos - centerPos
+        
         for i, gridOffset in ipairs(CONFIG.eggGridOffsets) do
-            if (offset - gridOffset).Magnitude < 2 then
+            if (offset - gridOffset).Magnitude < THRESHOLD then
                 occupied[i] = true
                 break
             end
         end
     end
+    
     return occupied
 end
 
-local function getNextFreeSlot()
+-- ⭐ GET EMPTY SLOTS — snapshot slot kosong
+local function getEmptySlots()
     local occupied = getOccupiedSlots()
+    local emptySlots = {}
     for i = 1, #CONFIG.eggGridOffsets do
-        if not occupied[i] then return i end
+        if not occupied[i] then
+            table.insert(emptySlots, i)
+        end
     end
-    return nil
-end
-
-local function placeEggAtSlot(slotIndex, eggTool)
-    local center = getCenterPoint()
-    if not center then return false end
-    local offset = CONFIG.eggGridOffsets[slotIndex]
-    if not offset then return false end
-    local pos = center.Position + offset
-    
-    if not eggTool then return false end
-    
-    -- Equip egg tool dulu
-    local character = player.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return false end
-    
-    pcall(function()
-        humanoid:EquipTool(eggTool)
-    end)
-    task.wait(0.5)
-    
-    -- Coba PetEggToolLocal dulu, fallback ke PetEggService
-    local PetEggToolLocal = player:FindFirstChild("PetEggToolLocal")
-    local ok
-    if PetEggToolLocal then
-        ok = pcall(function()
-            PetEggToolLocal:FireServer("CreateEgg", pos)
-        end)
-    else
-        ok = pcall(function()
-            PetEggService:FireServer("CreateEgg", pos)
-        end)
-    end
-    
-    task.wait(CONFIG.placeDelay)
-    return ok
+    return emptySlots, occupied
 end
 
 local function skipHatch(eggModel)
@@ -387,92 +364,60 @@ local lastLoadoutSlot = nil
 
 local function swapLoadout(slotNumber)
     if not slotNumber then return false end
-    
     print("[Loadout] Swap ke slot " .. slotNumber)
     pcall(function()
         PetsServiceRE:FireServer("SwapPetLoadout", slotNumber)
     end)
-    
-    -- Tunggu server load
     task.wait(CONFIG.delayAfterLoadout)
     return true
 end
 
--- Cek apakah equipped pet sesuai preset
 local function verifyEquippedMatchesPreset(presetName)
     if not presetName then return true, {}, {} end
-    
     local expectedUUIDs = getPresetUUIDs(presetName)
     local equippedUUIDs = getEquippedPets()
     
     local equippedSet = {}
-    for _, uuid in ipairs(equippedUUIDs) do
-        equippedSet[uuid] = true
-    end
-    
+    for _, uuid in ipairs(equippedUUIDs) do equippedSet[uuid] = true end
     local presetSet = {}
-    for _, uuid in ipairs(expectedUUIDs) do
-        presetSet[uuid] = true
-    end
+    for _, uuid in ipairs(expectedUUIDs) do presetSet[uuid] = true end
     
     local toUnequip = {}
     for _, uuid in ipairs(equippedUUIDs) do
-        if not presetSet[uuid] then
-            table.insert(toUnequip, uuid)
-        end
+        if not presetSet[uuid] then table.insert(toUnequip, uuid) end
     end
-    
     local toEquip = {}
     for _, uuid in ipairs(expectedUUIDs) do
-        if not equippedSet[uuid] then
-            table.insert(toEquip, uuid)
-        end
+        if not equippedSet[uuid] then table.insert(toEquip, uuid) end
     end
     
-    local isMatch = (#toUnequip == 0 and #toEquip == 0)
-    return isMatch, toUnequip, toEquip
+    return (#toUnequip == 0 and #toEquip == 0), toUnequip, toEquip
 end
 
--- Fix equipped supaya sesuai preset
 local function fixEquippedToMatchPreset(presetName)
     local isMatch, toUnequip, toEquip = verifyEquippedMatchesPreset(presetName)
-    
-    if isMatch then
-        print("[Fix] ✅ Equipped sudah sesuai")
-        return true
-    end
+    if isMatch then return true end
     
     print(string.format("[Fix] %d unequip, %d equip", #toUnequip, #toEquip))
-    
-    -- Unequip yang tidak sesuai
     for _, uuid in ipairs(toUnequip) do
         pcall(function() PetsService:UnequipPet(uuid) end)
         task.wait(CONFIG.equipDelay)
     end
-    
-    -- Equip yang belum
     for _, uuid in ipairs(toEquip) do
         if isPetUUIDValid(uuid) then
             pcall(function() PetsService:EquipPet(uuid, CFrame.new(0, 10, 0)) end)
             task.wait(CONFIG.equipDelay)
         end
     end
-    
     task.wait(CONFIG.syncWaitTime)
-    
     local isMatch2 = verifyEquippedMatchesPreset(presetName)
     return isMatch2
 end
 
--- Fungsi utama: equip team via loadout swap
 local function equipTeamByPreset(presetName, loadoutSlot, forceRefresh)
     if not presetName then return false end
-    if not loadoutSlot then
-        warn("[Equip] loadoutSlot tidak ada")
-        return false
-    end
+    if not loadoutSlot then return false end
     
-    -- Skip kalau loadout sama
     if not forceRefresh and lastLoadoutSlot == loadoutSlot then
         local isMatch = verifyEquippedMatchesPreset(presetName)
         if isMatch then
@@ -481,38 +426,28 @@ local function equipTeamByPreset(presetName, loadoutSlot, forceRefresh)
         end
     end
     
-    -- Swap loadout
     swapLoadout(loadoutSlot)
     lastLoadoutSlot = loadoutSlot
     
-    -- Verifikasi
     local isMatch, toUnequip, toEquip = verifyEquippedMatchesPreset(presetName)
-    
     if isMatch then
-        print("[Loadout] ✅ Cocok dengan preset " .. presetName)
+        print("[Loadout] ✅ Cocok dengan " .. presetName)
         return true
     end
     
-    print(string.format("[Loadout] ⚠️ Mismatch: %d unequip, %d equip", 
-        #toUnequip, #toEquip))
+    print(string.format("[Loadout] ⚠️ Mismatch: %d unequip, %d equip", #toUnequip, #toEquip))
     fixEquippedToMatchPreset(presetName)
-    
     return true
 end
 
 -- ==================================================================
--- HELPER: FAVORIT
+-- HELPER: FAVORIT & UNWANTED
 -- ==================================================================
 local function toggleFavorit(tool)
-    pcall(function()
-        FavoriteItemRE:FireServer(tool)
-    end)
+    pcall(function() FavoriteItemRE:FireServer(tool) end)
     task.wait(0.15)
 end
 
--- ==================================================================
--- HELPER: UNWANTED
--- ==================================================================
 local function isUnwantedPet(pet)
     if not CONFIG.unwantedPetTypes[pet.name] then return false end
     if pet.weight > CONFIG.maxWeight then return false end
@@ -520,13 +455,8 @@ local function isUnwantedPet(pet)
     return true
 end
 
--- ==================================================================
--- HELPER: SELL
--- ==================================================================
 local function sellAll()
-    pcall(function()
-        SellAllRE:FireServer()
-    end)
+    pcall(function() SellAllRE:FireServer() end)
     task.wait(3)
 end
 
@@ -545,50 +475,115 @@ local function updateStatus(text)
 end
 
 -- ==================================================================
--- FASE 1: PLACE EGG
+-- FASE 1: PLACE EGG — SCAN → PLACE KE SLOT KOSONG
 -- ==================================================================
 local function placeEggsFromBackpack()
-    local placed = 0
-    local maxAttempts = 20
+    local totalSlots = #CONFIG.eggGridOffsets
     
-    for attempt = 1, maxAttempts do
-        if not isRunning then break end
-        
-        local nextSlot = getNextFreeSlot()
-        if not nextSlot then
-            updateStatus("⚠️ Garden penuh")
-            break
+    -- =========================================
+    -- STEP 1: Tunggu server settle
+    -- =========================================
+    task.wait(CONFIG.scanSettleDelay)
+    
+    -- =========================================
+    -- STEP 2: SCAN slot — snapshot keadaan garden
+    -- =========================================
+    local emptySlots, occupied = getEmptySlots()
+    
+    print("[Place] === SCAN SLOT ===")
+    for i = 1, totalSlots do
+        if occupied[i] then
+            print(string.format("[Place]   Slot %d: TERISI", i))
+        else
+            print(string.format("[Place]   Slot %d: KOSONG", i))
         end
-        
-        local backpack = player:FindFirstChild("Backpack")
-        if not backpack then break end
-        
-        local foundTool = nil
+    end
+    
+    if #emptySlots == 0 then
+        updateStatus("⚠️ Garden penuh")
+        return 0
+    end
+    
+    updateStatus(string.format("📦 %d slot kosong", #emptySlots))
+    
+    -- =========================================
+    -- STEP 3: Cek egg tool
+    -- =========================================
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return 0 end
+    
+    local function findEggTool()
         for _, tool in ipairs(backpack:GetChildren()) do
             if isEggTool(tool) then
                 local eggName = tool:GetAttribute("h")
                 local count = tool:GetAttribute("e") or 0
                 if count > 0 and (next(CONFIG.selectedEggs) == nil or CONFIG.selectedEggs[eggName]) then
-                    foundTool = tool
-                    break
+                    return tool
                 end
             end
         end
+        return nil
+    end
+    
+    local eggTool = findEggTool()
+    if not eggTool then
+        updateStatus("⚠️ Tidak ada egg")
+        return 0
+    end
+    
+    -- =========================================
+    -- STEP 4: Equip egg tool
+    -- =========================================
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return 0 end
+    
+    pcall(function() humanoid:EquipTool(eggTool) end)
+    task.wait(0.5)
+    
+    -- =========================================
+    -- STEP 5: Place HANYA ke slot kosong
+    -- =========================================
+    local center = getCenterPoint()
+    if not center then return 0 end
+    
+    local placed = 0
+    
+    print("[Place] === PLACE KE SLOT KOSONG ===")
+    for _, slotIndex in ipairs(emptySlots) do
+        if not isRunning then break end
         
-        if not foundTool then
-            updateStatus("✅ Egg habis")
+        local currentEggTool = findEggTool()
+        if not currentEggTool then
+            print("[Place] Egg habis")
             break
         end
         
-        if placeEggAtSlot(nextSlot, foundTool) then
-            placed = placed + 1
-            updateStatus(string.format("📦 Place %d egg...", placed))
+        -- Equip kalau belum
+        local equippedTool = character:FindFirstChild(currentEggTool.Name)
+        if not equippedTool then
+            pcall(function() humanoid:EquipTool(currentEggTool) end)
             task.wait(0.5)
+        end
+        
+        -- Place
+        local pos = center.Position + CONFIG.eggGridOffsets[slotIndex]
+        print(string.format("[Place] Place slot %d: %s", slotIndex, tostring(pos)))
+        
+        local ok = pcall(function()
+            PetEggService:FireServer("CreateEgg", pos)
+        end)
+        
+        if ok then
+            placed = placed + 1
+            updateStatus(string.format("📦 Place %d/%d (slot %d)", placed, #emptySlots, slotIndex))
+            task.wait(CONFIG.placeDelay)
         else
-            break
+            print("[Place] Gagal slot " .. slotIndex)
         end
     end
     
+    print(string.format("[Place] Total: %d egg", placed))
     return placed
 end
 
@@ -605,7 +600,6 @@ local function runOneCycle(cycleNum, totalCycles)
     
     if placed == 0 then
         updateStatus(string.format("[%d/%d] ⚠️ Garden penuh, cek timer...", cycleNum, totalCycles))
-        
         if #existingEggs == 0 then
             updateStatus(string.format("[%d/%d] ⚠️ Tidak ada egg", cycleNum, totalCycles))
             return false
@@ -615,11 +609,8 @@ local function runOneCycle(cycleNum, totalCycles)
         local readyCount = 0
         for _, egg in ipairs(existingEggs) do
             local t = egg:GetAttribute("TimeToHatch") or 999
-            if t > 0 then
-                allReady = false
-            else
-                readyCount = readyCount + 1
-            end
+            if t > 0 then allReady = false
+            else readyCount = readyCount + 1 end
         end
         
         if allReady then
@@ -633,7 +624,7 @@ local function runOneCycle(cycleNum, totalCycles)
     
     task.wait(2)
     
-    -- FASE 2: Tim Speed (skip kalau semua ready)
+    -- FASE 2: Tim Speed
     if not allReady then
         updateStatus(string.format("[%d/%d] ⚡ Tim Speed...", cycleNum, totalCycles))
         equipTeamByPreset(CONFIG.speedPreset, CONFIG.speedLoadout)
@@ -679,14 +670,11 @@ local function runOneCycle(cycleNum, totalCycles)
     equipTeamByPreset(CONFIG.hatchPreset, CONFIG.hatchLoadout)
     task.wait(CONFIG.delayAfterHatch)
     
-    -- Hatch
     updateStatus(string.format("[%d/%d] 🥚 Hatch...", cycleNum, totalCycles))
     local eggsToHatch = {}
     for _, egg in ipairs(getMyGardenEggs()) do
         local t = egg:GetAttribute("TimeToHatch") or 999
-        if t <= 0 then
-            table.insert(eggsToHatch, egg)
-        end
+        if t <= 0 then table.insert(eggsToHatch, egg) end
     end
     
     for _, egg in ipairs(eggsToHatch) do
@@ -695,16 +683,12 @@ local function runOneCycle(cycleNum, totalCycles)
         task.wait(CONFIG.hatchDelay)
     end
     
-    -- Tunggu tidak ada egg timer ≤ 0
     local timeout = os.clock() + 60
     while isRunning and os.clock() < timeout do
         local hasReadyEgg = false
         for _, egg in ipairs(getMyGardenEggs()) do
             local t = egg:GetAttribute("TimeToHatch") or 999
-            if t <= 0 then
-                hasReadyEgg = true
-                break
-            end
+            if t <= 0 then hasReadyEgg = true break end
         end
         if not hasReadyEgg then break end
         task.wait(1)
@@ -721,12 +705,10 @@ end
 local function runFilterAndSell()
     if not CONFIG.autoSell then return end
     
-    -- STEP 1: Tim Sell (via loadout)
     updateStatus("💸 Tim Sell...")
     equipTeamByPreset(CONFIG.sellPreset, CONFIG.sellLoadout)
     task.wait(CONFIG.delayAfterSell)
     
-    -- STEP 2: Filter
     updateStatus("⭐ Filter pet...")
     local favCount = 0
     local unfavCount = 0
@@ -743,7 +725,6 @@ local function runFilterAndSell()
             end
         else
             local unwanted = isUnwantedPet(pet)
-            
             if not unwanted then
                 if not pet.isFavorited then
                     toggleFavorit(pet.tool)
@@ -763,7 +744,6 @@ local function runFilterAndSell()
         presetProtectCount, favCount, unfavCount, skipCount))
     task.wait(2)
     
-    -- STEP 3: Double check
     updateStatus("🔍 Verifikasi...")
     task.wait(1)
     
@@ -797,11 +777,9 @@ local function runFilterAndSell()
         updateStatus("✅ Verifikasi OK")
     end
     
-    -- STEP 4: Delay
     updateStatus("⏳ Delay sebelum sell...")
     task.wait(CONFIG.delayBeforeSell)
     
-    -- STEP 5: Sell
     updateStatus("💰 Sell all...")
     sellAll()
     task.wait(2)
@@ -879,7 +857,7 @@ Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
 titleLabel.Position = UDim2.new(0, 12, 0, 0)
-titleLabel.Text = "🥚 Auto Hatch v7.0"
+titleLabel.Text = "🥚 Auto Hatch v8.0"
 titleLabel.TextColor3 = C.text
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 11
@@ -1138,7 +1116,6 @@ mainLayout.Padding = UDim.new(0, 6)
 mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
 mainLayout.Parent = mainScroll
 
--- Preset Section (untuk verifikasi)
 local presetSection = makeSection(mainScroll, "🐾 Preset Tim (Verifikasi)", 145, 1)
 
 local function makeDropdown(parent, yPos, label, configKey)
@@ -1199,13 +1176,11 @@ makeDropdown(presetSection, 26, "⚡ Speed (Loadout 1)", "speedPreset")
 makeDropdown(presetSection, 68, "🥚 Hatch (Loadout 2)", "hatchPreset")
 makeDropdown(presetSection, 110, "💸 Sell (Loadout 3)", "sellPreset")
 
--- Cycle Section
 local cycleSection = makeSection(mainScroll, "🔁 Cycle", 100, 2)
 makeInputRow(cycleSection, 26, "Jumlah cycle:", "cycleCount", true, 1, 50)
 makeToggle(cycleSection, 50, "⚡ Auto Skip: ON", "⚡ Auto Skip: OFF", "autoSkip")
 makeToggle(cycleSection, 74, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
 
--- Control Section
 local controlSection = makeSection(mainScroll, nil, 60, 3)
 
 local startBtn = Instance.new("TextButton")
@@ -1378,7 +1353,7 @@ local delayLayout = Instance.new("UIListLayout")
 delayLayout.Padding = UDim.new(0, 6)
 delayLayout.Parent = delayScroll
 
-local delaySection = makeSection(delayScroll, "⏱️ Delay Settings (detik)", 270, 1)
+local delaySection = makeSection(delayScroll, "⏱️ Delay Settings (detik)", 300, 1)
 makeInputRow(delaySection, 26, "Setelah Loadout Swap:", "delayAfterLoadout", true, 0, 30)
 makeInputRow(delaySection, 50, "Setelah Tim Speed:", "delayAfterSpeed", true, 0, 30)
 makeInputRow(delaySection, 74, "Setelah Tim Hatch:", "delayAfterHatch", true, 0, 30)
@@ -1388,11 +1363,12 @@ makeInputRow(delaySection, 146, "Antar Hatch:", "hatchDelay", true, 0, 30)
 makeInputRow(delaySection, 170, "Antar Skip:", "skipDelay", true, 0, 30)
 makeInputRow(delaySection, 194, "Place Egg:", "placeDelay", true, 0, 30)
 makeInputRow(delaySection, 218, "Equip/Unequip Fix:", "equipDelay", true, 0, 10)
+makeInputRow(delaySection, 242, "Scan Settle Delay:", "scanSettleDelay", true, 0, 10)
 
 local delayInfo = Instance.new("TextLabel")
 delayInfo.Size = UDim2.new(1, -20, 0, 24)
-delayInfo.Position = UDim2.new(0, 10, 0, 242)
-delayInfo.Text = "💡 Loadout Swap = 6 detik, naikkan kalau server lag"
+delayInfo.Position = UDim2.new(0, 10, 0, 266)
+delayInfo.Text = "💡 Scan Settle = tunggu sebelum scan slot"
 delayInfo.TextColor3 = C.textDim
 delayInfo.Font = Enum.Font.Gotham
 delayInfo.TextSize = 7
@@ -1523,6 +1499,6 @@ refreshEggList()
 refreshUnwantedList()
 switchTab("Main")
 
-print("✅ Auto Hatch GUI v7.0 loaded!")
-print("   • Sistem: Swap Loadout (1=Speed, 2=Hatch, 3=Sell)")
-print("   • Delay loadout: " .. CONFIG.delayAfterLoadout .. "s")
+print("✅ Auto Hatch GUI v8.0 loaded!")
+print("   • Scan slot → Place ke slot kosong")
+print("   • Loadout 1=Speed, 2=Hatch, 3=Sell")
