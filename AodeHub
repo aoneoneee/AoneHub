@@ -220,20 +220,41 @@ local function isPetTool(tool)
     return tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet"
 end
 
-local function getBackpackEggs()
-    local eggs = {}
-    local backpack = player:FindFirstChild("Backpack")
-    if not backpack then return eggs end
-    for _, tool in ipairs(backpack:GetChildren()) do
-        if isEggTool(tool) then
-            local name = tool:GetAttribute("h")
-            local count = tool:GetAttribute("e") or 0
-            if name and count > 0 then
-                table.insert(eggs, { tool = tool, name = name, count = count })
+local function getBackpackPets()
+    local pets = {}
+    local seen = {}  -- ⭐ biar tidak dobel
+    
+    -- Kumpulkan container: backpack + character
+    local locations = {}
+    if player:FindFirstChild("Backpack") then
+        table.insert(locations, player.Backpack)
+    end
+    if player.Character then
+        table.insert(locations, player.Character)
+    end
+    
+    for _, container in ipairs(locations) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if isPetTool(tool) then
+                -- Skip kalau sudah diproses
+                if not seen[tool] then
+                    seen[tool] = true
+                    local name, weight, level = parsePetName(tool.Name)
+                    if name then
+                        table.insert(pets, {
+                            tool = tool,
+                            name = name,
+                            weight = weight,
+                            level = level,
+                            isFavorited = tool:GetAttribute("d") == true,
+                            location = container.Name,  -- ⭐ info lokasi
+                        })
+                    end
+                end
             end
         end
     end
-    return eggs
+    return pets
 end
 
 local function parsePetName(toolName)
@@ -730,32 +751,45 @@ end
 local function runFilterAndSell()
     if not CONFIG.autoSell then return end
     
+    -- =========================================
+    -- STEP 1: Tim Sell
+    -- =========================================
     updateStatus("💸 Tim Sell...")
     equipTeamByPreset(CONFIG.sellPreset, CONFIG.sellLoadout)
     task.wait(CONFIG.delayAfterSell)
     
+    -- =========================================
+    -- STEP 2: Filter pet (backpack + tangan)
+    -- =========================================
     updateStatus("⭐ Filter pet...")
     local favCount = 0
     local unfavCount = 0
     local skipCount = 0
     local presetProtectCount = 0
     
-    for _, pet in ipairs(getBackpackPets()) do
+    local pets = getBackpackPets()  -- sekarang cek backpack + tangan
+    print(string.format("[Filter] Total pet: %d", #pets))
+    
+    for _, pet in ipairs(pets) do
         if not isRunning then return end
         
         if isPetInPreset(pet.name) then
+            -- Pet preset → amankan dengan favorit
             if not pet.isFavorited then
                 toggleFavorit(pet.tool)
                 presetProtectCount = presetProtectCount + 1
             end
         else
             local unwanted = isUnwantedPet(pet)
+            
             if not unwanted then
+                -- Bukan unwanted → favorit
                 if not pet.isFavorited then
                     toggleFavorit(pet.tool)
                     favCount = favCount + 1
                 end
             else
+                -- Unwanted → unfavorit (biar dijual)
                 if pet.isFavorited then
                     toggleFavorit(pet.tool)
                     unfavCount = unfavCount + 1
@@ -769,6 +803,9 @@ local function runFilterAndSell()
         presetProtectCount, favCount, unfavCount, skipCount))
     task.wait(2)
     
+    -- =========================================
+    -- STEP 3: Double check
+    -- =========================================
     updateStatus("🔍 Verifikasi...")
     task.wait(1)
     
@@ -802,6 +839,9 @@ local function runFilterAndSell()
         updateStatus("✅ Verifikasi OK")
     end
     
+    -- =========================================
+    -- STEP 4: Sell
+    -- =========================================
     updateStatus("⏳ Delay sebelum sell...")
     task.wait(CONFIG.delayBeforeSell)
     
