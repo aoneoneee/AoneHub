@@ -503,63 +503,106 @@ local function placeEggsFromBackpack()
 end
 
 -- ==================================================================
--- FASE 2: SATU CYCLE
+-- CORE: SATU CYCLE (dengan smart garden-penuh check)
 -- ==================================================================
 local function runOneCycle(cycleNum, totalCycles)
-    -- 1. PLACE EGG
+    -- =========================================
+    -- FASE 1: PLACE EGG
+    -- =========================================
     updateStatus(string.format("[%d/%d] 📦 Place egg...", cycleNum, totalCycles))
     local placed = placeEggsFromBackpack()
+    
+    -- Cek kondisi garden
+    local allReady = false
+    local existingEggs = getMyGardenEggs()
+    
     if placed == 0 then
-        updateStatus(string.format("[%d/%d] ⚠️ Tidak ada egg", cycleNum, totalCycles))
-        return false
-    end
-    updateStatus(string.format("[%d/%d] ✅ %d egg", cycleNum, totalCycles, placed))
-    task.wait(2)
-    
-    -- 2. TIM SPEED
-    updateStatus(string.format("[%d/%d] ⚡ Tim Speed...", cycleNum, totalCycles))
-    equipTeamByPreset(CONFIG.speedPreset)
-    task.wait(CONFIG.delayAfterSpeed)
-    
-    -- 3. TUNGGU SEMUA EGG READY
-    updateStatus(string.format("[%d/%d] ⏳ Menunggu ready...", cycleNum, totalCycles))
-    local waitStart = os.clock()
-    local maxWait = 900
-    
-    while (os.clock() - waitStart) < maxWait and isRunning do
-        local eggs = getMyGardenEggs()
-        if #eggs == 0 then break end
+        -- Garden penuh — cek kondisi egg
+        updateStatus(string.format("[%d/%d] ⚠️ Garden penuh, cek timer...", cycleNum, totalCycles))
         
-        local allReady = true
+        if #existingEggs == 0 then
+            updateStatus(string.format("[%d/%d] ⚠️ Tidak ada egg sama sekali", cycleNum, totalCycles))
+            return false
+        end
+        
+        -- Cek apakah semua egg ready (timer ≤ 0)
+        allReady = true
         local readyCount = 0
-        for _, egg in ipairs(eggs) do
-            local t = egg:GetAttribute("TimeToHatch") or 0
+        for _, egg in ipairs(existingEggs) do
+            local t = egg:GetAttribute("TimeToHatch") or 999
             if t > 0 then
                 allReady = false
-                if CONFIG.autoSkip then
-                    skipHatch(egg)
-                    task.wait(CONFIG.skipDelay)
-                end
             else
                 readyCount = readyCount + 1
             end
         end
         
-        if allReady then break end
-        updateStatus(string.format("[%d/%d] ⏳ %d/%d ready", cycleNum, totalCycles, readyCount, #eggs))
-        task.wait(3)
+        if allReady then
+            updateStatus(string.format("[%d/%d] ✅ %d egg semua ready, skip Speed!", 
+                cycleNum, totalCycles, readyCount))
+        else
+            updateStatus(string.format("[%d/%d] ⏳ %d/%d ready, perlu Speed", 
+                cycleNum, totalCycles, readyCount, #existingEggs))
+        end
+    else
+        updateStatus(string.format("[%d/%d] ✅ %d egg di-place", cycleNum, totalCycles, placed))
     end
     
-    if not isRunning then return false end
-    updateStatus(string.format("[%d/%d] ✅ Semua ready!", cycleNum, totalCycles))
-    task.wait(1)
+    task.wait(2)
     
-    -- 4. TIM HATCH
+    -- =========================================
+    -- FASE 2: TIM SPEED (skip kalau semua sudah ready)
+    -- =========================================
+    if not allReady then
+        updateStatus(string.format("[%d/%d] ⚡ Tim Speed...", cycleNum, totalCycles))
+        equipTeamByPreset(CONFIG.speedPreset)
+        task.wait(CONFIG.delayAfterSpeed)
+        
+        -- Tunggu semua egg ready
+        updateStatus(string.format("[%d/%d] ⏳ Menunggu ready...", cycleNum, totalCycles))
+        local waitStart = os.clock()
+        local maxWait = 900
+        
+        while (os.clock() - waitStart) < maxWait and isRunning do
+            local eggs = getMyGardenEggs()
+            if #eggs == 0 then break end
+            
+            local readyAll = true
+            local readyCount = 0
+            for _, egg in ipairs(eggs) do
+                local t = egg:GetAttribute("TimeToHatch") or 0
+                if t > 0 then
+                    readyAll = false
+                    if CONFIG.autoSkip then
+                        skipHatch(egg)
+                        task.wait(CONFIG.skipDelay)
+                    end
+                else
+                    readyCount = readyCount + 1
+                end
+            end
+            
+            if readyAll then break end
+            updateStatus(string.format("[%d/%d] ⏳ %d/%d ready", cycleNum, totalCycles, readyCount, #eggs))
+            task.wait(3)
+        end
+        
+        if not isRunning then return false end
+        updateStatus(string.format("[%d/%d] ✅ Semua ready!", cycleNum, totalCycles))
+        task.wait(1)
+    else
+        -- Sudah ready dari awal, skip Speed
+        updateStatus(string.format("[%d/%d] ⏭️ Skip Speed (semua ready)", cycleNum, totalCycles))
+    end
+    
+    -- =========================================
+    -- FASE 3: TIM HATCH
+    -- =========================================
     updateStatus(string.format("[%d/%d] 🥚 Tim Hatch...", cycleNum, totalCycles))
     equipTeamByPreset(CONFIG.hatchPreset)
     task.wait(CONFIG.delayAfterHatch)
     
-    -- 5. HATCH SEMUA
+    -- Hatch semua egg yang timer ≤ 0
     updateStatus(string.format("[%d/%d] 🥚 Hatch...", cycleNum, totalCycles))
     local eggsToHatch = {}
     for _, egg in ipairs(getMyGardenEggs()) do
@@ -575,7 +618,7 @@ local function runOneCycle(cycleNum, totalCycles)
         task.wait(CONFIG.hatchDelay)
     end
     
-    -- Tunggu sampai tidak ada egg timer ≤ 0 (abaikan auto-spawn dengan timer > 0)
+    -- Tunggu sampai tidak ada egg timer ≤ 0 (abaikan auto-spawn)
     local timeout = os.clock() + 60
     while isRunning and os.clock() < timeout do
         local hasReadyEgg = false
