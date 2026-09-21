@@ -1,10 +1,12 @@
 -- ==================================================================
--- AUTO HATCH GUI v9.0 — FINAL
--- Fix:
---   • Place egg: scan slot → place ke slot kosong (egg di tangan / backpack)
---   • Filter pet: cek backpack + tangan (biar tidak ada yang ke-sell)
---   • Loadout swap: 1=Speed, 2=Hatch, 3=Sell
---   • Verifikasi loadout + auto-fix mismatch
+-- AUTO HATCH GUI v10.0 — FINAL
+-- Perubahan dari v9.0:
+--   • Hapus Auto Skip & skipDelay
+--   • Hapus delayAfterSpeed/Hatch/Sell, delayBeforeSell, equipDelay, syncWaitTime dari GUI
+--     (nilai tetap default di CONFIG)
+--   • Tambah delay 2s setelah hatch semua sebelum ganti loadout
+--   • Hapus unfavorit di filter (biarkan manual)
+--   • Tunggu konfirmasi favorit + final check sebelum sell
 -- ==================================================================
 
 local Players = game:GetService("Players")
@@ -60,21 +62,22 @@ local CONFIG = {
     
     selectedEggs = {},
     cycleCount = 1,
-    autoSkip = true,
     autoSell = true,
     
-    -- Delay
+    -- ⭐ Delay DEFAULT (tidak di GUI, kecuali yang tetap di GUI)
+    delayAfterLoadout = 6.0,      -- tetap di GUI
+    hatchDelay = 1.5,             -- tetap di GUI
+    placeDelay = 1.5,             -- tetap di GUI
+    scanSettleDelay = 1.5,        -- tetap di GUI
+    delayAfterHatchAll = 2.0,     -- tetap di GUI (BARU)
+    
+    -- Nilai internal (tidak di GUI)
     delayAfterSpeed = 2.0,
     delayAfterHatch = 3.0,
     delayAfterSell = 2.0,
     delayBeforeSell = 3.0,
-    delayAfterLoadout = 6.0,
-    hatchDelay = 1.5,
-    skipDelay = 0.8,
-    placeDelay = 1.5,
     equipDelay = 0.4,
     syncWaitTime = 2.0,
-    scanSettleDelay = 1.5,
     
     -- Filter
     maxWeight = 3.5,
@@ -196,12 +199,6 @@ local function getEmptySlots()
     return emptySlots, occupied
 end
 
-local function skipHatch(eggModel)
-    pcall(function()
-        PetEggService:FireServer("AuthorisePurchase", eggModel)
-    end)
-end
-
 local function hatchEgg(eggModel)
     pcall(function()
         PetEggService:FireServer("HatchPet", eggModel)
@@ -209,7 +206,7 @@ local function hatchEgg(eggModel)
 end
 
 -- ==================================================================
--- HELPER: BACKPACK (EGG + PET)
+-- HELPER: BACKPACK
 -- ==================================================================
 local function isEggTool(tool)
     return tool:IsA("Tool") and tool:GetAttribute("b") == "c"
@@ -219,7 +216,6 @@ local function isPetTool(tool)
     return tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet"
 end
 
--- ⭐ Cari egg di backpack + tangan
 local function findEggTool()
     local locations = {}
     local backpack = player:FindFirstChild("Backpack")
@@ -232,7 +228,6 @@ local function findEggTool()
                 local eggName = tool:GetAttribute("h")
                 local count = tool:GetAttribute("e") or 0
                 
-                -- Cek apakah egg ini dipilih
                 local isSelected = false
                 if next(CONFIG.selectedEggs) == nil then
                     isSelected = true
@@ -254,7 +249,6 @@ local function findEggTool()
     return nil
 end
 
--- ⭐ Cek egg types di backpack (untuk UI)
 local function getBackpackEggs()
     local eggs = {}
     local backpack = player:FindFirstChild("Backpack")
@@ -271,7 +265,6 @@ local function getBackpackEggs()
     return eggs
 end
 
--- ⭐ Parse nama pet: "Nama Pet [2.43 KG] [Age 1]"
 local function parsePetName(toolName)
     local name, weight, level = toolName:match("^(.+) %[([%d%.]+) KG%] %[Age (%d+)%]$")
     if not name then
@@ -287,7 +280,6 @@ local function parsePetName(toolName)
     return nil, 0, 0
 end
 
--- ⭐ Cari pet di backpack + tangan
 local function getBackpackPets()
     local pets = {}
     local seen = {}
@@ -487,13 +479,37 @@ local function equipTeamByPreset(presetName, loadoutSlot, forceRefresh)
 end
 
 -- ==================================================================
--- HELPER: FAVORIT & UNWANTED
+-- HELPER: FAVORIT (TUNGGU KONFIRMASI)
 -- ==================================================================
-local function toggleFavorit(tool)
+local function ensureFavorit(tool, shouldBeFavorite, timeout)
+    timeout = timeout or 2
+    local current = tool:GetAttribute("d") == true
+    
+    -- Sudah sesuai → skip
+    if current == shouldBeFavorite then
+        return true
+    end
+    
+    -- Fire toggle
     pcall(function() FavoriteItemRE:FireServer(tool) end)
-    task.wait(0.15)
+    
+    -- Tunggu konfirmasi
+    local startTime = os.clock()
+    while os.clock() - startTime < timeout do
+        if (tool:GetAttribute("d") == true) == shouldBeFavorite then
+            return true
+        end
+        task.wait(0.1)
+    end
+    
+    warn(string.format("[Favorit] Timeout: %s (expected %s, got %s)", 
+        tool.Name, tostring(shouldBeFavorite), tostring(tool:GetAttribute("d"))))
+    return false
 end
 
+-- ==================================================================
+-- HELPER: UNWANTED
+-- ==================================================================
 local function isUnwantedPet(pet)
     if not CONFIG.unwantedPetTypes[pet.name] then return false end
     if pet.weight > CONFIG.maxWeight then return false end
@@ -528,7 +544,6 @@ local function placeEggsFromBackpack()
     
     task.wait(CONFIG.scanSettleDelay)
     
-    -- SCAN SLOT
     local emptySlots, occupied = getEmptySlots()
     
     print("[Place] === SCAN ===")
@@ -546,7 +561,6 @@ local function placeEggsFromBackpack()
     
     updateStatus(string.format("📦 %d slot kosong", #emptySlots))
     
-    -- Cari egg tool
     local eggTool = findEggTool()
     if not eggTool then
         updateStatus("⚠️ Tidak ada egg yang dipilih")
@@ -562,13 +576,11 @@ local function placeEggsFromBackpack()
         eggTool:GetAttribute("e"),
         eggTool.Parent and eggTool.Parent.Name or "?"))
     
-    -- Equip kalau egg di backpack
     if eggTool.Parent == backpack and humanoid then
         pcall(function() humanoid:EquipTool(eggTool) end)
         task.wait(0.5)
     end
     
-    -- Place ke slot kosong
     local center = getCenterPoint()
     if not center then return 0 end
     
@@ -578,20 +590,17 @@ local function placeEggsFromBackpack()
     for _, slotIndex in ipairs(emptySlots) do
         if not isRunning then break end
         
-        -- Cek egg tool masih ada
         local currentEggTool = findEggTool()
         if not currentEggTool then
             print("[Place] Egg habis")
             break
         end
         
-        -- Kalau tool beda & di backpack, equip
         if currentEggTool.Parent == backpack and humanoid then
             pcall(function() humanoid:EquipTool(currentEggTool) end)
             task.wait(0.5)
         end
         
-        -- Place
         local pos = center.Position + CONFIG.eggGridOffsets[slotIndex]
         print(string.format("[Place] Slot %d | Egg: %s (e=%d)",
             slotIndex,
@@ -671,10 +680,6 @@ local function runOneCycle(cycleNum, totalCycles)
                 local t = egg:GetAttribute("TimeToHatch") or 0
                 if t > 0 then
                     readyAll = false
-                    if CONFIG.autoSkip then
-                        skipHatch(egg)
-                        task.wait(CONFIG.skipDelay)
-                    end
                 else
                     readyCount = readyCount + 1
                 end
@@ -710,6 +715,7 @@ local function runOneCycle(cycleNum, totalCycles)
         task.wait(CONFIG.hatchDelay)
     end
     
+    -- Tunggu tidak ada egg timer ≤ 0
     local timeout = os.clock() + 60
     while isRunning and os.clock() < timeout do
         local hasReadyEgg = false
@@ -720,6 +726,11 @@ local function runOneCycle(cycleNum, totalCycles)
         if not hasReadyEgg then break end
         task.wait(1)
     end
+    
+    -- ⭐ DELAY SETELAH HATCH SEMUA (sebelum ganti loadout)
+    updateStatus(string.format("[%d/%d] ⏳ Delay %ss sebelum lanjut...", 
+        cycleNum, totalCycles, CONFIG.delayAfterHatchAll))
+    task.wait(CONFIG.delayAfterHatchAll)
     
     updateStatus(string.format("[%d/%d] ✅ Cycle selesai", cycleNum, totalCycles))
     task.wait(2)
@@ -732,84 +743,86 @@ end
 local function runFilterAndSell()
     if not CONFIG.autoSell then return end
     
+    -- =========================================
+    -- STEP 1: Tim Sell
+    -- =========================================
     updateStatus("💸 Tim Sell...")
     equipTeamByPreset(CONFIG.sellPreset, CONFIG.sellLoadout)
     task.wait(CONFIG.delayAfterSell)
     
+    -- =========================================
+    -- STEP 2: Filter pet (favorit + tunggu konfirmasi)
+    -- =========================================
     updateStatus("⭐ Filter pet...")
+    local pets = getBackpackPets()
+    print(string.format("[Filter] Total pet: %d", #pets))
+    
     local favCount = 0
-    local unfavCount = 0
     local skipCount = 0
     local presetProtectCount = 0
-    
-    local pets = getBackpackPets()
-    print(string.format("[Filter] Total pet (backpack + tangan): %d", #pets))
+    local timeoutCount = 0
     
     for _, pet in ipairs(pets) do
         if not isRunning then return end
         
-        if isPetInPreset(pet.name) then
-            if not pet.isFavorited then
-                toggleFavorit(pet.tool)
-                presetProtectCount = presetProtectCount + 1
-            end
-        else
-            local unwanted = isUnwantedPet(pet)
-            if not unwanted then
-                if not pet.isFavorited then
-                    toggleFavorit(pet.tool)
+        local shouldBeFav = isPetInPreset(pet.name) or not isUnwantedPet(pet)
+        
+        if shouldBeFav then
+            -- Favorit + tunggu konfirmasi
+            local ok = ensureFavorit(pet.tool, true)
+            if ok then
+                if isPetInPreset(pet.name) then
+                    presetProtectCount = presetProtectCount + 1
+                else
                     favCount = favCount + 1
                 end
             else
-                if pet.isFavorited then
-                    toggleFavorit(pet.tool)
-                    unfavCount = unfavCount + 1
-                end
-                skipCount = skipCount + 1
-            end
-        end
-    end
-    
-    updateStatus(string.format("⭐ Preset:%d Fav:%d Unfav:%d Skip:%d", 
-        presetProtectCount, favCount, unfavCount, skipCount))
-    task.wait(2)
-    
-    updateStatus("🔍 Verifikasi...")
-    task.wait(1)
-    
-    local verifyFail = 0
-    for _, pet in ipairs(getBackpackPets()) do
-        if isPetInPreset(pet.name) then
-            if not pet.isFavorited then
-                verifyFail = verifyFail + 1
-                toggleFavorit(pet.tool)
+                timeoutCount = timeoutCount + 1
             end
         else
-            local unwanted = isUnwantedPet(pet)
-            if not unwanted then
-                if not pet.isFavorited then
-                    verifyFail = verifyFail + 1
-                    toggleFavorit(pet.tool)
-                end
-            else
-                if pet.isFavorited then
-                    verifyFail = verifyFail + 1
-                    toggleFavorit(pet.tool)
-                end
-            end
+            -- Unwanted → skip (biar dijual), TIDAK unfavorit
+            skipCount = skipCount + 1
         end
     end
     
-    if verifyFail > 0 then
-        updateStatus(string.format("⚠️ Verifikasi: %d fixed", verifyFail))
-        task.wait(2)
-    else
-        updateStatus("✅ Verifikasi OK")
+    updateStatus(string.format("⭐ Preset:%d Fav:%d Skip:%d Timeout:%d", 
+        presetProtectCount, favCount, skipCount, timeoutCount))
+    task.wait(1)
+    
+    -- =========================================
+    -- STEP 3: FINAL CHECK sebelum sell
+    -- =========================================
+    updateStatus("🔍 Final check...")
+    task.wait(1)
+    
+    local finalFail = 0
+    for _, pet in ipairs(getBackpackPets()) do
+        local shouldBeFav = isPetInPreset(pet.name) or not isUnwantedPet(pet)
+        
+        if shouldBeFav and not pet.isFavorited then
+            -- Belum favorit — coba fix
+            finalFail = finalFail + 1
+            ensureFavorit(pet.tool, true)
+        end
+        -- Kalau pet unwanted & favorit → biarkan (tidak unfavorit)
     end
     
+    if finalFail > 0 then
+        warn(string.format("[Final] %d pet belum favorit, sudah difix", finalFail))
+        task.wait(2)
+    else
+        updateStatus("✅ Final check OK")
+    end
+    
+    -- =========================================
+    -- STEP 4: Delay sebelum sell
+    -- =========================================
     updateStatus("⏳ Delay sebelum sell...")
     task.wait(CONFIG.delayBeforeSell)
     
+    -- =========================================
+    -- STEP 5: Sell all
+    -- =========================================
     updateStatus("💰 Sell all...")
     sellAll()
     task.wait(2)
@@ -887,7 +900,7 @@ Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
 titleLabel.Position = UDim2.new(0, 12, 0, 0)
-titleLabel.Text = "🥚 Auto Hatch v9.0"
+titleLabel.Text = "🥚 Auto Hatch v10.0"
 titleLabel.TextColor3 = C.text
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 11
@@ -1205,10 +1218,9 @@ makeDropdown(presetSection, 26, "⚡ Speed (Loadout 1)", "speedPreset")
 makeDropdown(presetSection, 68, "🥚 Hatch (Loadout 2)", "hatchPreset")
 makeDropdown(presetSection, 110, "💸 Sell (Loadout 3)", "sellPreset")
 
-local cycleSection = makeSection(mainScroll, "🔁 Cycle", 100, 2)
+local cycleSection = makeSection(mainScroll, "🔁 Cycle", 80, 2)
 makeInputRow(cycleSection, 26, "Jumlah cycle:", "cycleCount", true, 1, 50)
-makeToggle(cycleSection, 50, "⚡ Auto Skip: ON", "⚡ Auto Skip: OFF", "autoSkip")
-makeToggle(cycleSection, 74, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
+makeToggle(cycleSection, 50, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
 
 local controlSection = makeSection(mainScroll, nil, 60, 3)
 
@@ -1365,7 +1377,7 @@ end
 
 eggRefreshBtn.MouseButton1Click:Connect(refreshEggList)
 
--- TAB: DELAY
+-- TAB: DELAY (hanya delay yang masih bisa diatur)
 local delayTab = tabFrames["Delay"]
 local delayScroll = Instance.new("ScrollingFrame")
 delayScroll.Size = UDim2.new(1, -10, 1, -10)
@@ -1382,22 +1394,17 @@ local delayLayout = Instance.new("UIListLayout")
 delayLayout.Padding = UDim.new(0, 6)
 delayLayout.Parent = delayScroll
 
-local delaySection = makeSection(delayScroll, "⏱️ Delay Settings (detik)", 300, 1)
-makeInputRow(delaySection, 26, "Setelah Loadout Swap:", "delayAfterLoadout", true, 0, 30)
-makeInputRow(delaySection, 50, "Setelah Tim Speed:", "delayAfterSpeed", true, 0, 30)
-makeInputRow(delaySection, 74, "Setelah Tim Hatch:", "delayAfterHatch", true, 0, 30)
-makeInputRow(delaySection, 98, "Setelah Tim Sell:", "delayAfterSell", true, 0, 30)
-makeInputRow(delaySection, 122, "Sebelum Sell All:", "delayBeforeSell", true, 0, 30)
-makeInputRow(delaySection, 146, "Antar Hatch:", "hatchDelay", true, 0, 30)
-makeInputRow(delaySection, 170, "Antar Skip:", "skipDelay", true, 0, 30)
-makeInputRow(delaySection, 194, "Place Egg:", "placeDelay", true, 0, 30)
-makeInputRow(delaySection, 218, "Equip/Unequip Fix:", "equipDelay", true, 0, 10)
-makeInputRow(delaySection, 242, "Scan Settle Delay:", "scanSettleDelay", true, 0, 10)
+local delaySection = makeSection(delayScroll, "⏱️ Delay Settings", 175, 1)
+makeInputRow(delaySection, 26, "Loadout Swap:", "delayAfterLoadout", true, 0, 30)
+makeInputRow(delaySection, 50, "Setelah Hatch All:", "delayAfterHatchAll", true, 0, 30)
+makeInputRow(delaySection, 74, "Antar Hatch:", "hatchDelay", true, 0, 30)
+makeInputRow(delaySection, 98, "Place Egg:", "placeDelay", true, 0, 30)
+makeInputRow(delaySection, 122, "Scan Settle:", "scanSettleDelay", true, 0, 30)
 
 local delayInfo = Instance.new("TextLabel")
-delayInfo.Size = UDim2.new(1, -20, 0, 24)
-delayInfo.Position = UDim2.new(0, 10, 0, 266)
-delayInfo.Text = "💡 Scan Settle = tunggu sebelum scan slot"
+delayInfo.Size = UDim2.new(1, -20, 0, 30)
+delayInfo.Position = UDim2.new(0, 10, 0, 146)
+delayInfo.Text = "💡 Delay lain sudah di-set default.\nLoadout Swap = 6s, Scan Settle = 1.5s"
 delayInfo.TextColor3 = C.textDim
 delayInfo.Font = Enum.Font.Gotham
 delayInfo.TextSize = 7
@@ -1528,7 +1535,8 @@ refreshEggList()
 refreshUnwantedList()
 switchTab("Main")
 
-print("✅ Auto Hatch GUI v9.0 loaded!")
-print("   • Place egg: scan slot → place ke slot kosong (egg di tangan/backpack)")
-print("   • Filter pet: backpack + tangan")
-print("   • Loadout swap: 1=Speed, 2=Hatch, 3=Sell")
+print("✅ Auto Hatch GUI v10.0 loaded!")
+print("   • Auto Skip: DIHAPUS")
+print("   • Delay: hanya Loadout/HatchAll/Hatch/Place/Scan di GUI")
+print("   • Filter: tunggu konfirmasi + final check")
+print("   • Unfavorit: MANUAL")
