@@ -1,6 +1,10 @@
 -- ==================================================================
--- AUTO HATCH GUI v8.0 — FINAL
--- Sistem: Scan slot → Place ke slot kosong → Loadout Swap → Hatch → Filter → Sell
+-- AUTO HATCH GUI v9.0 — FINAL
+-- Fix:
+--   • Place egg: scan slot → place ke slot kosong (egg di tangan / backpack)
+--   • Filter pet: cek backpack + tangan (biar tidak ada yang ke-sell)
+--   • Loadout swap: 1=Speed, 2=Hatch, 3=Sell
+--   • Verifikasi loadout + auto-fix mismatch
 -- ==================================================================
 
 local Players = game:GetService("Players")
@@ -161,7 +165,6 @@ local function getMyGardenEggs()
     return eggs
 end
 
--- ⭐ SCAN SLOT — cek slot mana yang terisi
 local function getOccupiedSlots()
     local center = getCenterPoint()
     if not center then return {} end
@@ -171,9 +174,7 @@ local function getOccupiedSlots()
     local THRESHOLD = 3
     
     for _, egg in ipairs(getMyGardenEggs()) do
-        local eggPos = egg:GetPivot().Position
-        local offset = eggPos - centerPos
-        
+        local offset = egg:GetPivot().Position - centerPos
         for i, gridOffset in ipairs(CONFIG.eggGridOffsets) do
             if (offset - gridOffset).Magnitude < THRESHOLD then
                 occupied[i] = true
@@ -181,11 +182,9 @@ local function getOccupiedSlots()
             end
         end
     end
-    
     return occupied
 end
 
--- ⭐ GET EMPTY SLOTS — snapshot slot kosong
 local function getEmptySlots()
     local occupied = getOccupiedSlots()
     local emptySlots = {}
@@ -210,7 +209,7 @@ local function hatchEgg(eggModel)
 end
 
 -- ==================================================================
--- HELPER: BACKPACK
+-- HELPER: BACKPACK (EGG + PET)
 -- ==================================================================
 local function isEggTool(tool)
     return tool:IsA("Tool") and tool:GetAttribute("b") == "c"
@@ -220,43 +219,59 @@ local function isPetTool(tool)
     return tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet"
 end
 
-local function getBackpackPets()
-    local pets = {}
-    local seen = {}  -- ⭐ biar tidak dobel
-    
-    -- Kumpulkan container: backpack + character
+-- ⭐ Cari egg di backpack + tangan
+local function findEggTool()
     local locations = {}
-    if player:FindFirstChild("Backpack") then
-        table.insert(locations, player.Backpack)
-    end
-    if player.Character then
-        table.insert(locations, player.Character)
-    end
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, {name="Backpack", container=backpack}) end
+    if player.Character then table.insert(locations, {name="Tangan", container=player.Character}) end
     
-    for _, container in ipairs(locations) do
-        for _, tool in ipairs(container:GetChildren()) do
-            if isPetTool(tool) then
-                -- Skip kalau sudah diproses
-                if not seen[tool] then
-                    seen[tool] = true
-                    local name, weight, level = parsePetName(tool.Name)
-                    if name then
-                        table.insert(pets, {
-                            tool = tool,
-                            name = name,
-                            weight = weight,
-                            level = level,
-                            isFavorited = tool:GetAttribute("d") == true,
-                            location = container.Name,  -- ⭐ info lokasi
-                        })
+    for _, loc in ipairs(locations) do
+        for _, tool in ipairs(loc.container:GetChildren()) do
+            if isEggTool(tool) then
+                local eggName = tool:GetAttribute("h")
+                local count = tool:GetAttribute("e") or 0
+                
+                -- Cek apakah egg ini dipilih
+                local isSelected = false
+                if next(CONFIG.selectedEggs) == nil then
+                    isSelected = true
+                else
+                    for name, val in pairs(CONFIG.selectedEggs) do
+                        if name == eggName and val then
+                            isSelected = true
+                            break
+                        end
                     end
+                end
+                
+                if count > 0 and isSelected then
+                    return tool
                 end
             end
         end
     end
-    return pets
+    return nil
 end
 
+-- ⭐ Cek egg types di backpack (untuk UI)
+local function getBackpackEggs()
+    local eggs = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return eggs end
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if isEggTool(tool) then
+            local name = tool:GetAttribute("h")
+            local count = tool:GetAttribute("e") or 0
+            if name and count > 0 then
+                table.insert(eggs, { tool = tool, name = name, count = count })
+            end
+        end
+    end
+    return eggs
+end
+
+-- ⭐ Parse nama pet: "Nama Pet [2.43 KG] [Age 1]"
 local function parsePetName(toolName)
     local name, weight, level = toolName:match("^(.+) %[([%d%.]+) KG%] %[Age (%d+)%]$")
     if not name then
@@ -272,21 +287,31 @@ local function parsePetName(toolName)
     return nil, 0, 0
 end
 
+-- ⭐ Cari pet di backpack + tangan
 local function getBackpackPets()
     local pets = {}
+    local seen = {}
+    
+    local locations = {}
     local backpack = player:FindFirstChild("Backpack")
-    if not backpack then return pets end
-    for _, tool in ipairs(backpack:GetChildren()) do
-        if isPetTool(tool) then
-            local name, weight, level = parsePetName(tool.Name)
-            if name then
-                table.insert(pets, {
-                    tool = tool,
-                    name = name,
-                    weight = weight,
-                    level = level,
-                    isFavorited = tool:GetAttribute("d") == true,
-                })
+    if backpack then table.insert(locations, {name="Backpack", container=backpack}) end
+    if player.Character then table.insert(locations, {name="Tangan", container=player.Character}) end
+    
+    for _, loc in ipairs(locations) do
+        for _, tool in ipairs(loc.container:GetChildren()) do
+            if isPetTool(tool) and not seen[tool] then
+                seen[tool] = true
+                local name, weight, level = parsePetName(tool.Name)
+                if name then
+                    table.insert(pets, {
+                        tool = tool,
+                        name = name,
+                        weight = weight,
+                        level = level,
+                        isFavorited = tool:GetAttribute("d") == true,
+                        location = loc.name,
+                    })
+                end
             end
         end
     end
@@ -496,22 +521,23 @@ local function updateStatus(text)
 end
 
 -- ==================================================================
--- FASE 1: PLACE EGG — SCAN → PLACE KE SLOT KOSONG
+-- FASE 1: PLACE EGG
 -- ==================================================================
 local function placeEggsFromBackpack()
     local totalSlots = #CONFIG.eggGridOffsets
     
     task.wait(CONFIG.scanSettleDelay)
     
-    -- =========================================
     -- SCAN SLOT
-    -- =========================================
     local emptySlots, occupied = getEmptySlots()
     
-    print("[Place] === SCAN SLOT ===")
+    print("[Place] === SCAN ===")
+    local occupiedList = {}
     for i = 1, totalSlots do
-        print(string.format("[Place] Slot %d: %s", i, occupied[i] and "TERISI" or "KOSONG"))
+        if occupied[i] then table.insert(occupiedList, i) end
     end
+    print("[Place] Slot terisi: " .. (#occupiedList > 0 and table.concat(occupiedList, ", ") or "tidak ada"))
+    print("[Place] Slot kosong: " .. (#emptySlots > 0 and table.concat(emptySlots, ", ") or "tidak ada"))
     
     if #emptySlots == 0 then
         updateStatus("⚠️ Garden penuh")
@@ -520,73 +546,29 @@ local function placeEggsFromBackpack()
     
     updateStatus(string.format("📦 %d slot kosong", #emptySlots))
     
-    -- =========================================
-    -- Cari egg tool (backpack + tangan)
-    -- =========================================
-    local backpack = player:FindFirstChild("Backpack")
-    local character = player.Character
-    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-    
-    local function findEggTool()
-        local locations = {}
-        if backpack then table.insert(locations, {name="BP", container=backpack}) end
-        if character then table.insert(locations, {name="TGN", container=character}) end
-        
-        for _, loc in ipairs(locations) do
-            for _, tool in ipairs(loc.container:GetChildren()) do
-                if isEggTool(tool) then
-                    local eggName = tool:GetAttribute("h")
-                    local count = tool:GetAttribute("e") or 0
-                    
-                    local isSelected = false
-                    if next(CONFIG.selectedEggs) == nil then
-                        isSelected = true
-                    else
-                        for name, val in pairs(CONFIG.selectedEggs) do
-                            if name == eggName and val then
-                                isSelected = true
-                                break
-                            end
-                        end
-                    end
-                    
-                    if count > 0 and isSelected then
-                        return tool
-                    end
-                end
-            end
-        end
-        return nil
-    end
-    
-    -- =========================================
-    -- Cek egg tool
-    -- =========================================
+    -- Cari egg tool
     local eggTool = findEggTool()
     if not eggTool then
         updateStatus("⚠️ Tidak ada egg yang dipilih")
         return 0
     end
     
+    local backpack = player:FindFirstChild("Backpack")
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    
     print(string.format("[Place] Egg: %s | e=%d | Lokasi: %s",
         eggTool:GetAttribute("h"),
         eggTool:GetAttribute("e"),
         eggTool.Parent and eggTool.Parent.Name or "?"))
     
-    -- =========================================
     -- Equip kalau egg di backpack
-    -- =========================================
     if eggTool.Parent == backpack and humanoid then
-        print("[Place] Equip egg dari backpack...")
         pcall(function() humanoid:EquipTool(eggTool) end)
         task.wait(0.5)
-    else
-        print("[Place] Egg sudah di tangan")
     end
     
-    -- =========================================
     -- Place ke slot kosong
-    -- =========================================
     local center = getCenterPoint()
     if not center then return 0 end
     
@@ -629,7 +611,7 @@ local function placeEggsFromBackpack()
         end
     end
     
-    print(string.format("[Place] Total place: %d", placed))
+    print(string.format("[Place] Total: %d", placed))
     return placed
 end
 
@@ -637,7 +619,6 @@ end
 -- FASE 2: SATU CYCLE
 -- ==================================================================
 local function runOneCycle(cycleNum, totalCycles)
-    -- FASE 1: Place
     updateStatus(string.format("[%d/%d] 📦 Place egg...", cycleNum, totalCycles))
     local placed = placeEggsFromBackpack()
     
@@ -751,45 +732,35 @@ end
 local function runFilterAndSell()
     if not CONFIG.autoSell then return end
     
-    -- =========================================
-    -- STEP 1: Tim Sell
-    -- =========================================
     updateStatus("💸 Tim Sell...")
     equipTeamByPreset(CONFIG.sellPreset, CONFIG.sellLoadout)
     task.wait(CONFIG.delayAfterSell)
     
-    -- =========================================
-    -- STEP 2: Filter pet (backpack + tangan)
-    -- =========================================
     updateStatus("⭐ Filter pet...")
     local favCount = 0
     local unfavCount = 0
     local skipCount = 0
     local presetProtectCount = 0
     
-    local pets = getBackpackPets()  -- sekarang cek backpack + tangan
-    print(string.format("[Filter] Total pet: %d", #pets))
+    local pets = getBackpackPets()
+    print(string.format("[Filter] Total pet (backpack + tangan): %d", #pets))
     
     for _, pet in ipairs(pets) do
         if not isRunning then return end
         
         if isPetInPreset(pet.name) then
-            -- Pet preset → amankan dengan favorit
             if not pet.isFavorited then
                 toggleFavorit(pet.tool)
                 presetProtectCount = presetProtectCount + 1
             end
         else
             local unwanted = isUnwantedPet(pet)
-            
             if not unwanted then
-                -- Bukan unwanted → favorit
                 if not pet.isFavorited then
                     toggleFavorit(pet.tool)
                     favCount = favCount + 1
                 end
             else
-                -- Unwanted → unfavorit (biar dijual)
                 if pet.isFavorited then
                     toggleFavorit(pet.tool)
                     unfavCount = unfavCount + 1
@@ -803,9 +774,6 @@ local function runFilterAndSell()
         presetProtectCount, favCount, unfavCount, skipCount))
     task.wait(2)
     
-    -- =========================================
-    -- STEP 3: Double check
-    -- =========================================
     updateStatus("🔍 Verifikasi...")
     task.wait(1)
     
@@ -839,9 +807,6 @@ local function runFilterAndSell()
         updateStatus("✅ Verifikasi OK")
     end
     
-    -- =========================================
-    -- STEP 4: Sell
-    -- =========================================
     updateStatus("⏳ Delay sebelum sell...")
     task.wait(CONFIG.delayBeforeSell)
     
@@ -922,7 +887,7 @@ Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
 titleLabel.Position = UDim2.new(0, 12, 0, 0)
-titleLabel.Text = "🥚 Auto Hatch v8.0"
+titleLabel.Text = "🥚 Auto Hatch v9.0"
 titleLabel.TextColor3 = C.text
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 11
@@ -980,7 +945,6 @@ end
 
 makeDraggable(titleBar, mainFrame)
 
--- Sidebar
 local sidebar = Instance.new("Frame")
 sidebar.Size = UDim2.new(0.2, 0, 1, -28)
 sidebar.Position = UDim2.new(0, 0, 0, 28)
@@ -1390,7 +1354,7 @@ local function refreshEggList()
     if i == 0 then
         local lbl = Instance.new("TextLabel")
         lbl.Size = UDim2.new(1, -4, 0, 30)
-        lbl.Text = "(Tidak ada egg)"
+        lbl.Text = "(Tidak ada egg di backpack)"
         lbl.TextColor3 = C.textDim
         lbl.Font = Enum.Font.Gotham
         lbl.TextSize = 9
@@ -1564,6 +1528,7 @@ refreshEggList()
 refreshUnwantedList()
 switchTab("Main")
 
-print("✅ Auto Hatch GUI v8.0 loaded!")
-print("   • Scan slot → Place ke slot kosong")
-print("   • Loadout 1=Speed, 2=Hatch, 3=Sell")
+print("✅ Auto Hatch GUI v9.0 loaded!")
+print("   • Place egg: scan slot → place ke slot kosong (egg di tangan/backpack)")
+print("   • Filter pet: backpack + tangan")
+print("   • Loadout swap: 1=Speed, 2=Hatch, 3=Sell")
