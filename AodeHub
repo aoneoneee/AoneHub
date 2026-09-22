@@ -1599,7 +1599,7 @@ local webhookSection = makeSection(mainScroll, "🔔 Discord Webhook", 125, 3)
 makeToggle(webhookSection, 26, "🔔 Webhook: ON", "🔔 Webhook: OFF", "webhookEnabled")
 
 local webhookInput = Instance.new("TextBox")
-webhookInput.Size = UDim2.new(1, -20, 0, 60)  -- ⭐ lebih tinggi (dari 22 → 60)
+webhookInput.Size = UDim2.new(1, -20, 0, 22)          -- tetap 22
 webhookInput.Position = UDim2.new(0, 10, 0, 52)
 webhookInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 webhookInput.BorderSizePixel = 0
@@ -1609,16 +1609,16 @@ webhookInput.Text = CONFIG.webhookUrl or ""
 webhookInput.TextColor3 = C.text
 webhookInput.TextSize = 8
 webhookInput.ClearTextOnFocus = false
-webhookInput.TextWrapped = true          -- ⭐ wrap text
-webhookInput.MultiLine = true            -- ⭐ multi-line
+webhookInput.TextTruncate = Enum.TextTruncate.AtEnd  -- ⭐ potong di akhir
 webhookInput.TextXAlignment = Enum.TextXAlignment.Left
-webhookInput.TextYAlignment = Enum.TextYAlignment.Top
+webhookInput.ClipsDescendants = true                 -- ⭐ potong di batas box
 webhookInput.Parent = webhookSection
 Instance.new("UICorner", webhookInput).CornerRadius = UDim.new(0, 3)
 
+-- Padding
 local whPad = Instance.new("UIPadding")
-whPad.PaddingLeft = UDim.new(0, 7)
-whPad.PaddingRight = UDim.new(0, 7)
+whPad.PaddingLeft = UDim.new(0, 6)
+whPad.PaddingRight = UDim.new(0, 6)
 whPad.Parent = webhookInput
 
 webhookInput.FocusLost:Connect(function()
