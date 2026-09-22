@@ -1,5 +1,11 @@
 -- ==================================================================
--- AUTO HATCH GUI v13.0 — FINAL
+-- AUTO HATCH GUI v13.4 — FINAL
+-- Changes:
+--   • Split mutation pakai unwantedMutations dari AoneHub
+--   • Filter pet: name + weight + level + mutation
+--   • Auto unequip egg setelah place all
+--   • Stats reset tiap Mulai
+--   • Webhook 1 embed
 -- ==================================================================
 
 local Players = game:GetService("Players")
@@ -119,7 +125,49 @@ local C = {
 }
 
 -- ==================================================================
--- STATISTICS TRACKING (RESET SETIAP MULAI)
+-- MUTATION HELPERS (dari AoneHub)
+-- ==================================================================
+local unwantedMutationsCache = nil
+
+local function getUnwantedMutations()
+    if unwantedMutationsCache then return unwantedMutationsCache end
+    
+    local list = {}
+    local ok, data = pcall(readfile, "AoneHub/AoneHub_Gag1.json")
+    if ok and data then
+        local ok2, decoded = pcall(HttpService.JSONDecode, HttpService, data)
+        if ok2 and decoded and decoded.unwantedMutations then
+            for _, mutName in ipairs(decoded.unwantedMutations) do
+                table.insert(list, mutName)
+            end
+        end
+    end
+    
+    -- Sort panjang dulu (biar "Gilded Choc" kena sebelum "Choc")
+    table.sort(list, function(a, b) return #a > #b end)
+    
+    unwantedMutationsCache = list
+    return list
+end
+
+local function refreshUnwantedMutationsCache()
+    unwantedMutationsCache = nil
+    return getUnwantedMutations()
+end
+
+-- Split pet name: strip mutation (dari unwanted list)
+local function splitPetName(petName)
+    if not petName then return petName, nil end
+    for _, mutName in ipairs(getUnwantedMutations()) do
+        if petName:sub(1, #mutName + 1) == mutName .. " " then
+            return petName:sub(#mutName + 2), mutName
+        end
+    end
+    return petName, nil
+end
+
+-- ==================================================================
+-- STATISTICS TRACKING
 -- ==================================================================
 local STATS = {}
 
@@ -147,7 +195,6 @@ end
 
 resetStats()
 
--- Helper: extract info pet dari inventory data
 local function extractPetInfo(petData)
     if typeof(petData) ~= "table" then return nil end
     
@@ -236,11 +283,13 @@ local function scanNewPetsAfterSell()
             
             local petName = info.petName
             local baseWeight = info.baseWeight
+            local baseName = splitPetName(petName)
             
-            if CONFIG.unwantedPetTypes[petName] 
+            -- Cek unwanted pakai baseName
+            if CONFIG.unwantedPetTypes[baseName] 
                and baseWeight <= CONFIG.maxWeight 
                and info.level <= CONFIG.maxLevel then
-                print(string.format("[Stats] Skip unwanted: %s", petName))
+                print(string.format("[Stats] Skip unwanted: %s (base: %s)", petName, baseName))
             else
                 local rarity = getPetRarityFromBaseWeight(petName, baseWeight)
                 addHuntStat(rarity, petName, baseWeight)
@@ -283,13 +332,12 @@ local function getPetCountFromData()
 end
 
 -- ==================================================================
--- HELPER: Count egg di backpack
+-- HELPER: Count Egg (Backpack + Tangan)
 -- ==================================================================
 local function countEggsInBackpack()
     local total = 0
     local seen = {}
     
-    -- Cek backpack DAN tangan
     local locations = {}
     local backpack = player:FindFirstChild("Backpack")
     if backpack then table.insert(locations, backpack) end
@@ -302,7 +350,6 @@ local function countEggsInBackpack()
                     seen[tool] = true
                     local eggName = tool:GetAttribute("h")
                     
-                    -- Filter by selected egg
                     local isSelected = false
                     if next(CONFIG.selectedEggs) == nil then
                         isSelected = true
@@ -576,12 +623,14 @@ local function getPresetUUIDs(presetName)
 end
 
 local function isPetInPreset(petDisplayName)
+    local baseName = splitPetName(petDisplayName)
+    
     for _, presetName in ipairs({CONFIG.speedPreset, CONFIG.hatchPreset, CONFIG.sellPreset}) do
         if presetName then
             local preset = getPresetFromFile(presetName)
             if preset and preset.pets then
                 for _, petInfo in ipairs(preset.pets) do
-                    if petInfo.PetType == petDisplayName then
+                    if petInfo.PetType == baseName or petInfo.PetType == petDisplayName then
                         return true
                     end
                     if petInfo.Mutation and petInfo.Mutation ~= "Normal" then
@@ -705,12 +754,21 @@ local function ensureFavorit(tool, shouldBeFavorite, timeout)
 end
 
 -- ==================================================================
--- HELPER: UNWANTED & SELL
+-- HELPER: UNWANTED (dengan mutation)
 -- ==================================================================
 local function isUnwantedPet(pet)
-    if not CONFIG.unwantedPetTypes[pet.name] then return false end
+    -- Split mutation (hanya strip kalau di unwanted list)
+    local baseName, mutation = splitPetName(pet.name)
+    
+    -- 1. Cek name
+    if not CONFIG.unwantedPetTypes[baseName] then return false end
+    
+    -- 2. Cek weight
     if pet.weight > CONFIG.maxWeight then return false end
+    
+    -- 3. Cek level
     if pet.level > CONFIG.maxLevel then return false end
+    
     return true
 end
 
@@ -757,7 +815,6 @@ end
 -- WEBHOOK EMBED BUILDER (1 EMBED)
 -- ==================================================================
 local function buildWebhookEmbed()
-    -- Profile
     local eggName = "?"
     for name, _ in pairs(CONFIG.selectedEggs) do
         eggName = name
@@ -766,7 +823,6 @@ local function buildWebhookEmbed()
     
     local petCurrent, petMax = getPetCountFromData()
     
-    -- Teams
     local function formatPreset(presetName)
         if not presetName then return "-" end
         local preset = getPresetFromFile(presetName)
@@ -794,7 +850,6 @@ local function buildWebhookEmbed()
         return table.concat(parts, ", ")
     end
     
-    -- Hunt stats
     local function formatHuntBucket(bucket)
         local count = 0
         local lines = {}
@@ -816,20 +871,17 @@ local function buildWebhookEmbed()
     local titanCount, titanList = formatHuntBucket(STATS.huntStats.Titan)
     local godlyCount, godlyList = formatHuntBucket(STATS.huntStats.Godly)
     
-    -- Egg stats
     local eggBefore = STATS.eggBeforePlace or 0
     local eggCurrent = STATS.eggAfterSell or 0
     local netResult = eggCurrent - eggBefore
     local netStr = netResult >= 0 and ("+" .. netResult) or tostring(netResult)
     
-    -- Duration
     local totalDuration = os.time() - STATS.sessionStart
     local hours = math.floor(totalDuration / 3600)
     local minutes = math.floor((totalDuration % 3600) / 60)
     local seconds = totalDuration % 60
     local durationStr = string.format("%dh %dm %ds", hours, minutes, seconds)
     
-    -- Build description
     local desc = {}
     
     table.insert(desc, "**Profile :**")
@@ -872,7 +924,7 @@ local function buildWebhookEmbed()
         description = table.concat(desc, "\n"),
         color = 3447003,
         footer = {
-            text = "Auto Hatch v13.0 • " .. os.date("%Y-%m-%d %H:%M:%S")
+            text = "Auto Hatch v13.4 • " .. os.date("%Y-%m-%d %H:%M:%S")
         }
     }
 end
@@ -968,11 +1020,9 @@ local function placeEggsFromBackpack()
         end
     end
     
-    -- ⭐ UNEQUIP egg setelah place semua
+    -- ⭐ Unequip egg setelah place semua
     if humanoid then
-        pcall(function()
-            humanoid:UnequipTools()
-        end)
+        pcall(function() humanoid:UnequipTools() end)
         task.wait(0.5)
         print("[Place] Egg tool di-unequip")
     end
@@ -1070,7 +1120,6 @@ local function runOneCycle(cycleNum, totalCycles)
         if t <= 0 then table.insert(eggsToHatch, egg) end
     end
     
-    -- ⭐ Hitung egg yang benar-benar di-hatch
     local hatchCount = #eggsToHatch
     
     for _, egg in ipairs(eggsToHatch) do
@@ -1079,7 +1128,6 @@ local function runOneCycle(cycleNum, totalCycles)
         task.wait(CONFIG.hatchDelay)
     end
     
-    -- Tunggu tidak ada egg timer ≤ 0
     local timeout = os.clock() + 60
     while isRunning and os.clock() < timeout do
         local hasReadyEgg = false
@@ -1091,7 +1139,6 @@ local function runOneCycle(cycleNum, totalCycles)
         task.wait(1)
     end
     
-    -- ⭐ Update totalHatched
     STATS.totalHatched = STATS.totalHatched + hatchCount
     print(string.format("[Stats] Hatched %d egg (total: %d)", hatchCount, STATS.totalHatched))
     
@@ -1189,20 +1236,23 @@ end
 -- ==================================================================
 local function startAutoHatch()
     if isRunning then return end
+    
+    -- ⭐ Refresh mutation cache saat mulai
+    refreshUnwantedMutationsCache()
+    
+    -- ⭐ Reset stats
+    resetStats()
+    STATS.knownUUIDs = getInventoryUUIDs()
+    STATS.eggBeforePlace = countEggsInBackpack()
+    
+    local initCount = 0
+    for _ in pairs(STATS.knownUUIDs) do initCount = initCount + 1 end
+    print(string.format("[Stats] Reset! Inventory: %d pet, Egg before: %d, Mutations: %d", 
+        initCount, STATS.eggBeforePlace, #getUnwantedMutations()))
+    
     isRunning = true
     
     task.spawn(function()
-        resetStats()
-        STATS.knownUUIDs = getInventoryUUIDs()
-        
-        -- Hitung langsung (sudah cek backpack + tangan)
-        STATS.eggBeforePlace = countEggsInBackpack()
-        
-        local initCount = 0
-        for _ in pairs(STATS.knownUUIDs) do initCount = initCount + 1 end
-        print(string.format("[Stats] Inventory: %d pet, Egg before: %d", 
-            initCount, STATS.eggBeforePlace))
-        
         while isRunning and not guiDestroyed do
             for cycle = 1, CONFIG.cycleCount do
                 if not isRunning or guiDestroyed then break end
@@ -1273,7 +1323,7 @@ Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
 titleLabel.Position = UDim2.new(0, 12, 0, 0)
-titleLabel.Text = "🥚 Auto Hatch v13.0"
+titleLabel.Text = "🥚 Auto Hatch v13.4"
 titleLabel.TextColor3 = C.text
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 11
@@ -1599,7 +1649,7 @@ local webhookSection = makeSection(mainScroll, "🔔 Discord Webhook", 125, 3)
 makeToggle(webhookSection, 26, "🔔 Webhook: ON", "🔔 Webhook: OFF", "webhookEnabled")
 
 local webhookInput = Instance.new("TextBox")
-webhookInput.Size = UDim2.new(1, -20, 0, 22)          -- tetap 22
+webhookInput.Size = UDim2.new(1, -20, 0, 22)
 webhookInput.Position = UDim2.new(0, 10, 0, 52)
 webhookInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 webhookInput.BorderSizePixel = 0
@@ -1609,13 +1659,12 @@ webhookInput.Text = CONFIG.webhookUrl or ""
 webhookInput.TextColor3 = C.text
 webhookInput.TextSize = 8
 webhookInput.ClearTextOnFocus = false
-webhookInput.TextTruncate = Enum.TextTruncate.AtEnd  -- ⭐ potong di akhir
+webhookInput.TextTruncate = Enum.TextTruncate.AtEnd
 webhookInput.TextXAlignment = Enum.TextXAlignment.Left
-webhookInput.ClipsDescendants = true                 -- ⭐ potong di batas box
+webhookInput.ClipsDescendants = true
 webhookInput.Parent = webhookSection
 Instance.new("UICorner", webhookInput).CornerRadius = UDim.new(0, 3)
 
--- Padding
 local whPad = Instance.new("UIPadding")
 whPad.PaddingLeft = UDim.new(0, 6)
 whPad.PaddingRight = UDim.new(0, 6)
@@ -1645,7 +1694,7 @@ testWebhookBtn.MouseButton1Click:Connect(function()
     end
     sendWebhookEmbed({
         title = "🧪 Test Webhook",
-        description = "Auto Hatch v13.0\nBerhasil terhubung!",
+        description = "Auto Hatch v13.4\nBerhasil terhubung!",
         color = 3066993,
     })
     statusLabel.Text = "✅ Test webhook terkirim"
@@ -1964,7 +2013,7 @@ refreshEggList()
 refreshUnwantedList()
 switchTab("Main")
 
-print("✅ Auto Hatch GUI v13.0 loaded!")
-print("   • Webhook 1 embed")
+print("✅ Auto Hatch GUI v13.4 loaded!")
+print("   • Split mutation pakai unwanted mutations dari AoneHub")
+print("   • Auto unequip egg setelah place all")
 print("   • Stats reset tiap Mulai")
-print("   • Total Hatched = egg yang benar-benar di-hatch")
