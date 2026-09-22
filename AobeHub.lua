@@ -1690,54 +1690,10 @@ UICornerDelete.CornerRadius = UDim.new(0, 4)
 UICornerDelete.Parent = DeletePresetButton
 
 -- ==================================================================
--- SECTION: PILIH TIM (DROPDOWN DINAMIS)
--- ==================================================================
-local TeamSelectSection = createSection(weightScroll, "📈 Auto Leveling")
-TeamSelectSection.LayoutOrder = 2
-TeamSelectSection.Size = UDim2.new(1, -10, 0, 93)
-
-local LevelInput = Instance.new("TextBox")
-LevelInput.Size = UDim2.new(1, -20, 0, 22)
-LevelInput.Position = UDim2.new(0, 10, 0, 28)
-LevelInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-LevelInput.BorderSizePixel = 0
-LevelInput.Font = Enum.Font.Gotham
-LevelInput.PlaceholderText = "Target Level"
-LevelInput.Text = tostring(targetLevel)
-LevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-LevelInput.TextSize = 9
-LevelInput.Parent = TeamSelectSection
-
-local UICornerLevelInput = Instance.new("UICorner")
-UICornerLevelInput.CornerRadius = UDim.new(0, 4)
-UICornerLevelInput.Parent = LevelInput
-
-LevelInput.FocusLost:Connect(function()
-    local newLevel = tonumber(LevelInput.Text)
-    if newLevel and newLevel > 0 then
-        targetLevel = newLevel
-        config.targetLevel = newLevel
-        saveConfig()
-    else
-        LevelInput.Text = tostring(targetLevel)
-    end
-end)
-
--- Dropdown Tim Leveling
-local TeamPresetDropdown = createDynamicDropdown(
-    TeamSelectSection,
-    UDim2.new(0, 10, 0, 55),
-    selectedTeamPreset and string.format("📂 %s", selectedTeamPreset) or "📂 Pilih Preset Tim Leveling",
-    TeamSelectSection,
-    93,
-    weightScroll
-)
-
--- ==================================================================
 -- SECTION: PET TARGET
 -- ==================================================================
 local TargetSection = createSection(weightScroll, "🎯 Pet Target")
-TargetSection.LayoutOrder = 3
+TargetSection.LayoutOrder = 2
 TargetSection.Size = UDim2.new(1, -10, 0, 172)
 
 local TargetSearchBox = Instance.new("TextBox")
@@ -1784,6 +1740,113 @@ ScanButton.Parent = TargetSection
 local UICornerScan = Instance.new("UICorner")
 UICornerScan.CornerRadius = UDim.new(0, 4)
 UICornerScan.Parent = ScanButton
+
+-- ==================================================================
+-- SECTION: PILIH TIM (DROPDOWN DINAMIS)
+-- ==================================================================
+local TeamSelectSection = createSection(weightScroll, "📈 Auto Leveling")
+TeamSelectSection.LayoutOrder = 3
+TeamSelectSection.Size = UDim2.new(1, -10, 0, 210)
+
+local LevelInput = Instance.new("TextBox")
+LevelInput.Size = UDim2.new(1, -20, 0, 22)
+LevelInput.Position = UDim2.new(0, 10, 0, 28)
+LevelInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+LevelInput.BorderSizePixel = 0
+LevelInput.Font = Enum.Font.Gotham
+LevelInput.PlaceholderText = "Target Level"
+LevelInput.Text = tostring(targetLevel)
+LevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+LevelInput.TextSize = 9
+LevelInput.Parent = TeamSelectSection
+
+local UICornerLevelInput = Instance.new("UICorner")
+UICornerLevelInput.CornerRadius = UDim.new(0, 4)
+UICornerLevelInput.Parent = LevelInput
+
+LevelInput.FocusLost:Connect(function()
+    local newLevel = tonumber(LevelInput.Text)
+    if newLevel and newLevel > 0 then
+        targetLevel = newLevel
+        config.targetLevel = newLevel
+        saveConfig()
+    else
+        LevelInput.Text = tostring(targetLevel)
+    end
+end)
+
+-- Dropdown Tim Leveling
+local TeamPresetDropdown = createDynamicDropdown(
+    TeamSelectSection,
+    UDim2.new(0, 10, 0, 55),
+    selectedTeamPreset and string.format("📂 %s", selectedTeamPreset) or "📂 Pilih Preset Tim Leveling",
+    TeamSelectSection,
+    210,
+    weightScroll
+)
+
+AdvLabel = Instance.new("TextLabel")
+AdvLabel.Size = UDim2.new(1, -20, 0, 22)
+AdvLabel.Position = UDim2.new(0, 10, 0, 88)
+AdvLabel.BackgroundTransparency = 1
+AdvLabel.Font = Enum.Font.GothamBold
+AdvLabel.Text = "🚀 Advanced Leveling"
+AdvLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+AdvLabel.TextSize = 11
+AdvLabel.TextXAlignment = Enum.TextXAlignment.Left
+AdvLabel.Parent = TeamSelectSection
+
+local AdvancedToggleButton = Instance.new("TextButton")
+AdvancedToggleButton.Size = UDim2.new(1, -20, 0, 25)
+AdvancedToggleButton.Position = UDim2.new(0, 10, 0, 115)
+AdvancedToggleButton.BackgroundColor3 = isAdvancedLeveling and C.success or Color3.fromRGB(70, 70, 85)
+AdvancedToggleButton.BorderSizePixel = 0
+AdvancedToggleButton.Font = Enum.Font.GothamBold
+AdvancedToggleButton.Text = isAdvancedLeveling and "🚀 Advanced: ON" or "🚀 Advanced: OFF"
+AdvancedToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+AdvancedToggleButton.TextSize = 9
+AdvancedToggleButton.Parent = TeamSelectSection
+
+local UICornerAdvancedToggle = Instance.new("UICorner")
+UICornerAdvancedToggle.CornerRadius = UDim.new(0, 4)
+UICornerAdvancedToggle.Parent = AdvancedToggleButton
+
+local AdvancedLevelInput = Instance.new("TextBox")
+AdvancedLevelInput.Size = UDim2.new(1, -20, 0, 22)
+AdvancedLevelInput.Position = UDim2.new(0, 10, 0, 145)
+AdvancedLevelInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+AdvancedLevelInput.BorderSizePixel = 0
+AdvancedLevelInput.Font = Enum.Font.Gotham
+AdvancedLevelInput.PlaceholderText = "Advanced Target Level"
+AdvancedLevelInput.Text = tostring(advancedTargetLevel)
+AdvancedLevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+AdvancedLevelInput.TextSize = 9
+AdvancedLevelInput.Parent = TeamSelectSection
+
+local UICornerAdvancedLevel = Instance.new("UICorner")
+UICornerAdvancedLevel.CornerRadius = UDim.new(0, 4)
+UICornerAdvancedLevel.Parent = AdvancedLevelInput
+
+AdvancedLevelInput.FocusLost:Connect(function()
+    local newLevel = tonumber(AdvancedLevelInput.Text)
+    if newLevel and newLevel > 0 then
+        advancedTargetLevel = newLevel
+        config.advancedTargetLevel = newLevel
+        saveConfig()
+    else
+        AdvancedLevelInput.Text = tostring(advancedTargetLevel)
+    end
+end)
+
+-- Dropdown Advanced Preset
+local AdvancedPresetDropdown = createDynamicDropdown(
+    TeamSelectSection,
+    UDim2.new(0, 10, 0, 172),
+    selectedAdvancedPreset and string.format("📂 %s", selectedAdvancedPreset) or "📂 Pilih Preset Advanced",
+    TeamSelectSection,
+    210,
+    weightScroll
+)
 
 -- ==================================================================
 -- SECTION: AUTO WEIGHT (DROPDOWN DINAMIS)
@@ -1902,65 +1965,6 @@ MutationListFrame.Parent = MutationListSection
 local MutationListLayout = Instance.new("UIListLayout")
 MutationListLayout.Padding = UDim.new(0, 2)
 MutationListLayout.Parent = MutationListFrame
-
--- ==================================================================
--- SECTION: ADVANCED (DROPDOWN DINAMIS)
--- ==================================================================
-local AdvancedSection = createSection(weightScroll, "🚀 Advanced")
-AdvancedSection.LayoutOrder = 7
-AdvancedSection.Size = UDim2.new(1, -10, 0, 123)
-
-local AdvancedToggleButton = Instance.new("TextButton")
-AdvancedToggleButton.Size = UDim2.new(1, -20, 0, 25)
-AdvancedToggleButton.Position = UDim2.new(0, 10, 0, 28)
-AdvancedToggleButton.BackgroundColor3 = isAdvancedLeveling and C.success or Color3.fromRGB(70, 70, 85)
-AdvancedToggleButton.BorderSizePixel = 0
-AdvancedToggleButton.Font = Enum.Font.GothamBold
-AdvancedToggleButton.Text = isAdvancedLeveling and "🚀 Advanced: ON" or "🚀 Advanced: OFF"
-AdvancedToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-AdvancedToggleButton.TextSize = 9
-AdvancedToggleButton.Parent = AdvancedSection
-
-local UICornerAdvancedToggle = Instance.new("UICorner")
-UICornerAdvancedToggle.CornerRadius = UDim.new(0, 4)
-UICornerAdvancedToggle.Parent = AdvancedToggleButton
-
-local AdvancedLevelInput = Instance.new("TextBox")
-AdvancedLevelInput.Size = UDim2.new(1, -20, 0, 22)
-AdvancedLevelInput.Position = UDim2.new(0, 10, 0, 58)
-AdvancedLevelInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-AdvancedLevelInput.BorderSizePixel = 0
-AdvancedLevelInput.Font = Enum.Font.Gotham
-AdvancedLevelInput.PlaceholderText = "Advanced Target Level"
-AdvancedLevelInput.Text = tostring(advancedTargetLevel)
-AdvancedLevelInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-AdvancedLevelInput.TextSize = 9
-AdvancedLevelInput.Parent = AdvancedSection
-
-local UICornerAdvancedLevel = Instance.new("UICorner")
-UICornerAdvancedLevel.CornerRadius = UDim.new(0, 4)
-UICornerAdvancedLevel.Parent = AdvancedLevelInput
-
-AdvancedLevelInput.FocusLost:Connect(function()
-    local newLevel = tonumber(AdvancedLevelInput.Text)
-    if newLevel and newLevel > 0 then
-        advancedTargetLevel = newLevel
-        config.advancedTargetLevel = newLevel
-        saveConfig()
-    else
-        AdvancedLevelInput.Text = tostring(advancedTargetLevel)
-    end
-end)
-
--- Dropdown Advanced Preset
-local AdvancedPresetDropdown = createDynamicDropdown(
-    AdvancedSection,
-    UDim2.new(0, 10, 0, 85),
-    selectedAdvancedPreset and string.format("📂 %s", selectedAdvancedPreset) or "📂 Pilih Preset Advanced",
-    AdvancedSection,
-    123,
-    weightScroll
-)
 
 -- ==================================================================
 -- SECTION: KONTROL
