@@ -1232,17 +1232,23 @@ local function createSection(parent, title)
 end
 
 -- ==================================================================
--- DYNAMIC DROPDOWN (FIXED - AUTO REPOSITION)
+-- DYNAMIC DROPDOWN
+-- - Dropdown otomatis mendorong elemen di bawahnya
+-- - Section berikutnya tetap ikut terdorong oleh UIListLayout
+-- - Aman untuk TextBox / Button / ScrollingFrame
+-- - Open / Close tidak menyebabkan posisi semakin turun
 -- ==================================================================
 local function createDynamicDropdown(parent, position, placeholder, parentSection, baseSectionHeight, parentScroll)
     local width = 1
     local offsetX = -20
     local itemHeight = 22
     local maxListHeight = 100
-    
+
     local originalSectionHeight = baseSectionHeight or 120
-    
-    -- Container
+
+    -- ==============================================================
+    -- CONTAINER
+    -- ==============================================================
     local Container = Instance.new("Frame")
     Container.Size = UDim2.new(width, offsetX, 0, 28)
     Container.Position = position
@@ -1250,19 +1256,21 @@ local function createDynamicDropdown(parent, position, placeholder, parentSectio
     Container.ClipsDescendants = true
     Container.ZIndex = 10
     Container.Parent = parent
-    
-    -- Header
+
+    -- ==============================================================
+    -- HEADER
+    -- ==============================================================
     local HeaderFrame = Instance.new("Frame")
     HeaderFrame.Size = UDim2.new(1, 0, 0, 28)
     HeaderFrame.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
     HeaderFrame.BorderSizePixel = 0
     HeaderFrame.ZIndex = 10
     HeaderFrame.Parent = Container
-    
+
     local UICornerHeader = Instance.new("UICorner")
     UICornerHeader.CornerRadius = UDim.new(0, 4)
     UICornerHeader.Parent = HeaderFrame
-    
+
     local HeaderButton = Instance.new("TextButton")
     HeaderButton.Size = UDim2.new(1, -20, 1, 0)
     HeaderButton.BackgroundTransparency = 1
@@ -1273,11 +1281,11 @@ local function createDynamicDropdown(parent, position, placeholder, parentSectio
     HeaderButton.TextXAlignment = Enum.TextXAlignment.Left
     HeaderButton.ZIndex = 11
     HeaderButton.Parent = HeaderFrame
-    
+
     local HeaderPadding = Instance.new("UIPadding")
     HeaderPadding.PaddingLeft = UDim.new(0, 8)
     HeaderPadding.Parent = HeaderButton
-    
+
     local ArrowLabel = Instance.new("TextLabel")
     ArrowLabel.Size = UDim2.new(0, 15, 0, 20)
     ArrowLabel.Position = UDim2.new(1, -18, 0, 4)
@@ -1288,8 +1296,10 @@ local function createDynamicDropdown(parent, position, placeholder, parentSectio
     ArrowLabel.TextSize = 10
     ArrowLabel.ZIndex = 11
     ArrowLabel.Parent = HeaderFrame
-    
-    -- List Container
+
+    -- ==============================================================
+    -- LIST CONTAINER
+    -- ==============================================================
     local ListContainer = Instance.new("Frame")
     ListContainer.Size = UDim2.new(1, 0, 0, 0)
     ListContainer.Position = UDim2.new(0, 0, 0, 30)
@@ -1298,12 +1308,14 @@ local function createDynamicDropdown(parent, position, placeholder, parentSectio
     ListContainer.Visible = false
     ListContainer.ZIndex = 10
     ListContainer.Parent = Container
-    
+
     local UICornerList = Instance.new("UICorner")
     UICornerList.CornerRadius = UDim.new(0, 4)
     UICornerList.Parent = ListContainer
-    
-    -- List Scroll
+
+    -- ==============================================================
+    -- LIST SCROLL
+    -- ==============================================================
     local ListScroll = Instance.new("ScrollingFrame")
     ListScroll.Size = UDim2.new(1, -4, 1, -4)
     ListScroll.Position = UDim2.new(0, 2, 0, 2)
@@ -1314,108 +1326,271 @@ local function createDynamicDropdown(parent, position, placeholder, parentSectio
     ListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     ListScroll.ZIndex = 11
     ListScroll.Parent = ListContainer
-    
+
     local ListLayout = Instance.new("UIListLayout")
     ListLayout.Padding = UDim.new(0, 2)
     ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
     ListLayout.Parent = ListScroll
-    
+
+    -- ==============================================================
+    -- STATE
+    -- ==============================================================
     local isOpen = false
-    
+
+    -- Posisi asli elemen dalam parent section.
+    -- Ini penting supaya open -> close -> open tidak membuat
+    -- elemen semakin turun setiap kali dropdown dibuka.
+    local originalPositions = {}
+
+    local function saveOriginalPositions()
+        if not parentSection then
+            return
+        end
+
+        for _, child in ipairs(parentSection:GetChildren()) do
+            if child:IsA("GuiObject") and child ~= Container then
+                if not originalPositions[child] then
+                    originalPositions[child] = child.Position
+                end
+            end
+        end
+    end
+
+    -- Simpan posisi awal.
+    saveOriginalPositions()
+
+    -- ==============================================================
+    -- ITEM COUNT
+    -- ==============================================================
     local function getItemCount()
         local count = 0
-        for _, child in pairs(ListScroll:GetChildren()) do
+
+        for _, child in ipairs(ListScroll:GetChildren()) do
             if child:IsA("TextButton") then
                 count = count + 1
             end
         end
+
         return count
     end
-    
-    -- ⭐ KUNCI PERBAIKAN: Update semua section & canvas size
+
+    -- ==============================================================
+    -- UPDATE POSISI ELEMENT DI BAWAH DROPDOWN
+    -- ==============================================================
+    local function updateElementsBelow(offset)
+        if not parentSection then
+            return
+        end
+
+        -- Pastikan element yang baru dibuat juga tercatat.
+        saveOriginalPositions()
+
+        -- Posisi bawah header dropdown.
+        local dropdownTop = position.Y.Offset
+        local dropdownBottom = dropdownTop + 28
+
+        for child, originalPosition in pairs(originalPositions) do
+
+            -- Pastikan object masih ada.
+            if child and child.Parent == parentSection then
+
+                local originalY = originalPosition.Y.Offset
+
+                -- Hanya element yang berada di bawah dropdown
+                -- yang digeser.
+                if originalY >= dropdownBottom then
+
+                    child.Position = UDim2.new(
+                        originalPosition.X.Scale,
+                        originalPosition.X.Offset,
+                        originalPosition.Y.Scale,
+                        originalY + offset
+                    )
+
+                else
+                    -- Element di atas dropdown dikembalikan
+                    -- ke posisi aslinya.
+                    child.Position = originalPosition
+                end
+            end
+        end
+    end
+
+    -- ==============================================================
+    -- UPDATE CANVAS SIZE
+    -- ==============================================================
+    local function updateParentScroll()
+        if not parentScroll then
+            return
+        end
+
+        local layout = parentScroll:FindFirstChildOfClass("UIListLayout")
+
+        if layout then
+            -- UIListLayout sudah menghitung tinggi seluruh section.
+            -- AbsoluteContentSize lebih akurat daripada menghitung
+            -- child secara manual.
+            local contentHeight = layout.AbsoluteContentSize.Y
+
+            parentScroll.CanvasSize = UDim2.new(
+                0,
+                0,
+                0,
+                math.max(contentHeight + 20, 500)
+            )
+        end
+    end
+
+    -- ==============================================================
+    -- UPDATE SEMUA
+    -- ==============================================================
     local function updateAll()
         local itemCount = getItemCount()
-        local contentHeight = itemCount * (itemHeight + 2) + 2
-        local listHeight = math.min(contentHeight, maxListHeight)
-        
-        -- Update ListContainer
-        ListContainer.Size = UDim2.new(1, 0, 0, listHeight)
-        ListScroll.CanvasSize = UDim2.new(0, 0, 0, contentHeight)
-        
-        -- Update Container
+
+        local contentHeight =
+            itemCount * (itemHeight + 2) + 2
+
+        local listHeight = math.min(
+            contentHeight,
+            maxListHeight
+        )
+
+        -- ----------------------------------------------------------
+        -- Update tinggi list
+        -- ----------------------------------------------------------
+        ListContainer.Size = UDim2.new(
+            1,
+            0,
+            0,
+            listHeight
+        )
+
+        ListScroll.CanvasSize = UDim2.new(
+            0,
+            0,
+            0,
+            contentHeight
+        )
+
+        -- ----------------------------------------------------------
+        -- Update dropdown container
+        -- ----------------------------------------------------------
         if isOpen then
-            Container.Size = UDim2.new(width, offsetX, 0, 30 + listHeight + 2)
+
+            Container.Size = UDim2.new(
+                width,
+                offsetX,
+                0,
+                30 + listHeight + 2
+            )
+
         else
-            Container.Size = UDim2.new(width, offsetX, 0, 28)
+
+            Container.Size = UDim2.new(
+                width,
+                offsetX,
+                0,
+                28
+            )
+
         end
-        
-        -- ⭐ Update parent section (yang berisi dropdown)
+
+        -- ----------------------------------------------------------
+        -- Geser element di bawah dropdown
+        -- ----------------------------------------------------------
+        local extraHeight = 0
+
+        if isOpen then
+            extraHeight = listHeight + 2
+        end
+
+        updateElementsBelow(extraHeight)
+
+        -- ----------------------------------------------------------
+        -- Update tinggi parent section
+        -- ----------------------------------------------------------
         if parentSection then
-            local extraHeight = 0
-            if isOpen then
-                extraHeight = listHeight + 2
-            end
-            
+
             parentSection.Size = UDim2.new(
                 parentSection.Size.X.Scale,
                 parentSection.Size.X.Offset,
                 0,
                 originalSectionHeight + extraHeight
             )
+
         end
-        
-        -- ⭐ Update CanvasSize dari parent ScrollingFrame
-        if parentScroll then
-            -- Hitung total height dari semua section
-            local totalHeight = 0
-            local layout = parentScroll:FindFirstChildOfClass("UIListLayout")
-            local padding = layout and layout.Padding.Offset or 6
-            
-            for _, child in pairs(parentScroll:GetChildren()) do
-                if child:IsA("Frame") and child ~= ListContainer then
-                    totalHeight = totalHeight + child.Size.Y.Offset + padding
-                end
-            end
-            
-            parentScroll.CanvasSize = UDim2.new(0, 0, 0, math.max(totalHeight + 20, 500))
-        end
+
+        -- ----------------------------------------------------------
+        -- Update scroll section utama
+        -- ----------------------------------------------------------
+        updateParentScroll()
     end
-    
+
+    -- ==============================================================
+    -- CLOSE
+    -- ==============================================================
     local function close()
-        if isOpen then
-            isOpen = false
-            ListContainer.Visible = false
-            ArrowLabel.Text = "▼"
-            updateAll()
+
+        if not isOpen then
+            return
         end
-    end
-    
-    local function toggle()
-        isOpen = not isOpen
-        
-        if isOpen then
-            ListContainer.Visible = true
-            ArrowLabel.Text = "▲"
-        else
-            ListContainer.Visible = false
-            ArrowLabel.Text = "▼"
-        end
+
+        isOpen = false
+
+        ListContainer.Visible = false
+        ArrowLabel.Text = "▼"
+
         updateAll()
     end
-    
+
+    -- ==============================================================
+    -- TOGGLE
+    -- ==============================================================
+    local function toggle()
+
+        isOpen = not isOpen
+
+        if isOpen then
+
+            ListContainer.Visible = true
+            ArrowLabel.Text = "▲"
+
+        else
+
+            ListContainer.Visible = false
+            ArrowLabel.Text = "▼"
+
+        end
+
+        updateAll()
+    end
+
+    -- ==============================================================
+    -- HEADER CLICK
+    -- ==============================================================
     HeaderButton.MouseButton1Click:Connect(toggle)
-    
+
+    -- ==============================================================
+    -- RETURN API
+    -- ==============================================================
     return {
         Container = Container,
         HeaderButton = HeaderButton,
         ListContainer = ListContainer,
         ListScroll = ListScroll,
+
         ItemHeight = itemHeight,
+
         UpdateSize = updateAll,
         Close = close,
         Toggle = toggle,
-        IsOpen = function() return isOpen end,
+
+        IsOpen = function()
+            return isOpen
+        end,
+
         GetItemCount = getItemCount,
+
         ParentSection = parentSection,
         BaseHeight = originalSectionHeight,
     }
@@ -1426,7 +1601,7 @@ end
 -- ==================================================================
 local CreatePresetSection = createSection(weightScroll, "💾 Buat/Edit Preset")
 CreatePresetSection.LayoutOrder = 1
-CreatePresetSection.Size = UDim2.new(1, -10, 0, 185)
+CreatePresetSection.Size = UDim2.new(1, -10, 0, 239)
 
 local PresetNameInput = Instance.new("TextBox")
 PresetNameInput.Size = UDim2.new(1, -20, 0, 22)
@@ -1480,17 +1655,13 @@ local EditPresetDropdown = createDynamicDropdown(
     UDim2.new(0, 10, 0, 147),
     "📂 Pilih Preset untuk Diedit/Dihapus",
     CreatePresetSection,
-    185,
+    239,
     weightScroll
 )
 
-local CreatePresetButtonSection = createSection(weightScroll)
-CreatePresetButtonSection.LayoutOrder = 2
-CreatePresetButtonSection.Size = UDim2.new(1, -10, 0, 69)
-
 local SavePresetButton = Instance.new("TextButton")
 SavePresetButton.Size = UDim2.new(1, -20, 0, 22)
-SavePresetButton.Position = UDim2.new(0, 10, 0, 10)
+SavePresetButton.Position = UDim2.new(0, 10, 0, 180)
 SavePresetButton.BackgroundColor3 = C.success
 SavePresetButton.BorderSizePixel = 0
 SavePresetButton.Font = Enum.Font.GothamBold
@@ -1505,7 +1676,7 @@ UICornerSave.Parent = SavePresetButton
 
 local DeletePresetButton = Instance.new("TextButton")
 DeletePresetButton.Size = UDim2.new(1, -20, 0, 22)
-DeletePresetButton.Position = UDim2.new(0, 10, 0, 37)
+DeletePresetButton.Position = UDim2.new(0, 10, 0, 207)
 DeletePresetButton.BackgroundColor3 = C.danger
 DeletePresetButton.BorderSizePixel = 0
 DeletePresetButton.Font = Enum.Font.GothamBold
@@ -1522,7 +1693,7 @@ UICornerDelete.Parent = DeletePresetButton
 -- SECTION: PILIH TIM (DROPDOWN DINAMIS)
 -- ==================================================================
 local TeamSelectSection = createSection(weightScroll, "📈 Auto Leveling")
-TeamSelectSection.LayoutOrder = 3
+TeamSelectSection.LayoutOrder = 2
 TeamSelectSection.Size = UDim2.new(1, -10, 0, 93)
 
 local LevelInput = Instance.new("TextBox")
@@ -1566,7 +1737,7 @@ local TeamPresetDropdown = createDynamicDropdown(
 -- SECTION: PET TARGET
 -- ==================================================================
 local TargetSection = createSection(weightScroll, "🎯 Pet Target")
-TargetSection.LayoutOrder = 4
+TargetSection.LayoutOrder = 3
 TargetSection.Size = UDim2.new(1, -10, 0, 172)
 
 local TargetSearchBox = Instance.new("TextBox")
@@ -1618,7 +1789,7 @@ UICornerScan.Parent = ScanButton
 -- SECTION: AUTO WEIGHT (DROPDOWN DINAMIS)
 -- ==================================================================
 local WeightSection = createSection(weightScroll, "⚖️ Auto Weight")
-WeightSection.LayoutOrder = 5
+WeightSection.LayoutOrder = 4
 WeightSection.Size = UDim2.new(1, -10, 0, 129)
 
 local WeightToggleButton = Instance.new("TextButton")
@@ -1670,7 +1841,7 @@ local rainbowTargets = {
 -- SECTION: AUTO MUTATION (DROPDOWN DINAMIS)
 -- ==================================================================
 local MutationSection = createSection(weightScroll, "🧬 Auto Mutation")
-MutationSection.LayoutOrder = 6
+MutationSection.LayoutOrder = 5
 MutationSection.Size = UDim2.new(1, -10, 0, 99)
 
 local MutationToggleButton = Instance.new("TextButton")
@@ -1699,7 +1870,7 @@ local MutationPresetDropdown = createDynamicDropdown(
 )
 
 local MutationListSection = createSection(weightScroll, "❌ Mutasi yg tidak diinginkan:")
-MutationListSection.LayoutOrder = 7
+MutationListSection.LayoutOrder = 6
 MutationListSection.Size = UDim2.new(1, -10, 0, 185)
 
 local MutationSearchBox = Instance.new("TextBox")
@@ -1736,7 +1907,7 @@ MutationListLayout.Parent = MutationListFrame
 -- SECTION: ADVANCED (DROPDOWN DINAMIS)
 -- ==================================================================
 local AdvancedSection = createSection(weightScroll, "🚀 Advanced")
-AdvancedSection.LayoutOrder = 8
+AdvancedSection.LayoutOrder = 7
 AdvancedSection.Size = UDim2.new(1, -10, 0, 123)
 
 local AdvancedToggleButton = Instance.new("TextButton")
@@ -1795,7 +1966,7 @@ local AdvancedPresetDropdown = createDynamicDropdown(
 -- SECTION: KONTROL
 -- ==================================================================
 local ButtonSection = createSection(weightScroll)
-ButtonSection.LayoutOrder = 9
+ButtonSection.LayoutOrder = 8
 ButtonSection.Size = UDim2.new(1, -10, 0, 69)
 
 local ToggleButton = Instance.new("TextButton")
