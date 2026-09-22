@@ -1808,20 +1808,48 @@ local function refreshEggList()
     for _, c in ipairs(eggScroll:GetChildren()) do
         if c:IsA("TextButton") then c:Destroy() end
     end
-    local eggData = {}
+    
+    -- Kumpulkan data egg
+    local eggList = {}
     for _, eggInfo in ipairs(getBackpackEggs()) do
-        eggData[eggInfo.name] = (eggData[eggInfo.name] or 0) + eggInfo.count
+        local name = eggInfo.name
+        if not eggList[name] then
+            eggList[name] = 0
+        end
+        eggList[name] = eggList[name] + eggInfo.count
     end
+    
+    -- Convert ke array
+    local items = {}
+    for eggName, count in pairs(eggList) do
+        table.insert(items, {
+            name = eggName,
+            count = count,
+            isSelected = CONFIG.selectedEggs[eggName] == true,
+        })
+    end
+    
+    -- ⭐ Sort: yang dipilih dulu, lalu alfabetis
+    table.sort(items, function(a, b)
+        if a.isSelected ~= b.isSelected then
+            return a.isSelected  -- true (dipilih) naik ke atas
+        end
+        return a.name < b.name  -- alfabetis
+    end)
+    
+    -- Render
     local i = 0
-    for eggName, count in pairs(eggData) do
+    for _, item in ipairs(items) do
         i = i + 1
-        local isSelected = CONFIG.selectedEggs[eggName] == true
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(1, -4, 0, 24)
-        btn.BackgroundColor3 = isSelected and C.success or Color3.fromRGB(65, 65, 80)
+        btn.BackgroundColor3 = item.isSelected and C.success or Color3.fromRGB(65, 65, 80)
         btn.BorderSizePixel = 0
         btn.Font = Enum.Font.Gotham
-        btn.Text = string.format("%s %s (x%d)", isSelected and "✓" or "○", eggName, count)
+        btn.Text = string.format("%s %s (x%d)", 
+            item.isSelected and "✓" or "○", 
+            item.name, 
+            item.count)
         btn.TextColor3 = C.text
         btn.TextSize = 9
         btn.TextXAlignment = Enum.TextXAlignment.Left
@@ -1832,15 +1860,16 @@ local function refreshEggList()
         pad.PaddingLeft = UDim.new(0, 8)
         pad.Parent = btn
         btn.MouseButton1Click:Connect(function()
-            if CONFIG.selectedEggs[eggName] then
-                CONFIG.selectedEggs[eggName] = nil
+            if CONFIG.selectedEggs[item.name] then
+                CONFIG.selectedEggs[item.name] = nil
             else
-                CONFIG.selectedEggs[eggName] = true
+                CONFIG.selectedEggs[item.name] = true
             end
             saveConfig()
             refreshEggList()
         end)
     end
+    
     if i == 0 then
         local lbl = Instance.new("TextLabel")
         lbl.Size = UDim2.new(1, -4, 0, 30)
@@ -1968,41 +1997,62 @@ local function refreshUnwantedList()
     for _, c in ipairs(listFrame:GetChildren()) do
         if c:IsA("TextButton") then c:Destroy() end
     end
+    
     local search = searchBox.Text:lower()
     local petTypes = getAllPetTypesFromRegistry()
-    local i = 0
-    local selectedCount = 0
+    
+    -- Kumpulkan items yang match search
+    local items = {}
     for _, petType in ipairs(petTypes) do
         if search == "" or petType:lower():find(search) then
-            i = i + 1
-            local isSelected = CONFIG.unwantedPetTypes[petType] == true
-            if isSelected then selectedCount = selectedCount + 1 end
-            local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(1, -4, 0, 20)
-            btn.BackgroundColor3 = isSelected and C.danger or Color3.fromRGB(65, 65, 80)
-            btn.BorderSizePixel = 0
-            btn.Font = Enum.Font.Gotham
-            btn.Text = string.format("%s %s", isSelected and "✓" or "○", petType)
-            btn.TextColor3 = C.text
-            btn.TextSize = 8
-            btn.TextXAlignment = Enum.TextXAlignment.Left
-            btn.LayoutOrder = i
-            btn.Parent = listFrame
-            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
-            local pad = Instance.new("UIPadding")
-            pad.PaddingLeft = UDim.new(0, 6)
-            pad.Parent = btn
-            btn.MouseButton1Click:Connect(function()
-                if CONFIG.unwantedPetTypes[petType] then
-                    CONFIG.unwantedPetTypes[petType] = nil
-                else
-                    CONFIG.unwantedPetTypes[petType] = true
-                end
-                saveConfig()
-                refreshUnwantedList()
-            end)
+            table.insert(items, {
+                name = petType,
+                isSelected = CONFIG.unwantedPetTypes[petType] == true,
+            })
         end
     end
+    
+    -- ⭐ Sort: yang dipilih dulu, lalu alfabetis
+    table.sort(items, function(a, b)
+        if a.isSelected ~= b.isSelected then
+            return a.isSelected
+        end
+        return a.name < b.name
+    end)
+    
+    -- Render
+    local i = 0
+    local selectedCount = 0
+    for _, item in ipairs(items) do
+        i = i + 1
+        if item.isSelected then selectedCount = selectedCount + 1 end
+        
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 20)
+        btn.BackgroundColor3 = item.isSelected and C.danger or Color3.fromRGB(65, 65, 80)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.Text = string.format("%s %s", item.isSelected and "✓" or "○", item.name)
+        btn.TextColor3 = C.text
+        btn.TextSize = 8
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.LayoutOrder = i
+        btn.Parent = listFrame
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 6)
+        pad.Parent = btn
+        btn.MouseButton1Click:Connect(function()
+            if CONFIG.unwantedPetTypes[item.name] then
+                CONFIG.unwantedPetTypes[item.name] = nil
+            else
+                CONFIG.unwantedPetTypes[item.name] = true
+            end
+            saveConfig()
+            refreshUnwantedList()
+        end)
+    end
+    
     countLabel.Text = string.format("Total: %d pet | Terpilih: %d", i, selectedCount)
 end
 
