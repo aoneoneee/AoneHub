@@ -287,14 +287,24 @@ end
 -- ==================================================================
 local function countEggsInBackpack()
     local total = 0
-    local backpack = player:FindFirstChild("Backpack")
-    if not backpack then return 0 end
+    local seen = {}
     
-    for _, tool in ipairs(backpack:GetChildren()) do
-        if tool:IsA("Tool") and tool:GetAttribute("b") == "c" then
-            local eggName = tool:GetAttribute("h")
-            if next(CONFIG.selectedEggs) == nil or CONFIG.selectedEggs[eggName] then
-                total = total + (tool:GetAttribute("e") or 0)
+    -- Cek backpack DAN tangan
+    local locations = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, backpack) end
+    if player.Character then table.insert(locations, player.Character) end
+    
+    for _, container in ipairs(locations) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") and tool:GetAttribute("b") == "c" then
+                if not seen[tool] then
+                    seen[tool] = true
+                    local eggName = tool:GetAttribute("h")
+                    if next(CONFIG.selectedEggs) == nil or CONFIG.selectedEggs[eggName] then
+                        total = total + (tool:GetAttribute("e") or 0)
+                    end
+                end
             end
         end
     end
@@ -1156,20 +1166,21 @@ end
 -- ==================================================================
 local function startAutoHatch()
     if isRunning then return end
-    
-    -- ⭐ RESET STATS setiap mulai
-    resetStats()
-    STATS.knownUUIDs = getInventoryUUIDs()
-    STATS.eggBeforePlace = countEggsInBackpack()
-    
-    local initCount = 0
-    for _ in pairs(STATS.knownUUIDs) do initCount = initCount + 1 end
-    print(string.format("[Stats] Reset! Initial inventory: %d pet, Egg before: %d", 
-        initCount, STATS.eggBeforePlace))
-    
     isRunning = true
     
     task.spawn(function()
+        -- Reset stats
+        resetStats()
+        STATS.knownUUIDs = getInventoryUUIDs()
+        
+        -- ⭐ Hitung langsung saat klik MULAI
+        STATS.eggBeforePlace = countEggsInBackpack()
+        
+        local initCount = 0
+        for _ in pairs(STATS.knownUUIDs) do initCount = initCount + 1 end
+        print(string.format("[Stats] Inventory: %d pet, Egg before: %d", 
+            initCount, STATS.eggBeforePlace))
+        
         while isRunning and not guiDestroyed do
             for cycle = 1, CONFIG.cycleCount do
                 if not isRunning or guiDestroyed then break end
@@ -1181,7 +1192,6 @@ local function startAutoHatch()
             
             if not isRunning or guiDestroyed then break end
             
-            -- Kirim webhook (1 embed)
             if CONFIG.webhookEnabled then
                 local embed = buildWebhookEmbed()
                 task.spawn(function()
