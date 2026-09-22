@@ -301,7 +301,21 @@ local function countEggsInBackpack()
                 if not seen[tool] then
                     seen[tool] = true
                     local eggName = tool:GetAttribute("h")
-                    if next(CONFIG.selectedEggs) == nil or CONFIG.selectedEggs[eggName] then
+                    
+                    -- Filter by selected egg
+                    local isSelected = false
+                    if next(CONFIG.selectedEggs) == nil then
+                        isSelected = true
+                    else
+                        for name, val in pairs(CONFIG.selectedEggs) do
+                            if name == eggName and val then
+                                isSelected = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    if isSelected then
                         total = total + (tool:GetAttribute("e") or 0)
                     end
                 end
@@ -1169,11 +1183,10 @@ local function startAutoHatch()
     isRunning = true
     
     task.spawn(function()
-        -- Reset stats
         resetStats()
         STATS.knownUUIDs = getInventoryUUIDs()
         
-        -- ⭐ Hitung langsung saat klik MULAI
+        -- Hitung langsung (sudah cek backpack + tangan)
         STATS.eggBeforePlace = countEggsInBackpack()
         
         local initCount = 0
