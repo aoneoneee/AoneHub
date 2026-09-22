@@ -1668,7 +1668,7 @@ SavePresetButton.Font = Enum.Font.GothamBold
 SavePresetButton.Text = "💾 Simpan Preset"
 SavePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 SavePresetButton.TextSize = 9
-SavePresetButton.Parent = CreatePresetButtonSection
+SavePresetButton.Parent = CreatePresetSection
 
 local UICornerSave = Instance.new("UICorner")
 UICornerSave.CornerRadius = UDim.new(0, 4)
@@ -1683,7 +1683,7 @@ DeletePresetButton.Font = Enum.Font.GothamBold
 DeletePresetButton.Text = "🗑️ Hapus Preset"
 DeletePresetButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 DeletePresetButton.TextSize = 9
-DeletePresetButton.Parent = CreatePresetButtonSection
+DeletePresetButton.Parent = CreatePresetSection
 
 local UICornerDelete = Instance.new("UICorner")
 UICornerDelete.CornerRadius = UDim.new(0, 4)
