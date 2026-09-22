@@ -1062,20 +1062,54 @@ local function makeSection(parent, title, height, order)
     section.BackgroundColor3 = C.section
     section.BorderSizePixel = 0
     section.LayoutOrder = order or 1
+    section.ClipsDescendants = true
     section.Parent = parent
+
     Instance.new("UICorner", section).CornerRadius = UDim.new(0, 6)
-    if title then
-        local t = Instance.new("TextLabel")
-        t.Size = UDim2.new(1, -20, 0, 20)
-        t.Position = UDim2.new(0, 10, 0, 4)
-        t.Text = title
-        t.TextColor3 = C.text
-        t.Font = Enum.Font.GothamBold
-        t.TextSize = 10
-        t.TextXAlignment = Enum.TextXAlignment.Left
-        t.BackgroundTransparency = 1
-        t.Parent = section
-    end
+
+    local expandedHeight = height
+    local collapsedHeight = 28
+    local expanded = true
+
+    -- Header
+    local header = Instance.new("TextButton")
+    header.Size = UDim2.new(1, 0, 0, collapsedHeight)
+    header.Position = UDim2.new(0, 0, 0, 0)
+    header.BackgroundColor3 = C.section
+    header.BorderSizePixel = 0
+    header.AutoButtonColor = false
+    header.Font = Enum.Font.GothamBold
+    header.TextSize = 10
+    header.TextColor3 = C.text
+    header.TextXAlignment = Enum.TextXAlignment.Left
+    header.Text = "▼  " .. (title or "")
+    header.Parent = section
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingLeft = UDim.new(0, 10)
+    padding.Parent = header
+
+    -- Klik header
+    header.MouseButton1Click:Connect(function()
+        expanded = not expanded
+
+        if expanded then
+            section.Size = UDim2.new(
+                1, -10,
+                0, expandedHeight
+            )
+
+            header.Text = "▼  " .. (title or "")
+        else
+            section.Size = UDim2.new(
+                1, -10,
+                0, collapsedHeight
+            )
+
+            header.Text = "▶  " .. (title or "")
+        end
+    end)
+
     return section
 end
 
