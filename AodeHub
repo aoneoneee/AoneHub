@@ -968,6 +968,15 @@ local function placeEggsFromBackpack()
         end
     end
     
+    -- ⭐ UNEQUIP egg setelah place semua
+    if humanoid then
+        pcall(function()
+            humanoid:UnequipTools()
+        end)
+        task.wait(0.5)
+        print("[Place] Egg tool di-unequip")
+    end
+    
     print(string.format("[Place] Total: %d", placed))
     return placed
 end
