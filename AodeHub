@@ -1,11 +1,5 @@
 -- ==================================================================
--- AUTO HATCH GUI v12.0 — FINAL
--- Features:
---   • Place egg (scan → place ke slot kosong)
---   • Loadout swap (1=Speed, 2=Hatch, 3=Sell)
---   • Filter pet + tunggu konfirmasi + final check
---   • Scan inventory setelah filter+sell (untuk statistik)
---   • Discord Embed Report (5 embeds rapi)
+-- AUTO HATCH GUI v13.0 — FINAL
 -- ==================================================================
 
 local Players = game:GetService("Players")
@@ -125,34 +119,35 @@ local C = {
 }
 
 -- ==================================================================
--- STATISTICS TRACKING
+-- STATISTICS TRACKING (RESET SETIAP MULAI)
 -- ==================================================================
-local STATS = {
-    sessionStart = os.time(),
-    totalHatchCycles = 0,
-    totalHatched = 0,
-    currentSellCycle = 0,
-    cycleStartTime = 0,
-    lastCycleDuration = 0,
-    
-    huntStats = {
-        Huge = {},
-        Titan = {},
-        Godly = {},
-        Special = {},
-    },
-    
-    eggBeforePlace = 0,
-    eggAfterHatch = 0,
-    eggAfterSell = 0,
-    luckyHatchCount = 0,
-    luckySellCount = 0,
-    totalRecovery = 0,
-    
-    knownUUIDs = {},
-}
+local STATS = {}
 
--- Helper: extract info pet dari inventory data (nested PetData)
+local function resetStats()
+    STATS = {
+        sessionStart = os.time(),
+        totalHatchCycles = 0,
+        totalHatched = 0,
+        cycleStartTime = 0,
+        lastCycleDuration = 0,
+        
+        huntStats = {
+            Huge = {},
+            Titan = {},
+            Godly = {},
+            Special = {},
+        },
+        
+        eggBeforePlace = 0,
+        eggAfterSell = 0,
+        
+        knownUUIDs = {},
+    }
+end
+
+resetStats()
+
+-- Helper: extract info pet dari inventory data
 local function extractPetInfo(petData)
     if typeof(petData) ~= "table" then return nil end
     
@@ -181,7 +176,6 @@ local function extractPetInfo(petData)
     }
 end
 
--- Helper: ambil set UUID dari inventory
 local function getInventoryUUIDs()
     local uuids = {}
     local data = DataService:GetData()
@@ -196,7 +190,6 @@ local function getInventoryUUIDs()
     return uuids
 end
 
--- Helper: tentukan rarity dari baseweight
 local function getPetRarityFromBaseWeight(petName, baseWeight)
     if baseWeight then
         if baseWeight >= 10 and baseWeight <= 12 then return "Godly" end
@@ -209,7 +202,6 @@ local function getPetRarityFromBaseWeight(petName, baseWeight)
     return nil
 end
 
--- Helper: tambah hunt stat
 local function addHuntStat(rarity, petName, weight)
     if not rarity then return end
     local bucket = STATS.huntStats[rarity]
@@ -225,7 +217,6 @@ local function addHuntStat(rarity, petName, weight)
     if weight > entry.maxWeight then entry.maxWeight = weight end
 end
 
--- ⭐ SCAN inventory: pet baru yang lolos filter (masih ada setelah sell)
 local function scanNewPetsAfterSell()
     local data = DataService:GetData()
     if not data or not data.PetsData then return 0 end
@@ -246,7 +237,6 @@ local function scanNewPetsAfterSell()
             local petName = info.petName
             local baseWeight = info.baseWeight
             
-            -- Skip kalau unwanted (safety)
             if CONFIG.unwantedPetTypes[petName] 
                and baseWeight <= CONFIG.maxWeight 
                and info.level <= CONFIG.maxLevel then
@@ -269,7 +259,7 @@ local function scanNewPetsAfterSell()
 end
 
 -- ==================================================================
--- HELPER: Pet Count dari DataService
+-- HELPER: Pet Count
 -- ==================================================================
 local function getPetCountFromData()
     local data = DataService:GetData()
@@ -716,7 +706,7 @@ local function getHttpRequest()
     return nil
 end
 
-local function sendWebhookEmbeds(embeds)
+local function sendWebhookEmbed(embed)
     if not CONFIG.webhookEnabled then return end
     if not CONFIG.webhookUrl or CONFIG.webhookUrl == "" then return end
     
@@ -733,16 +723,16 @@ local function sendWebhookEmbeds(embeds)
             Headers = { ["Content-Type"] = "application/json" },
             Body = HttpService:JSONEncode({
                 username = CONFIG.webhookUsername or "Auto Hatch Report",
-                embeds = embeds,
+                embeds = {embed},
             }),
         })
     end)
 end
 
 -- ==================================================================
--- WEBHOOK EMBED BUILDER
+-- WEBHOOK EMBED BUILDER (1 EMBED)
 -- ==================================================================
-local function buildWebhookEmbeds()
+local function buildWebhookEmbed()
     -- Profile
     local eggName = "?"
     for name, _ in pairs(CONFIG.selectedEggs) do
@@ -752,7 +742,7 @@ local function buildWebhookEmbeds()
     
     local petCurrent, petMax = getPetCountFromData()
     
-    -- Helper: format team
+    -- Teams
     local function formatPreset(presetName)
         if not presetName then return "-" end
         local preset = getPresetFromFile(presetName)
@@ -780,7 +770,7 @@ local function buildWebhookEmbeds()
         return table.concat(parts, ", ")
     end
     
-    -- Helper: format hunt bucket
+    -- Hunt stats
     local function formatHuntBucket(bucket)
         local count = 0
         local lines = {}
@@ -802,16 +792,11 @@ local function buildWebhookEmbeds()
     local titanCount, titanList = formatHuntBucket(STATS.huntStats.Titan)
     local godlyCount, godlyList = formatHuntBucket(STATS.huntStats.Godly)
     
-    -- Egg Statistics
+    -- Egg stats
     local eggBefore = STATS.eggBeforePlace or 0
     local eggCurrent = STATS.eggAfterSell or 0
     local netResult = eggCurrent - eggBefore
     local netStr = netResult >= 0 and ("+" .. netResult) or tostring(netResult)
-    
-    local luckyHatchPct = 0
-    if eggBefore > 0 then luckyHatchPct = (STATS.luckyHatchCount / eggBefore) * 100 end
-    local luckySellPct = 0
-    if eggBefore > 0 then luckySellPct = (STATS.luckySellCount / eggBefore) * 100 end
     
     -- Duration
     local totalDuration = os.time() - STATS.sessionStart
@@ -820,74 +805,52 @@ local function buildWebhookEmbeds()
     local seconds = totalDuration % 60
     local durationStr = string.format("%dh %dm %ds", hours, minutes, seconds)
     
-    -- Sell Cycle Hatch
-    local sellCycleStr = string.format("%d / %d", STATS.currentSellCycle, CONFIG.cycleCount)
+    -- Build description
+    local desc = {}
     
-    -- Build embeds
-    local embeds = {
-        -- Embed 1: Profile
-        {
-            title = "📊 Profile",
-            color = 3447003,
-            fields = {
-                { name = "👤 Username", value = "||" .. player.Name .. "||", inline = true },
-                { name = "🥚 Egg Name", value = "`" .. eggName .. "`", inline = true },
-                { name = "🐾 Pet on Backpack", value = string.format("`%d/%d`", petCurrent, petMax), inline = true },
-            },
-        },
-        
-        -- Embed 2: Teams
-        {
-            title = "🐾 Teams",
-            color = 10181046,
-            fields = {
-                { name = "⚡ Core", value = "`" .. formatPreset(CONFIG.speedPreset) .. "`", inline = false },
-                { name = "🥚 Hatch", value = "`" .. formatPreset(CONFIG.hatchPreset) .. "`", inline = false },
-                { name = "💸 Sell", value = "`" .. formatPreset(CONFIG.sellPreset) .. "`", inline = false },
-            },
-        },
-        
-        -- Embed 3: Hunt Statistics
-        {
-            title = "🎯 Hunt Statistics",
-            color = 15844367,
-            fields = {
-                { name = string.format("⭐ Special: %d", specialCount), value = specialList ~= "" and specialList or "-", inline = false },
-                { name = string.format("🥉 Huge: %d", hugeCount), value = hugeList ~= "" and hugeList or "-", inline = false },
-                { name = string.format("🥈 Titan: %d", titanCount), value = titanList ~= "" and titanList or "-", inline = false },
-                { name = string.format("🥇 Godly: %d", godlyCount), value = godlyList ~= "" and godlyList or "-", inline = false },
-            },
-        },
-        
-        -- Embed 4: Egg Statistics
-        {
-            title = "📦 Egg Statistics",
-            color = 15105570,
-            fields = {
-                { name = "📦 Egg Before", value = "`" .. eggBefore .. "`", inline = true },
-                { name = "📊 Current Amount", value = "`" .. eggCurrent .. "`", inline = true },
-                { name = "📈 Net Result", value = "`" .. netStr .. "`", inline = true },
-                { name = "☘️ Lucky Hatch", value = string.format("`%d` (%.2f%%)", STATS.luckyHatchCount, luckyHatchPct), inline = true },
-                { name = "💰 Lucky Sell", value = string.format("`%d` (%.2f%%)", STATS.luckySellCount, luckySellPct), inline = true },
-                { name = "✨ Total Recovery", value = "`" .. STATS.totalRecovery .. "`", inline = true },
-            },
-        },
-        
-        -- Embed 5: Hatch Statistics
-        {
-            title = "🐣 Hatch Statistics",
-            color = 3066993,
-            fields = {
-                { name = "🔄 Hatch Cycles", value = "`" .. STATS.totalHatchCycles .. "`", inline = true },
-                { name = "🐣 Total Hatched", value = "`" .. STATS.totalHatched .. "`", inline = true },
-                { name = "⚙️ Sell Cycle Hatch", value = "`" .. sellCycleStr .. "`", inline = true },
-                { name = "⏱️ Cycle Duration", value = "`" .. STATS.lastCycleDuration .. "s`", inline = true },
-                { name = "⏳ All Time Duration", value = "`" .. durationStr .. "`", inline = true },
-            },
-        },
+    table.insert(desc, "**Profile :**")
+    table.insert(desc, string.format("> 👤 Username : ||%s||", player.Name))
+    table.insert(desc, string.format("> 🥚 Egg Name: ``%s``", eggName))
+    table.insert(desc, string.format("> 🐾 Pet on backpack: ``%d/%d``", petCurrent, petMax))
+    
+    table.insert(desc, "")
+    table.insert(desc, "**Teams :**")
+    table.insert(desc, "> Core: " .. formatPreset(CONFIG.speedPreset))
+    table.insert(desc, "> Hatch: " .. formatPreset(CONFIG.hatchPreset))
+    table.insert(desc, "> Sell: " .. formatPreset(CONFIG.sellPreset))
+    
+    table.insert(desc, "")
+    table.insert(desc, "**Hunt Statistics :**")
+    table.insert(desc, string.format("> ⭐ Special: %d", specialCount))
+    if specialList ~= "" then table.insert(desc, specialList) end
+    table.insert(desc, string.format("> 🥉 Huge: %d", hugeCount))
+    if hugeList ~= "" then table.insert(desc, hugeList) end
+    table.insert(desc, string.format("> 🥈 Titan: %d", titanCount))
+    if titanList ~= "" then table.insert(desc, titanList) end
+    table.insert(desc, string.format("> 🥇 Godly: %d", godlyCount))
+    if godlyList ~= "" then table.insert(desc, godlyList) end
+    
+    table.insert(desc, "")
+    table.insert(desc, "**Egg Statistics :**")
+    table.insert(desc, string.format("> 📦 Egg Before: ``%d``", eggBefore))
+    table.insert(desc, string.format("> 📊 Current Amount: ``%d``", eggCurrent))
+    table.insert(desc, string.format("> 📈 Net Result: ``%s``", netStr))
+    
+    table.insert(desc, "")
+    table.insert(desc, "**Hatch Statistics :**")
+    table.insert(desc, string.format("> 🔄 Hatch Cycles: ``%d``", STATS.totalHatchCycles))
+    table.insert(desc, string.format("> 🐣 Total Hatched: ``%d``", STATS.totalHatched))
+    table.insert(desc, string.format("> ⏱️ Cycle Duration: ``%ds``", STATS.lastCycleDuration))
+    table.insert(desc, string.format("> ⏳ All Time Duration: ``%s``", durationStr))
+    
+    return {
+        title = "🥚 Auto Hatch Report",
+        description = table.concat(desc, "\n"),
+        color = 3447003,
+        footer = {
+            text = "Auto Hatch v13.0 • " .. os.date("%Y-%m-%d %H:%M:%S")
+        }
     }
-    
-    return embeds
 end
 
 -- ==================================================================
@@ -911,9 +874,6 @@ local function placeEggsFromBackpack()
     local totalSlots = #CONFIG.eggGridOffsets
     
     task.wait(CONFIG.scanSettleDelay)
-    
-    local eggCountBefore = countEggsInBackpack()
-    print("[Stats] Egg sebelum place: " .. eggCountBefore)
     
     local emptySlots, occupied = getEmptySlots()
     
@@ -956,7 +916,6 @@ local function placeEggsFromBackpack()
     if not center then return 0 end
     
     local placed = 0
-    print("[Place] === PLACE ===")
     
     for _, slotIndex in ipairs(emptySlots) do
         if not isRunning then break end
@@ -973,10 +932,6 @@ local function placeEggsFromBackpack()
         end
         
         local pos = center.Position + CONFIG.eggGridOffsets[slotIndex]
-        print(string.format("[Place] Slot %d | Egg: %s (e=%d)",
-            slotIndex,
-            currentEggTool:GetAttribute("h"),
-            currentEggTool:GetAttribute("e")))
         
         local ok = pcall(function()
             PetEggService:FireServer("CreateEgg", pos)
@@ -986,8 +941,6 @@ local function placeEggsFromBackpack()
             placed = placed + 1
             updateStatus(string.format("📦 Place %d/%d (slot %d)", placed, #emptySlots, slotIndex))
             task.wait(CONFIG.placeDelay)
-        else
-            print("[Place] Gagal slot " .. slotIndex)
         end
     end
     
@@ -1084,6 +1037,9 @@ local function runOneCycle(cycleNum, totalCycles)
         if t <= 0 then table.insert(eggsToHatch, egg) end
     end
     
+    -- ⭐ Hitung egg yang benar-benar di-hatch
+    local hatchCount = #eggsToHatch
+    
     for _, egg in ipairs(eggsToHatch) do
         if not isRunning then break end
         hatchEgg(egg)
@@ -1102,16 +1058,9 @@ local function runOneCycle(cycleNum, totalCycles)
         task.wait(1)
     end
     
-    -- Track lucky hatch
-    task.wait(2)
-    local eggCountAfterHatch = countEggsInBackpack()
-    local expectedRemaining = STATS.eggBeforePlace - placed
-    local autoSpawned = eggCountAfterHatch - expectedRemaining
-    if autoSpawned > 0 then
-        STATS.luckyHatchCount = STATS.luckyHatchCount + autoSpawned
-        print(string.format("[Stats] Lucky Hatch: +%d egg", autoSpawned))
-    end
-    STATS.eggAfterHatch = eggCountAfterHatch
+    -- ⭐ Update totalHatched
+    STATS.totalHatched = STATS.totalHatched + hatchCount
+    print(string.format("[Stats] Hatched %d egg (total: %d)", hatchCount, STATS.totalHatched))
     
     updateStatus(string.format("[%d/%d] ⏳ Delay %ss...", cycleNum, totalCycles, CONFIG.delayAfterHatchAll))
     task.wait(CONFIG.delayAfterHatchAll)
@@ -1136,7 +1085,6 @@ local function runFilterAndSell()
     
     updateStatus("⭐ Filter pet...")
     local pets = getBackpackPets()
-    print(string.format("[Filter] Total pet: %d", #pets))
     
     local favCount = 0
     local skipCount = 0
@@ -1190,25 +1138,14 @@ local function runFilterAndSell()
     updateStatus("⏳ Delay sebelum sell...")
     task.wait(CONFIG.delayBeforeSell)
     
-    local eggCountBeforeSell = countEggsInBackpack()
-    
     updateStatus("💰 Sell all...")
     sellAll()
     task.wait(3)
     
-    local eggCountAfterSell = countEggsInBackpack()
-    local sellRecovery = eggCountAfterSell - eggCountBeforeSell
-    if sellRecovery > 0 then
-        STATS.luckySellCount = STATS.luckySellCount + sellRecovery
-        STATS.totalRecovery = STATS.totalRecovery + sellRecovery
-        print(string.format("[Stats] Lucky Sell: +%d egg", sellRecovery))
-    end
-    STATS.eggAfterSell = eggCountAfterSell
-    STATS.currentSellCycle = CONFIG.cycleCount
+    STATS.eggAfterSell = countEggsInBackpack()
     
     updateStatus("✅ Sell selesai")
     
-    -- ⭐ SCAN inventory setelah sell
     task.wait(2)
     updateStatus("📊 Scan statistics...")
     scanNewPetsAfterSell()
@@ -1219,23 +1156,23 @@ end
 -- ==================================================================
 local function startAutoHatch()
     if isRunning then return end
-    isRunning = true
     
-    -- Snapshot inventory
+    -- ⭐ RESET STATS setiap mulai
+    resetStats()
     STATS.knownUUIDs = getInventoryUUIDs()
+    STATS.eggBeforePlace = countEggsInBackpack()
+    
     local initCount = 0
     for _ in pairs(STATS.knownUUIDs) do initCount = initCount + 1 end
-    print(string.format("[Stats] Initial inventory: %d pet", initCount))
+    print(string.format("[Stats] Reset! Initial inventory: %d pet, Egg before: %d", 
+        initCount, STATS.eggBeforePlace))
     
-    task.wait(1)
-    STATS.eggBeforePlace = countEggsInBackpack()
-    print("[Stats] Egg before: " .. STATS.eggBeforePlace)
+    isRunning = true
     
     task.spawn(function()
         while isRunning and not guiDestroyed do
             for cycle = 1, CONFIG.cycleCount do
                 if not isRunning or guiDestroyed then break end
-                STATS.currentSellCycle = cycle
                 runOneCycle(cycle, CONFIG.cycleCount)
             end
             
@@ -1244,11 +1181,11 @@ local function startAutoHatch()
             
             if not isRunning or guiDestroyed then break end
             
-            -- Kirim webhook setelah scan
+            -- Kirim webhook (1 embed)
             if CONFIG.webhookEnabled then
-                local embeds = buildWebhookEmbeds()
+                local embed = buildWebhookEmbed()
                 task.spawn(function()
-                    sendWebhookEmbeds(embeds)
+                    sendWebhookEmbed(embed)
                 end)
             end
             
@@ -1304,7 +1241,7 @@ Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
 titleLabel.Position = UDim2.new(0, 12, 0, 0)
-titleLabel.Text = "🥚 Auto Hatch v12.0"
+titleLabel.Text = "🥚 Auto Hatch v13.0"
 titleLabel.TextColor3 = C.text
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 11
@@ -1670,12 +1607,10 @@ testWebhookBtn.MouseButton1Click:Connect(function()
         statusLabel.Text = "⚠️ Webhook URL kosong!"
         return
     end
-    sendWebhookEmbeds({
-        {
-            title = "🧪 Test Webhook",
-            description = "Auto Hatch v12.0\nBerhasil terhubung!",
-            color = 3066993,
-        }
+    sendWebhookEmbed({
+        title = "🧪 Test Webhook",
+        description = "Auto Hatch v13.0\nBerhasil terhubung!",
+        color = 3066993,
     })
     statusLabel.Text = "✅ Test webhook terkirim"
 end)
@@ -1993,7 +1928,7 @@ refreshEggList()
 refreshUnwantedList()
 switchTab("Main")
 
-print("✅ Auto Hatch GUI v12.0 loaded!")
-print("   • Discord Embed Report (5 embeds)")
-print("   • Scan inventory setelah filter+sell")
-print("   • BaseWeight dari nested PetData")
+print("✅ Auto Hatch GUI v13.0 loaded!")
+print("   • Webhook 1 embed")
+print("   • Stats reset tiap Mulai")
+print("   • Total Hatched = egg yang benar-benar di-hatch")
