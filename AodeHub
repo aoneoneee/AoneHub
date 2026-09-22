@@ -1,12 +1,10 @@
 -- ==================================================================
--- AUTO HATCH GUI v10.0 — FINAL
--- Perubahan dari v9.0:
---   • Hapus Auto Skip & skipDelay
---   • Hapus delayAfterSpeed/Hatch/Sell, delayBeforeSell, equipDelay, syncWaitTime dari GUI
---     (nilai tetap default di CONFIG)
---   • Tambah delay 2s setelah hatch semua sebelum ganti loadout
---   • Hapus unfavorit di filter (biarkan manual)
---   • Tunggu konfirmasi favorit + final check sebelum sell
+-- AUTO HATCH GUI v11.0 — FINAL
+-- Features:
+--   • Place egg (scan → place ke slot kosong)
+--   • Loadout swap (1=Speed, 2=Hatch, 3=Sell)
+--   • Filter pet + tunggu konfirmasi + final check
+--   • Discord Webhook report setelah hatch semua
 -- ==================================================================
 
 local Players = game:GetService("Players")
@@ -50,12 +48,10 @@ local CONFIG = {
         Vector3.new(27.13, -4.97, -16.24),
     },
     
-    -- Loadout mapping
     speedLoadout = 1,
     hatchLoadout = 2,
     sellLoadout = 3,
     
-    -- Preset (untuk verifikasi)
     speedPreset = nil,
     hatchPreset = nil,
     sellPreset = nil,
@@ -64,14 +60,12 @@ local CONFIG = {
     cycleCount = 1,
     autoSell = true,
     
-    -- ⭐ Delay DEFAULT (tidak di GUI, kecuali yang tetap di GUI)
-    delayAfterLoadout = 6.0,      -- tetap di GUI
-    hatchDelay = 1.5,             -- tetap di GUI
-    placeDelay = 1.5,             -- tetap di GUI
-    scanSettleDelay = 1.5,        -- tetap di GUI
-    delayAfterHatchAll = 2.0,     -- tetap di GUI (BARU)
-    
-    -- Nilai internal (tidak di GUI)
+    -- Delay
+    delayAfterLoadout = 6.0,
+    hatchDelay = 1.5,
+    placeDelay = 1.5,
+    scanSettleDelay = 1.5,
+    delayAfterHatchAll = 2.0,
     delayAfterSpeed = 2.0,
     delayAfterHatch = 3.0,
     delayAfterSell = 2.0,
@@ -83,6 +77,11 @@ local CONFIG = {
     maxWeight = 3.5,
     maxLevel = 50,
     unwantedPetTypes = {},
+    
+    -- ⭐ Webhook
+    webhookEnabled = false,
+    webhookUrl = "",
+    webhookUsername = "Auto Hatch Report",
 }
 
 local SAVE_FILE = "AutoHatch_Config.json"
@@ -123,6 +122,142 @@ local C = {
     warning = Color3.fromRGB(255, 200, 0),
     section = Color3.fromRGB(38, 38, 48),
 }
+
+-- ==================================================================
+-- STATISTICS TRACKING
+-- ==================================================================
+local STATS = {
+    sessionStart = os.time(),
+    totalHatchCycles = 0,
+    totalHatched = 0,
+    currentSellCycle = 0,
+    totalSellCycle = 0,
+    cycleStartTime = 0,
+    lastCycleDuration = 0,
+    
+    huntStats = {
+        Huge = {},
+        Titan = {},
+        Godly = {},
+        Special = {},
+    },
+    
+    eggBeforePlace = 0,
+    eggAfterHatch = 0,
+    eggAfterSell = 0,
+    luckyHatchCount = 0,
+    luckySellCount = 0,
+    totalRecovery = 0,
+    
+    petCache = {},
+}
+
+-- Helper: tentukan rarity dari baseweight / unwanted
+local function getPetRarity(petName, baseWeight)
+    if baseWeight then
+        if baseWeight >= 10 and baseWeight <= 12 then return "Godly" end
+        if baseWeight >= 7 and baseWeight <= 9 then return "Titan" end
+        if baseWeight >= 4 and baseWeight <= 6 then return "Huge" end
+    end
+    -- Special = pet yang TIDAK dipilih di unwanted list
+    if petName and not CONFIG.unwantedPetTypes[petName] then
+        return "Special"
+    end
+    return nil
+end
+
+-- Helper: tambah hunt stat
+local function addHuntStat(rarity, petName, weight)
+    if not rarity then return end
+    local bucket = STATS.huntStats[rarity]
+    if not bucket then return end
+    
+    if not bucket[petName] then
+        bucket[petName] = { count = 0, minWeight = weight, maxWeight = weight }
+    end
+    
+    local entry = bucket[petName]
+    entry.count = entry.count + 1
+    if weight < entry.minWeight then entry.minWeight = weight end
+    if weight > entry.maxWeight then entry.maxWeight = weight end
+end
+
+-- Hook: Tangkap setiap hatch
+local EggReady = RS.GameEvents:FindFirstChild("EggReadyToHatch_RE")
+if EggReady then
+    EggReady.OnClientEvent:Connect(function(petData, uuid)
+        STATS.totalHatched = STATS.totalHatched + 1
+        
+        local petName = nil
+        local weight = 0
+        local baseWeight = 0
+        
+        if typeof(petData) == "table" then
+            petName = petData.PetType or petData.Name or petData.Pet
+            weight = petData.Weight or petData.BaseWeight or 0
+            baseWeight = petData.BaseWeight or weight
+        elseif typeof(petData) == "string" then
+            petName = petData
+        end
+        
+        if uuid then
+            STATS.petCache[uuid] = {
+                name = petName,
+                weight = weight,
+                baseWeight = baseWeight,
+                timestamp = os.time(),
+            }
+        end
+        
+        if petName then
+            local rarity = getPetRarity(petName, baseWeight)
+            addHuntStat(rarity, petName, weight)
+        end
+    end)
+end
+
+-- ==================================================================
+-- HELPER: Pet Count dari DataService
+-- ==================================================================
+local function getPetCountFromData()
+    local data = DataService:GetData()
+    if not data or not data.PetsData then return 0, 0 end
+    
+    local petsData = data.PetsData
+    
+    local current = 0
+    if petsData.PetInventory and petsData.PetInventory.Data then
+        for _ in pairs(petsData.PetInventory.Data) do
+            current = current + 1
+        end
+    end
+    
+    local max = 0
+    if petsData.MutableStats and petsData.MutableStats.MaxPetsInInventory then
+        max = petsData.MutableStats.MaxPetsInInventory
+    end
+    
+    return current, max
+end
+
+-- ==================================================================
+-- HELPER: Count egg di backpack
+-- ==================================================================
+local function countEggsInBackpack()
+    local total = 0
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return 0 end
+    
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") and tool:GetAttribute("b") == "c" then
+            local eggName = tool:GetAttribute("h")
+            if next(CONFIG.selectedEggs) == nil or CONFIG.selectedEggs[eggName] then
+                total = total + (tool:GetAttribute("e") or 0)
+            end
+        end
+    end
+    return total
+end
 
 -- ==================================================================
 -- HELPER: FARM
@@ -479,21 +614,18 @@ local function equipTeamByPreset(presetName, loadoutSlot, forceRefresh)
 end
 
 -- ==================================================================
--- HELPER: FAVORIT (TUNGGU KONFIRMASI)
+-- HELPER: FAVORIT
 -- ==================================================================
 local function ensureFavorit(tool, shouldBeFavorite, timeout)
     timeout = timeout or 2
     local current = tool:GetAttribute("d") == true
     
-    -- Sudah sesuai → skip
     if current == shouldBeFavorite then
         return true
     end
     
-    -- Fire toggle
     pcall(function() FavoriteItemRE:FireServer(tool) end)
     
-    -- Tunggu konfirmasi
     local startTime = os.clock()
     while os.clock() - startTime < timeout do
         if (tool:GetAttribute("d") == true) == shouldBeFavorite then
@@ -502,13 +634,12 @@ local function ensureFavorit(tool, shouldBeFavorite, timeout)
         task.wait(0.1)
     end
     
-    warn(string.format("[Favorit] Timeout: %s (expected %s, got %s)", 
-        tool.Name, tostring(shouldBeFavorite), tostring(tool:GetAttribute("d"))))
+    warn(string.format("[Favorit] Timeout: %s", tool.Name))
     return false
 end
 
 -- ==================================================================
--- HELPER: UNWANTED
+-- HELPER: UNWANTED & SELL
 -- ==================================================================
 local function isUnwantedPet(pet)
     if not CONFIG.unwantedPetTypes[pet.name] then return false end
@@ -520,6 +651,177 @@ end
 local function sellAll()
     pcall(function() SellAllRE:FireServer() end)
     task.wait(3)
+end
+
+-- ==================================================================
+-- WEBHOOK
+-- ==================================================================
+local function getHttpRequest()
+    if typeof(request) == "function" then return request end
+    if typeof(http_request) == "function" then return http_request end
+    if syn and typeof(syn.request) == "function" then return syn.request end
+    if fluxus and typeof(fluxus.request) == "function" then return fluxus.request end
+    return nil
+end
+
+local function sendWebhook(content)
+    if not CONFIG.webhookEnabled then return end
+    if not CONFIG.webhookUrl or CONFIG.webhookUrl == "" then return end
+    
+    local httpRequest = getHttpRequest()
+    if not httpRequest then
+        warn("[Webhook] Executor tidak support HTTP request")
+        return
+    end
+    
+    pcall(function()
+        httpRequest({
+            Url = CONFIG.webhookUrl,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode({
+                username = CONFIG.webhookUsername or "Auto Hatch",
+                content = content,
+            }),
+        })
+    end)
+end
+
+-- ==================================================================
+-- WEBHOOK PAYLOAD BUILDER
+-- ==================================================================
+local function buildWebhookPayload()
+    -- Profile
+    local eggName = "?"
+    for name, _ in pairs(CONFIG.selectedEggs) do
+        eggName = name
+        break
+    end
+    
+    local petCurrent, petMax = getPetCountFromData()
+    
+    -- Teams
+    local function formatPreset(presetName)
+        if not presetName then return "-" end
+        local preset = getPresetFromFile(presetName)
+        if not preset or not preset.pets then return "-" end
+        
+        local groups = {}
+        for _, petInfo in ipairs(preset.pets) do
+            local key = petInfo.PetType or "?"
+            if petInfo.Mutation and petInfo.Mutation ~= "Normal" then
+                key = petInfo.Mutation .. " " .. key
+            end
+            groups[key] = (groups[key] or 0) + 1
+        end
+        
+        local list = {}
+        for name, count in pairs(groups) do
+            table.insert(list, {name = name, count = count})
+        end
+        table.sort(list, function(a, b) return a.count > b.count end)
+        
+        local parts = {}
+        for _, item in ipairs(list) do
+            table.insert(parts, string.format("%d %s", item.count, item.name))
+        end
+        return table.concat(parts, ", ")
+    end
+    
+    local coreTeam = formatPreset(CONFIG.speedPreset)
+    local hatchTeam = formatPreset(CONFIG.hatchPreset)
+    local sellTeam = formatPreset(CONFIG.sellPreset)
+    
+    -- Hunt Statistics
+    local function formatHuntBucket(bucket)
+        local count = 0
+        local list = {}
+        for petName, entry in pairs(bucket) do
+            count = count + entry.count
+            local weightStr
+            if math.abs(entry.minWeight - entry.maxWeight) < 0.01 then
+                weightStr = string.format("%.2f kg", entry.minWeight)
+            else
+                weightStr = string.format("%.2f-%.2f kg", entry.minWeight, entry.maxWeight)
+            end
+            table.insert(list, {name = petName, count = entry.count, weight = weightStr})
+        end
+        table.sort(list, function(a, b) return a.count > b.count end)
+        
+        local petLines = {}
+        for _, item in ipairs(list) do
+            table.insert(petLines, string.format("  • %s x%d (%s)", 
+                item.name, item.count, item.weight))
+        end
+        
+        return count, table.concat(petLines, "\n")
+    end
+    
+    local specialCount, specialList = formatHuntBucket(STATS.huntStats.Special)
+    local hugeCount, hugeList = formatHuntBucket(STATS.huntStats.Huge)
+    local titanCount, titanList = formatHuntBucket(STATS.huntStats.Titan)
+    local godlyCount, godlyList = formatHuntBucket(STATS.huntStats.Godly)
+    
+    -- Egg Statistics
+    local eggBefore = STATS.eggBeforePlace or 0
+    local eggCurrent = STATS.eggAfterSell or 0
+    local netResult = eggCurrent - eggBefore
+    
+    local luckyHatchPct = 0
+    if eggBefore > 0 then luckyHatchPct = (STATS.luckyHatchCount / eggBefore) * 100 end
+    
+    local luckySellPct = 0
+    if eggBefore > 0 then luckySellPct = (STATS.luckySellCount / eggBefore) * 100 end
+    
+    -- Hatch Statistics
+    local totalDuration = os.time() - STATS.sessionStart
+    local hours = math.floor(totalDuration / 3600)
+    local minutes = math.floor((totalDuration % 3600) / 60)
+    local seconds = totalDuration % 60
+    local durationStr = string.format("%dh %dm %ds", hours, minutes, seconds)
+    
+    -- Build
+    local lines = {}
+    table.insert(lines, "**Profile :**")
+    table.insert(lines, string.format("> 👤 Username : ||%s||", player.Name))
+    table.insert(lines, string.format("> 🥚 Egg Name: ``%s``", eggName))
+    table.insert(lines, string.format("> 🐾 Pet on backpack: ``%d/%d``", petCurrent, petMax))
+    
+    table.insert(lines, "")
+    table.insert(lines, "**Teams :**")
+    table.insert(lines, "> Core: " .. coreTeam)
+    table.insert(lines, "> Hatch: " .. hatchTeam)
+    table.insert(lines, "> Sell: " .. sellTeam)
+    
+    table.insert(lines, "")
+    table.insert(lines, "**Hunt Statistics :**")
+    table.insert(lines, string.format("> ⭐ Special: %d", specialCount))
+    if specialList ~= "" then table.insert(lines, specialList) end
+    table.insert(lines, string.format("> 🥉 Huge: %d", hugeCount))
+    if hugeList ~= "" then table.insert(lines, hugeList) end
+    table.insert(lines, string.format("> 🥈 Titan: %d", titanCount))
+    if titanList ~= "" then table.insert(lines, titanList) end
+    table.insert(lines, string.format("> 🥇 Godly: %d", godlyCount))
+    if godlyList ~= "" then table.insert(lines, godlyList) end
+    
+    table.insert(lines, "")
+    table.insert(lines, "**Egg Statistics :**")
+    table.insert(lines, string.format("> 📦 Egg Before: ``%d``", eggBefore))
+    table.insert(lines, string.format("> 📊 Current Amount: ``%d``", eggCurrent))
+    table.insert(lines, string.format("> 📈 Net Result: ``%+d``", netResult))
+    table.insert(lines, string.format("> ☘️ Lucky Hatch: ``%d`` ( %.2f%% )", STATS.luckyHatchCount, luckyHatchPct))
+    table.insert(lines, string.format("> 💰 Lucky Sell: ``%d`` ( %.2f%% )", STATS.luckySellCount, luckySellPct))
+    table.insert(lines, string.format("> ✨ Total Recovery: ``%d``", STATS.totalRecovery))
+    
+    table.insert(lines, "")
+    table.insert(lines, "**Hatch Statistics :**")
+    table.insert(lines, string.format("> 🔄 Hatch Cycles: ``%d``", STATS.totalHatchCycles))
+    table.insert(lines, string.format("> 🐣 Total Hatched: ``%d``", STATS.totalHatched))
+    table.insert(lines, string.format("> ⚙️ Sell Cycle Hatch: ``%d / %d``", STATS.currentSellCycle, CONFIG.cycleCount))
+    table.insert(lines, string.format("> ⏱️ Cycle Duration: ``%ds``", STATS.lastCycleDuration))
+    table.insert(lines, string.format("> ⏳ All Time Duration: ``%s``", durationStr))
+    
+    return table.concat(lines, "\n")
 end
 
 -- ==================================================================
@@ -544,6 +846,10 @@ local function placeEggsFromBackpack()
     
     task.wait(CONFIG.scanSettleDelay)
     
+    -- Track egg sebelum place
+    local eggCountBefore = countEggsInBackpack()
+    print("[Stats] Egg sebelum place: " .. eggCountBefore)
+    
     local emptySlots, occupied = getEmptySlots()
     
     print("[Place] === SCAN ===")
@@ -556,6 +862,7 @@ local function placeEggsFromBackpack()
     
     if #emptySlots == 0 then
         updateStatus("⚠️ Garden penuh")
+        STATS.eggBeforePlace = eggCountBefore
         return 0
     end
     
@@ -564,6 +871,7 @@ local function placeEggsFromBackpack()
     local eggTool = findEggTool()
     if not eggTool then
         updateStatus("⚠️ Tidak ada egg yang dipilih")
+        STATS.eggBeforePlace = eggCountBefore
         return 0
     end
     
@@ -621,6 +929,7 @@ local function placeEggsFromBackpack()
     end
     
     print(string.format("[Place] Total: %d", placed))
+    STATS.eggBeforePlace = eggCountBefore
     return placed
 end
 
@@ -628,6 +937,10 @@ end
 -- FASE 2: SATU CYCLE
 -- ==================================================================
 local function runOneCycle(cycleNum, totalCycles)
+    if cycleNum == 1 then
+        STATS.cycleStartTime = os.time()
+    end
+    
     updateStatus(string.format("[%d/%d] 📦 Place egg...", cycleNum, totalCycles))
     local placed = placeEggsFromBackpack()
     
@@ -727,12 +1040,35 @@ local function runOneCycle(cycleNum, totalCycles)
         task.wait(1)
     end
     
-    -- ⭐ DELAY SETELAH HATCH SEMUA (sebelum ganti loadout)
-    updateStatus(string.format("[%d/%d] ⏳ Delay %ss sebelum lanjut...", 
-        cycleNum, totalCycles, CONFIG.delayAfterHatchAll))
+    -- ⭐ Track lucky hatch (auto spawn)
+    task.wait(2)
+    local eggCountAfterHatch = countEggsInBackpack()
+    local expectedRemaining = STATS.eggBeforePlace - placed
+    local autoSpawned = eggCountAfterHatch - expectedRemaining
+    if autoSpawned > 0 then
+        STATS.luckyHatchCount = STATS.luckyHatchCount + autoSpawned
+        print(string.format("[Stats] Lucky Hatch: +%d egg", autoSpawned))
+    end
+    STATS.eggAfterHatch = eggCountAfterHatch
+    
+    -- ⭐ Delay setelah hatch semua
+    updateStatus(string.format("[%d/%d] ⏳ Delay %ss...", cycleNum, totalCycles, CONFIG.delayAfterHatchAll))
     task.wait(CONFIG.delayAfterHatchAll)
     
+    -- ⭐ Update statistics
+    STATS.totalHatchCycles = STATS.totalHatchCycles + 1
+    STATS.lastCycleDuration = os.time() - STATS.cycleStartTime
+    
     updateStatus(string.format("[%d/%d] ✅ Cycle selesai", cycleNum, totalCycles))
+    
+    -- ⭐ Kirim webhook report setelah hatch semua
+    if CONFIG.webhookEnabled then
+        task.spawn(function()
+            local message = buildWebhookPayload()
+            sendWebhook(message)
+        end)
+    end
+    
     task.wait(2)
     return true
 end
@@ -743,16 +1079,10 @@ end
 local function runFilterAndSell()
     if not CONFIG.autoSell then return end
     
-    -- =========================================
-    -- STEP 1: Tim Sell
-    -- =========================================
     updateStatus("💸 Tim Sell...")
     equipTeamByPreset(CONFIG.sellPreset, CONFIG.sellLoadout)
     task.wait(CONFIG.delayAfterSell)
     
-    -- =========================================
-    -- STEP 2: Filter pet (favorit + tunggu konfirmasi)
-    -- =========================================
     updateStatus("⭐ Filter pet...")
     local pets = getBackpackPets()
     print(string.format("[Filter] Total pet: %d", #pets))
@@ -768,7 +1098,6 @@ local function runFilterAndSell()
         local shouldBeFav = isPetInPreset(pet.name) or not isUnwantedPet(pet)
         
         if shouldBeFav then
-            -- Favorit + tunggu konfirmasi
             local ok = ensureFavorit(pet.tool, true)
             if ok then
                 if isPetInPreset(pet.name) then
@@ -780,7 +1109,6 @@ local function runFilterAndSell()
                 timeoutCount = timeoutCount + 1
             end
         else
-            -- Unwanted → skip (biar dijual), TIDAK unfavorit
             skipCount = skipCount + 1
         end
     end
@@ -789,43 +1117,44 @@ local function runFilterAndSell()
         presetProtectCount, favCount, skipCount, timeoutCount))
     task.wait(1)
     
-    -- =========================================
-    -- STEP 3: FINAL CHECK sebelum sell
-    -- =========================================
     updateStatus("🔍 Final check...")
     task.wait(1)
     
     local finalFail = 0
     for _, pet in ipairs(getBackpackPets()) do
         local shouldBeFav = isPetInPreset(pet.name) or not isUnwantedPet(pet)
-        
         if shouldBeFav and not pet.isFavorited then
-            -- Belum favorit — coba fix
             finalFail = finalFail + 1
             ensureFavorit(pet.tool, true)
         end
-        -- Kalau pet unwanted & favorit → biarkan (tidak unfavorit)
     end
     
     if finalFail > 0 then
-        warn(string.format("[Final] %d pet belum favorit, sudah difix", finalFail))
+        warn(string.format("[Final] %d fixed", finalFail))
         task.wait(2)
     else
         updateStatus("✅ Final check OK")
     end
     
-    -- =========================================
-    -- STEP 4: Delay sebelum sell
-    -- =========================================
     updateStatus("⏳ Delay sebelum sell...")
     task.wait(CONFIG.delayBeforeSell)
     
-    -- =========================================
-    -- STEP 5: Sell all
-    -- =========================================
+    -- ⭐ Track lucky sell
+    local eggCountBeforeSell = countEggsInBackpack()
+    
     updateStatus("💰 Sell all...")
     sellAll()
-    task.wait(2)
+    task.wait(3)
+    
+    local eggCountAfterSell = countEggsInBackpack()
+    local sellRecovery = eggCountAfterSell - eggCountBeforeSell
+    if sellRecovery > 0 then
+        STATS.luckySellCount = STATS.luckySellCount + sellRecovery
+        STATS.totalRecovery = STATS.totalRecovery + sellRecovery
+        print(string.format("[Stats] Lucky Sell: +%d egg", sellRecovery))
+    end
+    STATS.eggAfterSell = eggCountAfterSell
+    STATS.currentSellCycle = STATS.currentSellCycle + 1
     
     updateStatus("✅ Sell selesai")
 end
@@ -900,7 +1229,7 @@ Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
 titleLabel.Position = UDim2.new(0, 12, 0, 0)
-titleLabel.Text = "🥚 Auto Hatch v10.0"
+titleLabel.Text = "🥚 Auto Hatch v11.0"
 titleLabel.TextColor3 = C.text
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 11
@@ -1062,54 +1391,20 @@ local function makeSection(parent, title, height, order)
     section.BackgroundColor3 = C.section
     section.BorderSizePixel = 0
     section.LayoutOrder = order or 1
-    section.ClipsDescendants = true
     section.Parent = parent
-
     Instance.new("UICorner", section).CornerRadius = UDim.new(0, 6)
-
-    local expandedHeight = height
-    local collapsedHeight = 28
-    local expanded = true
-
-    -- Header
-    local header = Instance.new("TextButton")
-    header.Size = UDim2.new(1, 0, 0, collapsedHeight)
-    header.Position = UDim2.new(0, 0, 0, 0)
-    header.BackgroundColor3 = C.section
-    header.BorderSizePixel = 0
-    header.AutoButtonColor = false
-    header.Font = Enum.Font.GothamBold
-    header.TextSize = 10
-    header.TextColor3 = C.text
-    header.TextXAlignment = Enum.TextXAlignment.Left
-    header.Text = "▼  " .. (title or "")
-    header.Parent = section
-
-    local padding = Instance.new("UIPadding")
-    padding.PaddingLeft = UDim.new(0, 10)
-    padding.Parent = header
-
-    -- Klik header
-    header.MouseButton1Click:Connect(function()
-        expanded = not expanded
-
-        if expanded then
-            section.Size = UDim2.new(
-                1, -10,
-                0, expandedHeight
-            )
-
-            header.Text = "▼  " .. (title or "")
-        else
-            section.Size = UDim2.new(
-                1, -10,
-                0, collapsedHeight
-            )
-
-            header.Text = "▶  " .. (title or "")
-        end
-    end)
-
+    if title then
+        local t = Instance.new("TextLabel")
+        t.Size = UDim2.new(1, -20, 0, 20)
+        t.Position = UDim2.new(0, 10, 0, 4)
+        t.Text = title
+        t.TextColor3 = C.text
+        t.Font = Enum.Font.GothamBold
+        t.TextSize = 10
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.BackgroundTransparency = 1
+        t.Parent = section
+    end
     return section
 end
 
@@ -1256,7 +1551,55 @@ local cycleSection = makeSection(mainScroll, "🔁 Cycle", 80, 2)
 makeInputRow(cycleSection, 26, "Jumlah cycle:", "cycleCount", true, 1, 50)
 makeToggle(cycleSection, 50, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
 
-local controlSection = makeSection(mainScroll, nil, 60, 3)
+local webhookSection = makeSection(mainScroll, "🔔 Discord Webhook", 125, 3)
+makeToggle(webhookSection, 26, "🔔 Webhook: ON", "🔔 Webhook: OFF", "webhookEnabled")
+
+local webhookInput = Instance.new("TextBox")
+webhookInput.Size = UDim2.new(1, -20, 0, 22)
+webhookInput.Position = UDim2.new(0, 10, 0, 52)
+webhookInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+webhookInput.BorderSizePixel = 0
+webhookInput.Font = Enum.Font.Gotham
+webhookInput.PlaceholderText = "https://discord.com/api/webhooks/..."
+webhookInput.Text = CONFIG.webhookUrl or ""
+webhookInput.TextColor3 = C.text
+webhookInput.TextSize = 8
+webhookInput.ClearTextOnFocus = false
+webhookInput.Parent = webhookSection
+Instance.new("UICorner", webhookInput).CornerRadius = UDim.new(0, 3)
+
+local whPad = Instance.new("UIPadding")
+whPad.PaddingLeft = UDim.new(0, 7)
+whPad.PaddingRight = UDim.new(0, 7)
+whPad.Parent = webhookInput
+
+webhookInput.FocusLost:Connect(function()
+    CONFIG.webhookUrl = webhookInput.Text:gsub("%s+$", "")
+    saveConfig()
+end)
+
+local testWebhookBtn = Instance.new("TextButton")
+testWebhookBtn.Size = UDim2.new(1, -20, 0, 20)
+testWebhookBtn.Position = UDim2.new(0, 10, 0, 78)
+testWebhookBtn.BackgroundColor3 = C.accent
+testWebhookBtn.BorderSizePixel = 0
+testWebhookBtn.Font = Enum.Font.Gotham
+testWebhookBtn.Text = "🧪 Test Webhook"
+testWebhookBtn.TextColor3 = C.text
+testWebhookBtn.TextSize = 8
+testWebhookBtn.Parent = webhookSection
+Instance.new("UICorner", testWebhookBtn).CornerRadius = UDim.new(0, 3)
+
+testWebhookBtn.MouseButton1Click:Connect(function()
+    if not CONFIG.webhookUrl or CONFIG.webhookUrl == "" then
+        statusLabel.Text = "⚠️ Webhook URL kosong!"
+        return
+    end
+    sendWebhook("🧪 **Test Webhook** dari Auto Hatch v11.0\nBerhasil terhubung!")
+    statusLabel.Text = "✅ Test webhook terkirim"
+end)
+
+local controlSection = makeSection(mainScroll, nil, 60, 4)
 
 local startBtn = Instance.new("TextButton")
 startBtn.Size = UDim2.new(1, -20, 0, 30)
@@ -1411,7 +1754,7 @@ end
 
 eggRefreshBtn.MouseButton1Click:Connect(refreshEggList)
 
--- TAB: DELAY (hanya delay yang masih bisa diatur)
+-- TAB: DELAY
 local delayTab = tabFrames["Delay"]
 local delayScroll = Instance.new("ScrollingFrame")
 delayScroll.Size = UDim2.new(1, -10, 1, -10)
@@ -1438,7 +1781,7 @@ makeInputRow(delaySection, 122, "Scan Settle:", "scanSettleDelay", true, 0, 30)
 local delayInfo = Instance.new("TextLabel")
 delayInfo.Size = UDim2.new(1, -20, 0, 30)
 delayInfo.Position = UDim2.new(0, 10, 0, 146)
-delayInfo.Text = "💡 Delay lain sudah di-set default.\nLoadout Swap = 6s, Scan Settle = 1.5s"
+delayInfo.Text = "💡 Delay lain default: Speed 2s, Hatch 3s, Sell 2s"
 delayInfo.TextColor3 = C.textDim
 delayInfo.Font = Enum.Font.Gotham
 delayInfo.TextSize = 7
@@ -1569,8 +1912,7 @@ refreshEggList()
 refreshUnwantedList()
 switchTab("Main")
 
-print("✅ Auto Hatch GUI v10.0 loaded!")
-print("   • Auto Skip: DIHAPUS")
-print("   • Delay: hanya Loadout/HatchAll/Hatch/Place/Scan di GUI")
-print("   • Filter: tunggu konfirmasi + final check")
-print("   • Unfavorit: MANUAL")
+print("✅ Auto Hatch GUI v11.0 loaded!")
+print("   • Webhook report setelah hatch semua")
+print("   • Pet count dari DataService")
+print("   • Filter + final check + tunggu konfirmasi")
