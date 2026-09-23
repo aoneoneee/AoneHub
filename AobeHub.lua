@@ -1093,12 +1093,12 @@ sep.Parent = sidebar
 
 local tabs = {
     {name="Farm", label="🌾 Farm"},
-    {name="Weight", label="🐘 Weight"},
+    {name="Weight", label="🤖 Automaton"},
     {name="Hatch", label="🥚 Hatch"},
     {name="Event", label="🔥 Event"},
     {name="Mutation", label="🧬 Mutation"},
     {name="AutoBuy", label="🛒 Buy"},
-    {name="Gift", label="🎁 Gift"},
+    {name="Inventory", label="🎒 Inventory"},
     {name="Ekstra", label="⚙️ Extra"}
 }
 
@@ -2056,7 +2056,7 @@ local AdvancedPresetDropdown = createDynamicDropdown(
 -- ==================================================================
 -- SECTION: AUTO WEIGHT (DROPDOWN DINAMIS)
 -- ==================================================================
-local WeightSection = createSection(weightScroll, "⚖️ Auto Weight", "autoWeight")
+local WeightSection = createSection(weightScroll, "🐘 Auto Weight", "autoWeight")
 WeightSection.LayoutOrder = 4
 WeightSection.Size = UDim2.new(1, -10, 0, 129)
 
@@ -2066,7 +2066,7 @@ WeightToggleButton.Position = UDim2.new(0, 10, 0, 28)
 WeightToggleButton.BackgroundColor3 = isAutoWeight and C.success or Color3.fromRGB(70, 70, 85)
 WeightToggleButton.BorderSizePixel = 0
 WeightToggleButton.Font = Enum.Font.GothamBold
-WeightToggleButton.Text = isAutoWeight and "⚖️ Auto Weight: ON" or "⚖️ Auto Weight: OFF"
+WeightToggleButton.Text = isAutoWeight and "🐘 Auto Weight: ON" or "🐘 Auto Weight: OFF"
 WeightToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 WeightToggleButton.TextSize = 10
 WeightToggleButton.Parent = WeightSection
