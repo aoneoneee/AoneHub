@@ -743,37 +743,32 @@ local function hideGiftUI()
 end
 
 local function processGiftQueue()
+    print(string.format("[Gift Debug] processGiftQueue dipanggil! Queue: %d | isProcessing=%s",
+        #giftQueue, tostring(isProcessingGiftQueue)))
+    
     if isProcessingGiftQueue then return end
-    if #giftQueue == 0 then return end  -- ⭐ skip kalau kosong
+    if #giftQueue == 0 then return end
     
     isProcessingGiftQueue = true
     isAutoAcceptActive = true
-    
-    -- ⭐ SAVE previous state
-    local wasWaitingEggTimer = isWaitingEggTimer
     
     task.spawn(function()
         while #giftQueue > 0 do
             local gift = table.remove(giftQueue, 1)
             print(string.format("[Gift] Process: %s | %s", gift.id, gift.pet))
-            
             task.wait(CONFIG.giftDelayAfter)
-            
             local ok = pcall(function()
                 AcceptPetGift:FireServer(true, gift.id)
             end)
-            
             if ok then
                 GIFT_STATS.totalAccepted = GIFT_STATS.totalAccepted + 1
             else
                 GIFT_STATS.totalFailed = GIFT_STATS.totalFailed + 1
             end
-            
             task.wait(0.5)
             hideGiftUI()
             task.wait(0.3)
             hideGiftUI()
-            
             if #giftQueue > 0 then
                 task.wait(CONFIG.giftDelayBetween)
             end
@@ -782,37 +777,36 @@ local function processGiftQueue()
         hideGiftUI()
         isProcessingGiftQueue = false
         isAutoAcceptActive = false
+        print("[Gift Debug] processGiftQueue selesai")
     end)
 end
 
 GiftPetEvent.OnClientEvent:Connect(function(giftId, petName, weightInfo)
-    if not CONFIG.giftEnabled then return end
-    if not giftId or typeof(giftId) ~= "string" then return end
+    if not CONFIG.giftEnabled then 
+        print("[Gift] Skip — giftEnabled OFF")
+        return 
+    end
     
-    -- ⭐ SELALU tambahkan ke queue
+    if not giftId or typeof(giftId) ~= "string" then 
+        print("[Gift] Skip — giftId invalid:", giftId)
+        return 
+    end
+    
+    -- ⭐ DEBUG
+    print(string.format("[Gift Debug] Gift masuk! isRunning=%s | isWaitingEggTimer=%s",
+        tostring(isRunning), tostring(isWaitingEggTimer)))
+    
     table.insert(giftQueue, { 
-        id = giftId, 
-        pet = petName, 
-        weight = weightInfo, 
-        time = os.time() 
-    })
-    table.insert(GIFT_STATS.history, { 
-        id = giftId, 
-        pet = petName, 
-        weight = weightInfo, 
-        time = os.time() 
+        id = giftId, pet = petName, weight = weightInfo, time = os.time() 
     })
     
-    print(string.format("[Gift] 📥 Queued: %s | %s (queue: %d)", 
-        giftId, tostring(petName), #giftQueue))
-    
-    -- ⭐ HANYA process kalau SEDANG TUNGGU EGG TIMER
+    -- ⭐ Cek kondisi
     if isRunning and not isWaitingEggTimer then
-        print("[Gift] Skip process — tunggu fase tunggu egg timer")
+        print("[Gift Debug] ⚠️ SKIP process — bukan tunggu egg timer")
         return
     end
     
-    -- Process queue (hanya kalau tunggu timer atau auto hatch OFF)
+    print("[Gift Debug] ✅ Process queue...")
     processGiftQueue()
 end)
 
@@ -1176,19 +1170,33 @@ local function runOneCycle(cycleNum, totalCycles)
         task.wait(1)
     end
     
+    -- Fase hatch
     updateStatus(string.format("[%d/%d] 🥚 Tim Hatch...", cycleNum, totalCycles))
+    print(string.format("[Hatch Debug] Mulai hatch | isWaitingEggTimer=%s | queue=%d",
+        tostring(isWaitingEggTimer), #giftQueue))
+
     equipTeamByPreset(CONFIG.hatchPreset, CONFIG.hatchLoadout)
     task.wait(CONFIG.delayAfterHatch)
+
+    print("[Hatch Debug] Sebelum hatch loop")
+
     local eggsToHatch = {}
     for _, egg in ipairs(getMyGardenEggs()) do
-        if (egg:GetAttribute("TimeToHatch") or 999) <= 0 then table.insert(eggsToHatch, egg) end
+        if (egg:GetAttribute("TimeToHatch") or 999) <= 0 then 
+            table.insert(eggsToHatch, egg) 
+        end
     end
-    local hatchCount = #eggsToHatch
-    for _, egg in ipairs(eggsToHatch) do
+
+    print(string.format("[Hatch Debug] %d egg untuk hatch", #eggsToHatch))
+
+    for i, egg in ipairs(eggsToHatch) do
         if not isRunning then break end
+        print(string.format("[Hatch Debug] Hatch %d/%d", i, #eggsToHatch))
         hatchEgg(egg)
         task.wait(CONFIG.hatchDelay)
     end
+
+    print("[Hatch Debug] Hatch loop selesai")
     local timeout = os.clock() + 60
     while isRunning and os.clock() < timeout do
         local hasReadyEgg = false
