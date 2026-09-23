@@ -1,0 +1,2384 @@
+-- ==================================================================
+-- AUTO HATCH GUI v16.0 — FINAL
+-- Sync: Auto Gift & Auto Accept hanya saat tunggu egg timer
+-- ==================================================================
+
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local CollectionService = game:GetService("CollectionService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Remotes
+local PetEggService = RS.GameEvents:WaitForChild("PetEggService")
+local PetsServiceRE = RS.GameEvents:WaitForChild("PetsService")
+local FavoriteItemRE = RS.GameEvents:WaitForChild("Favorite_Item")
+local SellAllRE = RS.GameEvents:WaitForChild("SellAllPets_RE")
+local GiftPetEvent = RS.GameEvents:WaitForChild("GiftPet")
+local AcceptPetGift = RS.GameEvents:WaitForChild("AcceptPetGift")
+local PetGiftingService = RS.GameEvents:WaitForChild("PetGiftingService")
+
+-- Modules
+local DataService = require(RS.Modules.DataService)
+local PetsService = require(RS.Modules.PetServices.PetsService)
+local PetRegistry = require(RS.Data.PetRegistry)
+local PetList = PetRegistry.PetList or {}
+
+-- ==================================================================
+-- CONFIG
+-- ==================================================================
+local CONFIG = {
+    eggGridOffsets = {
+        Vector3.new(13.63, -4.97, 7.74),
+        Vector3.new(13.63, -4.97, 1.74),
+        Vector3.new(13.63, -4.97, -5.74),
+        Vector3.new(13.63, -4.97, -11.74),
+        Vector3.new(31.63, -4.97, 7.74),
+        Vector3.new(31.63, -4.97, 1.74),
+        Vector3.new(31.63, -4.97, -5.74),
+        Vector3.new(31.63, -4.97, -11.74),
+        Vector3.new(19.63, -4.97, -2.74),
+        Vector3.new(25.63, -4.97, -2.74),
+        Vector3.new(18.13, -4.97, -16.24),
+        Vector3.new(22.63, -4.97, -16.24),
+        Vector3.new(27.13, -4.97, -16.24),
+    },
+    
+    speedLoadout = 1,
+    hatchLoadout = 2,
+    sellLoadout = 3,
+    
+    speedPreset = nil,
+    hatchPreset = nil,
+    sellPreset = nil,
+    
+    selectedEggs = {},
+    cycleCount = 1,
+    autoSell = true,
+    
+    -- Delay
+    delayAfterLoadout = 6.0,
+    hatchDelay = 1.5,
+    placeDelay = 1.5,
+    scanSettleDelay = 1.5,
+    delayAfterHatchAll = 2.0,
+    delayAfterSpeed = 2.0,
+    delayAfterHatch = 3.0,
+    delayAfterSell = 2.0,
+    delayBeforeSell = 3.0,
+    equipDelay = 0.4,
+    syncWaitTime = 2.0,
+    
+    -- Filter
+    maxWeight = 3.5,
+    maxLevel = 50,
+    unwantedPetTypes = {},
+    
+    -- Webhook
+    webhookEnabled = false,
+    webhookUrl = "",
+    webhookUsername = "Auto Hatch Report",
+    
+    -- Auto Accept Gift (giftDelayAfter default, bukan di GUI)
+    giftEnabled = true,
+    giftHideUI = true,
+    giftDelayAfter = 2,
+    giftDelayBetween = 3,
+    
+    -- Auto Gift Pet
+    giftPetTarget = nil,
+    giftPetMinWeight = 0,
+    giftPetMaxWeight = 5.0,
+    giftPetMinLevel = 0,
+    giftPetMaxLevel = 100,
+    giftPetDelayEquip = 1.0,
+    giftPetDelayUnfavorit = 0.5,
+    giftPetDelayBetween = 3.0,
+    giftPetSelectedTypes = {},
+    
+    -- ⭐ Sync
+    delayAfterGiftSync = 10,  -- delay 10s setelah auto gift/accept selesai sebelum hatch
+}
+
+local SAVE_FILE = "AutoHatch_Config.json"
+
+local function saveConfig()
+    local data = {}
+    for k, v in pairs(CONFIG) do
+        if k ~= "eggGridOffsets" then data[k] = v end
+    end
+    pcall(function()
+        writefile(SAVE_FILE, HttpService:JSONEncode(data))
+    end)
+end
+
+local function loadConfig()
+    local ok, data = pcall(readfile, SAVE_FILE)
+    if not ok or not data then return end
+    local ok2, decoded = pcall(HttpService.JSONDecode, HttpService, data)
+    if not ok2 or not decoded then return end
+    for k, v in pairs(decoded) do
+        if CONFIG[k] ~= nil then CONFIG[k] = v end
+    end
+end
+
+loadConfig()
+
+-- ==================================================================
+-- COLORS
+-- ==================================================================
+local C = {
+    bg = Color3.fromRGB(28, 28, 35),
+    sidebar = Color3.fromRGB(22, 22, 28),
+    accent = Color3.fromRGB(80, 120, 200),
+    text = Color3.fromRGB(240, 240, 240),
+    textDim = Color3.fromRGB(150, 150, 160),
+    success = Color3.fromRGB(50, 180, 50),
+    danger = Color3.fromRGB(200, 50, 50),
+    warning = Color3.fromRGB(255, 200, 0),
+    section = Color3.fromRGB(38, 38, 48),
+}
+
+-- ==================================================================
+-- MUTATION HELPERS
+-- ==================================================================
+local unwantedMutationsCache = nil
+
+local function getUnwantedMutations()
+    if unwantedMutationsCache then return unwantedMutationsCache end
+    local list = {}
+    local ok, data = pcall(readfile, "AoneHub/AoneHub_Gag1.json")
+    if ok and data then
+        local ok2, decoded = pcall(HttpService.JSONDecode, HttpService, data)
+        if ok2 and decoded and decoded.unwantedMutations then
+            for _, mutName in ipairs(decoded.unwantedMutations) do
+                table.insert(list, mutName)
+            end
+        end
+    end
+    table.sort(list, function(a, b) return #a > #b end)
+    unwantedMutationsCache = list
+    return list
+end
+
+local function refreshUnwantedMutationsCache()
+    unwantedMutationsCache = nil
+    return getUnwantedMutations()
+end
+
+local function splitPetName(petName)
+    if not petName then return petName, nil end
+    for _, mutName in ipairs(getUnwantedMutations()) do
+        if petName:sub(1, #mutName + 1) == mutName .. " " then
+            return petName:sub(#mutName + 2), mutName
+        end
+    end
+    return petName, nil
+end
+
+-- ==================================================================
+-- STATE
+-- ==================================================================
+local isRunning = false
+local isGiftPetRunning = false
+local giftPetUserStarted = false
+local isWaitingEggTimer = false
+local isAutoGiftActive = false
+local isAutoAcceptActive = false
+local statusCallback = nil
+local guiDestroyed = false
+
+-- ==================================================================
+-- STATISTICS TRACKING
+-- ==================================================================
+local STATS = {}
+
+local function resetStats()
+    STATS = {
+        sessionStart = os.time(),
+        totalHatchCycles = 0,
+        totalHatched = 0,
+        cycleStartTime = 0,
+        lastCycleDuration = 0,
+        huntStats = { Huge = {}, Titan = {}, Godly = {}, Special = {} },
+        eggBeforePlace = 0,
+        eggAfterSell = 0,
+        knownUUIDs = {},
+    }
+end
+
+resetStats()
+
+local function extractPetInfo(petData)
+    if typeof(petData) ~= "table" then return nil end
+    local petName = petData.PetType or petData.Name or (petData.PetData and petData.PetData.PetType) or "?"
+    local baseWeight = petData.BaseWeight or (petData.PetData and petData.PetData.BaseWeight) or 0
+    local level = petData.Level or (petData.PetData and petData.PetData.Level) or 0
+    local isFav = petData.IsFavorite or (petData.PetData and petData.PetData.IsFavorite) or false
+    return { petName = petName, baseWeight = baseWeight, level = level, isFavorited = isFav }
+end
+
+local function getInventoryUUIDs()
+    local uuids = {}
+    local data = DataService:GetData()
+    if not data or not data.PetsData then return uuids end
+    local inventory = data.PetsData.PetInventory and data.PetsData.PetInventory.Data
+    if not inventory then return uuids end
+    for uuid, _ in pairs(inventory) do uuids[uuid] = true end
+    return uuids
+end
+
+local function getPetRarityFromBaseWeight(petName, baseWeight)
+    if baseWeight then
+        if baseWeight >= 10 and baseWeight <= 12 then return "Godly" end
+        if baseWeight >= 7 and baseWeight <= 9 then return "Titan" end
+        if baseWeight >= 4 and baseWeight <= 6 then return "Huge" end
+    end
+    if petName and not CONFIG.unwantedPetTypes[petName] then return "Special" end
+    return nil
+end
+
+local function addHuntStat(rarity, petName, weight)
+    if not rarity then return end
+    local bucket = STATS.huntStats[rarity]
+    if not bucket then return end
+    if not bucket[petName] then
+        bucket[petName] = { count = 0, minWeight = weight, maxWeight = weight }
+    end
+    local entry = bucket[petName]
+    entry.count = entry.count + 1
+    if weight < entry.minWeight then entry.minWeight = weight end
+    if weight > entry.maxWeight then entry.maxWeight = weight end
+end
+
+local function scanNewPetsAfterSell()
+    local data = DataService:GetData()
+    if not data or not data.PetsData then return 0 end
+    local inventory = data.PetsData.PetInventory and data.PetsData.PetInventory.Data
+    if not inventory then return 0 end
+    local newCount = 0
+    for uuid, petData in pairs(inventory) do
+        if not STATS.knownUUIDs[uuid] then
+            STATS.knownUUIDs[uuid] = true
+            newCount = newCount + 1
+            local info = extractPetInfo(petData)
+            if not info then continue end
+            local petName = info.petName
+            local baseWeight = info.baseWeight
+            local baseName = splitPetName(petName)
+            if CONFIG.unwantedPetTypes[baseName] 
+               and baseWeight <= CONFIG.maxWeight 
+               and info.level <= CONFIG.maxLevel then
+                print(string.format("[Stats] Skip unwanted: %s", petName))
+            else
+                local rarity = getPetRarityFromBaseWeight(petName, baseWeight)
+                addHuntStat(rarity, petName, baseWeight)
+            end
+        end
+    end
+    return newCount
+end
+
+-- ==================================================================
+-- HELPER: Pet Count
+-- ==================================================================
+local function getPetCountFromData()
+    local data = DataService:GetData()
+    if not data or not data.PetsData then return 0, 0 end
+    local petsData = data.PetsData
+    local current = 0
+    if petsData.PetInventory and petsData.PetInventory.Data then
+        for _ in pairs(petsData.PetInventory.Data) do current = current + 1 end
+    end
+    local max = 0
+    if petsData.MutableStats and petsData.MutableStats.MaxPetsInInventory then
+        max = petsData.MutableStats.MaxPetsInInventory
+    end
+    return current, max
+end
+
+-- ==================================================================
+-- HELPER: Count Egg
+-- ==================================================================
+local function countEggsInBackpack()
+    local total = 0
+    local seen = {}
+    local locations = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, backpack) end
+    if player.Character then table.insert(locations, player.Character) end
+    for _, container in ipairs(locations) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") and tool:GetAttribute("b") == "c" then
+                if not seen[tool] then
+                    seen[tool] = true
+                    local eggName = tool:GetAttribute("h")
+                    local isSelected = false
+                    if next(CONFIG.selectedEggs) == nil then
+                        isSelected = true
+                    else
+                        for name, val in pairs(CONFIG.selectedEggs) do
+                            if name == eggName and val then isSelected = true break end
+                        end
+                    end
+                    if isSelected then
+                        total = total + (tool:GetAttribute("e") or 0)
+                    end
+                end
+            end
+        end
+    end
+    return total
+end
+
+-- ==================================================================
+-- HELPER: FARM
+-- ==================================================================
+local function getMyFarm()
+    local farmContainer = workspace:FindFirstChild("Farm")
+    if not farmContainer then return nil end
+    for _, farm in ipairs(farmContainer:GetChildren()) do
+        local important = farm:FindFirstChild("Important")
+        local dataFolder = important and important:FindFirstChild("Data")
+        if dataFolder then
+            for _, obj in ipairs(dataFolder:GetChildren()) do
+                if obj:IsA("StringValue") and obj.Value == player.Name then
+                    return farm
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function getCenterPoint()
+    local farm = getMyFarm()
+    if not farm then return nil end
+    local center = farm:FindFirstChild("Center_Point")
+    if center then return center end
+    for _, obj in ipairs(farm:GetDescendants()) do
+        if obj.Name == "Center_Point" then return obj end
+    end
+    return nil
+end
+
+-- ==================================================================
+-- HELPER: EGG
+-- ==================================================================
+local function getMyGardenEggs()
+    local eggs = {}
+    for _, egg in CollectionService:GetTagged("PetEggServer") do
+        if egg:GetAttribute("OWNER") == player.Name then
+            table.insert(eggs, egg)
+        end
+    end
+    return eggs
+end
+
+local function getOccupiedSlots()
+    local center = getCenterPoint()
+    if not center then return {} end
+    local occupied = {}
+    local centerPos = center.Position
+    local THRESHOLD = 3
+    for _, egg in ipairs(getMyGardenEggs()) do
+        local offset = egg:GetPivot().Position - centerPos
+        for i, gridOffset in ipairs(CONFIG.eggGridOffsets) do
+            if (offset - gridOffset).Magnitude < THRESHOLD then
+                occupied[i] = true
+                break
+            end
+        end
+    end
+    return occupied
+end
+
+local function getEmptySlots()
+    local occupied = getOccupiedSlots()
+    local emptySlots = {}
+    for i = 1, #CONFIG.eggGridOffsets do
+        if not occupied[i] then table.insert(emptySlots, i) end
+    end
+    return emptySlots, occupied
+end
+
+local function hatchEgg(eggModel)
+    pcall(function()
+        PetEggService:FireServer("HatchPet", eggModel)
+    end)
+end
+
+-- ==================================================================
+-- HELPER: BACKPACK
+-- ==================================================================
+local function isEggTool(tool)
+    return tool:IsA("Tool") and tool:GetAttribute("b") == "c"
+end
+
+local function isPetTool(tool)
+    return tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet"
+end
+
+local function findEggTool()
+    local locations = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, {name="Backpack", container=backpack}) end
+    if player.Character then table.insert(locations, {name="Tangan", container=player.Character}) end
+    for _, loc in ipairs(locations) do
+        for _, tool in ipairs(loc.container:GetChildren()) do
+            if isEggTool(tool) then
+                local eggName = tool:GetAttribute("h")
+                local count = tool:GetAttribute("e") or 0
+                local isSelected = false
+                if next(CONFIG.selectedEggs) == nil then
+                    isSelected = true
+                else
+                    for name, val in pairs(CONFIG.selectedEggs) do
+                        if name == eggName and val then isSelected = true break end
+                    end
+                end
+                if count > 0 and isSelected then return tool end
+            end
+        end
+    end
+    return nil
+end
+
+local function getBackpackEggs()
+    local eggs = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return eggs end
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if isEggTool(tool) then
+            local name = tool:GetAttribute("h")
+            local count = tool:GetAttribute("e") or 0
+            if name and count > 0 then
+                table.insert(eggs, { tool = tool, name = name, count = count })
+            end
+        end
+    end
+    return eggs
+end
+
+local function parsePetName(toolName)
+    local name, weight, level = toolName:match("^(.+) %[([%d%.]+) KG%] %[Age (%d+)%]$")
+    if not name then
+        name, weight, level = toolName:match("^(.+)%s+%[([%d%.]+) KG%]%s+%[Age (%d+)%]")
+    end
+    if name then
+        return name:gsub("%s+$", ""), tonumber(weight) or 0, tonumber(level) or 0
+    end
+    name, weight = toolName:match("^(.+) %[([%d%.]+) KG%]$")
+    if name then
+        return name:gsub("%s+$", ""), tonumber(weight) or 0, 0
+    end
+    return nil, 0, 0
+end
+
+local function getBackpackPets()
+    local pets = {}
+    local seen = {}
+    local locations = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, {name="Backpack", container=backpack}) end
+    if player.Character then table.insert(locations, {name="Tangan", container=player.Character}) end
+    for _, loc in ipairs(locations) do
+        for _, tool in ipairs(loc.container:GetChildren()) do
+            if isPetTool(tool) and not seen[tool] then
+                seen[tool] = true
+                local name, weight, level = parsePetName(tool.Name)
+                if name then
+                    table.insert(pets, {
+                        tool = tool,
+                        name = name,
+                        weight = weight,
+                        level = level,
+                        isFavorited = tool:GetAttribute("d") == true,
+                        location = loc.name,
+                    })
+                end
+            end
+        end
+    end
+    return pets
+end
+
+local function getAllPetTypesFromRegistry()
+    local types = {}
+    for petName, _ in pairs(PetList) do
+        table.insert(types, petName)
+    end
+    table.sort(types)
+    return types
+end
+
+local function findPetToolByName(petName)
+    local locations = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, backpack) end
+    if player.Character then table.insert(locations, player.Character) end
+    for _, container in ipairs(locations) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                local name = parsePetName(tool.Name)
+                if name == petName then return tool end
+            end
+        end
+    end
+    return nil
+end
+
+local function getPlayerNames()
+    local names = {}
+    for _, p in ipairs(game.Players:GetPlayers()) do
+        if p ~= player then table.insert(names, p.Name) end
+    end
+    table.sort(names)
+    return names
+end
+
+local function findPlayerByName(name)
+    for _, p in ipairs(game.Players:GetPlayers()) do
+        if p.Name == name then return p end
+    end
+    return nil
+end
+
+-- ==================================================================
+-- HELPER: DATA
+-- ==================================================================
+local function getPlayerPetData()
+    local data = DataService:GetData()
+    return data and data.PetsData
+end
+
+local function isPetUUIDValid(uuid)
+    local petsData = getPlayerPetData()
+    if not petsData or not petsData.PetInventory then return false end
+    return petsData.PetInventory.Data[uuid] ~= nil
+end
+
+local function getEquippedPets()
+    local petsData = getPlayerPetData()
+    return (petsData and petsData.EquippedPets) or {}
+end
+
+-- ==================================================================
+-- HELPER: PRESET
+-- ==================================================================
+local function getPresetNames()
+    local ok, data = pcall(readfile, "AoneHub/AoneHub_Gag1.json")
+    if not ok or not data then return {} end
+    local ok2, decoded = pcall(HttpService.JSONDecode, HttpService, data)
+    if not ok2 or not decoded or not decoded.teamPresets then return {} end
+    local names = {}
+    for name, _ in pairs(decoded.teamPresets) do table.insert(names, name) end
+    table.sort(names)
+    return names
+end
+
+local function getPresetFromFile(presetName)
+    local ok, data = pcall(readfile, "AoneHub/AoneHub_Gag1.json")
+    if not ok or not data then return nil end
+    local ok2, decoded = pcall(HttpService.JSONDecode, HttpService, data)
+    if not ok2 or not decoded or not decoded.teamPresets then return nil end
+    return decoded.teamPresets[presetName]
+end
+
+local function getPresetUUIDs(presetName)
+    local preset = getPresetFromFile(presetName)
+    if not preset or not preset.pets then return {} end
+    local uuids = {}
+    for _, petInfo in ipairs(preset.pets) do
+        if isPetUUIDValid(petInfo.UUID) then table.insert(uuids, petInfo.UUID) end
+    end
+    return uuids
+end
+
+local function isPetInPreset(petDisplayName)
+    local baseName = splitPetName(petDisplayName)
+    for _, presetName in ipairs({CONFIG.speedPreset, CONFIG.hatchPreset, CONFIG.sellPreset}) do
+        if presetName then
+            local preset = getPresetFromFile(presetName)
+            if preset and preset.pets then
+                for _, petInfo in ipairs(preset.pets) do
+                    if petInfo.PetType == baseName or petInfo.PetType == petDisplayName then
+                        return true
+                    end
+                    if petInfo.Mutation and petInfo.Mutation ~= "Normal" then
+                        if (petInfo.Mutation .. " " .. petInfo.PetType) == petDisplayName then
+                            return true
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- ==================================================================
+-- HELPER: LOADOUT SWAP
+-- ==================================================================
+local lastLoadoutSlot = nil
+
+local function swapLoadout(slotNumber)
+    if not slotNumber then return false end
+    pcall(function()
+        PetsServiceRE:FireServer("SwapPetLoadout", slotNumber)
+    end)
+    task.wait(CONFIG.delayAfterLoadout)
+    return true
+end
+
+local function verifyEquippedMatchesPreset(presetName)
+    if not presetName then return true, {}, {} end
+    local expectedUUIDs = getPresetUUIDs(presetName)
+    local equippedUUIDs = getEquippedPets()
+    local equippedSet = {}
+    for _, uuid in ipairs(equippedUUIDs) do equippedSet[uuid] = true end
+    local presetSet = {}
+    for _, uuid in ipairs(expectedUUIDs) do presetSet[uuid] = true end
+    local toUnequip = {}
+    for _, uuid in ipairs(equippedUUIDs) do
+        if not presetSet[uuid] then table.insert(toUnequip, uuid) end
+    end
+    local toEquip = {}
+    for _, uuid in ipairs(expectedUUIDs) do
+        if not equippedSet[uuid] then table.insert(toEquip, uuid) end
+    end
+    return (#toUnequip == 0 and #toEquip == 0), toUnequip, toEquip
+end
+
+local function fixEquippedToMatchPreset(presetName)
+    local isMatch, toUnequip, toEquip = verifyEquippedMatchesPreset(presetName)
+    if isMatch then return true end
+    for _, uuid in ipairs(toUnequip) do
+        pcall(function() PetsService:UnequipPet(uuid) end)
+        task.wait(CONFIG.equipDelay)
+    end
+    for _, uuid in ipairs(toEquip) do
+        if isPetUUIDValid(uuid) then
+            pcall(function() PetsService:EquipPet(uuid, CFrame.new(0, 10, 0)) end)
+            task.wait(CONFIG.equipDelay)
+        end
+    end
+    task.wait(CONFIG.syncWaitTime)
+    return verifyEquippedMatchesPreset(presetName)
+end
+
+local function equipTeamByPreset(presetName, loadoutSlot, forceRefresh)
+    if not presetName then return false end
+    if not loadoutSlot then return false end
+    if not forceRefresh and lastLoadoutSlot == loadoutSlot then
+        local isMatch = verifyEquippedMatchesPreset(presetName)
+        if isMatch then return true end
+    end
+    swapLoadout(loadoutSlot)
+    lastLoadoutSlot = loadoutSlot
+    local isMatch = verifyEquippedMatchesPreset(presetName)
+    if isMatch then return true end
+    fixEquippedToMatchPreset(presetName)
+    return true
+end
+
+-- ==================================================================
+-- HELPER: FAVORIT
+-- ==================================================================
+local function ensureFavorit(tool, shouldBeFavorite, timeout)
+    timeout = timeout or 2
+    local current = tool:GetAttribute("d") == true
+    if current == shouldBeFavorite then return true end
+    pcall(function() FavoriteItemRE:FireServer(tool) end)
+    local startTime = os.clock()
+    while os.clock() - startTime < timeout do
+        if (tool:GetAttribute("d") == true) == shouldBeFavorite then return true end
+        task.wait(0.1)
+    end
+    return false
+end
+
+-- ==================================================================
+-- HELPER: UNWANTED
+-- ==================================================================
+local function isUnwantedPet(pet)
+    local baseName, mutation = splitPetName(pet.name)
+    if not CONFIG.unwantedPetTypes[baseName] then return false end
+    if pet.weight > CONFIG.maxWeight then return false end
+    if pet.level > CONFIG.maxLevel then return false end
+    return true
+end
+
+local function sellAll()
+    pcall(function() SellAllRE:FireServer() end)
+    task.wait(3)
+end
+
+-- ==================================================================
+-- AUTO ACCEPT GIFT
+-- ==================================================================
+local GIFT_STATS = {
+    totalAccepted = 0,
+    totalFailed = 0,
+    history = {},
+}
+
+local giftQueue = {}
+local isProcessingGiftQueue = false
+
+local function hideGiftUI()
+    if not CONFIG.giftHideUI then return end
+    local giftGui = playerGui:FindFirstChild("Gift_Notification")
+    if not giftGui then return end
+    local frame = giftGui:FindFirstChild("Frame")
+    if not frame then return end
+    for _, obj in ipairs(frame:GetDescendants()) do
+        if obj.Name == "Gift_Notification" and obj:IsA("GuiObject") then
+            obj.Visible = false
+        end
+    end
+end
+
+local function processGiftQueue()
+    if isProcessingGiftQueue then return end
+    if #giftQueue == 0 then return end  -- ⭐ skip kalau kosong
+    
+    isProcessingGiftQueue = true
+    isAutoAcceptActive = true
+    
+    -- ⭐ SAVE previous state
+    local wasWaitingEggTimer = isWaitingEggTimer
+    
+    task.spawn(function()
+        while #giftQueue > 0 do
+            local gift = table.remove(giftQueue, 1)
+            print(string.format("[Gift] Process: %s | %s", gift.id, gift.pet))
+            
+            task.wait(CONFIG.giftDelayAfter)
+            
+            local ok = pcall(function()
+                AcceptPetGift:FireServer(true, gift.id)
+            end)
+            
+            if ok then
+                GIFT_STATS.totalAccepted = GIFT_STATS.totalAccepted + 1
+            else
+                GIFT_STATS.totalFailed = GIFT_STATS.totalFailed + 1
+            end
+            
+            task.wait(0.5)
+            hideGiftUI()
+            task.wait(0.3)
+            hideGiftUI()
+            
+            if #giftQueue > 0 then
+                task.wait(CONFIG.giftDelayBetween)
+            end
+        end
+        task.wait(0.5)
+        hideGiftUI()
+        isProcessingGiftQueue = false
+        isAutoAcceptActive = false
+    end)
+end
+
+GiftPetEvent.OnClientEvent:Connect(function(giftId, petName, weightInfo)
+    if not CONFIG.giftEnabled then return end
+    if not giftId or typeof(giftId) ~= "string" then return end
+    
+    -- ⭐ SELALU tambahkan ke queue
+    table.insert(giftQueue, { 
+        id = giftId, 
+        pet = petName, 
+        weight = weightInfo, 
+        time = os.time() 
+    })
+    table.insert(GIFT_STATS.history, { 
+        id = giftId, 
+        pet = petName, 
+        weight = weightInfo, 
+        time = os.time() 
+    })
+    
+    print(string.format("[Gift] 📥 Queued: %s | %s (queue: %d)", 
+        giftId, tostring(petName), #giftQueue))
+    
+    -- ⭐ HANYA process kalau SEDANG TUNGGU EGG TIMER
+    if isRunning and not isWaitingEggTimer then
+        print("[Gift] Skip process — tunggu fase tunggu egg timer")
+        return
+    end
+    
+    -- Process queue (hanya kalau tunggu timer atau auto hatch OFF)
+    processGiftQueue()
+end)
+
+-- ==================================================================
+-- AUTO GIFT PET
+-- ==================================================================
+local function autoGiftOnePet(petName, targetUsername)
+    local target = findPlayerByName(targetUsername)
+    if not target then return false end
+    
+    local petTool = findPetToolByName(petName)
+    if not petTool then return false end
+    
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    
+    -- Equip
+    pcall(function() humanoid:EquipTool(petTool) end)
+    
+    -- ⭐ Delay setelah equip sebelum cek favorit
+    task.wait(CONFIG.giftPetDelayEquip)
+    
+    -- Cek & unfavorit
+    if petTool:GetAttribute("d") == true then
+        pcall(function() FavoriteItemRE:FireServer(petTool) end)
+        task.wait(CONFIG.giftPetDelayUnfavorit)
+    end
+    
+    -- Fire gift
+    print(string.format("[Gift Pet] Kirim %s → %s", petName, targetUsername))
+    local ok = pcall(function()
+        PetGiftingService:FireServer("GivePet", target)
+    end)
+    
+    task.wait(CONFIG.giftPetDelayBetween)
+    return ok
+end
+
+local function autoGiftAllFiltered()
+    if not CONFIG.giftPetTarget then return end
+    local target = findPlayerByName(CONFIG.giftPetTarget)
+    if not target then return end
+    
+    isAutoGiftActive = true
+    
+    local pets = getBackpackPets()
+    local toGift = {}
+    
+    for _, pet in ipairs(pets) do
+        local skip = false
+        if pet.weight < CONFIG.giftPetMinWeight then skip = true end
+        if pet.weight > CONFIG.giftPetMaxWeight then skip = true end
+        if pet.level < CONFIG.giftPetMinLevel then skip = true end
+        if pet.level > CONFIG.giftPetMaxLevel then skip = true end
+        
+        if not skip and next(CONFIG.giftPetSelectedTypes) ~= nil then
+            local baseName = splitPetName(pet.name)
+            if not CONFIG.giftPetSelectedTypes[baseName] and not CONFIG.giftPetSelectedTypes[pet.name] then
+                skip = true
+            end
+        end
+        
+        if not skip then table.insert(toGift, pet) end
+    end
+    
+    print(string.format("[Gift Pet] %d pet lolos filter", #toGift))
+    
+    if #toGift == 0 then
+        isAutoGiftActive = false
+        return
+    end
+    
+    for i, pet in ipairs(toGift) do
+        if not isGiftPetRunning then break end
+        print(string.format("[Gift Pet] [%d/%d] %s", i, #toGift, pet.name))
+        autoGiftOnePet(pet.name, CONFIG.giftPetTarget)
+    end
+    
+    isAutoGiftActive = false
+end
+
+-- ==================================================================
+-- WEBHOOK
+-- ==================================================================
+local function getHttpRequest()
+    if typeof(request) == "function" then return request end
+    if typeof(http_request) == "function" then return http_request end
+    if syn and typeof(syn.request) == "function" then return syn.request end
+    if fluxus and typeof(fluxus.request) == "function" then return fluxus.request end
+    return nil
+end
+
+local function sendWebhookEmbed(embed)
+    if not CONFIG.webhookEnabled then return end
+    if not CONFIG.webhookUrl or CONFIG.webhookUrl == "" then return end
+    local httpRequest = getHttpRequest()
+    if not httpRequest then return end
+    pcall(function()
+        httpRequest({
+            Url = CONFIG.webhookUrl,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode({
+                username = CONFIG.webhookUsername or "Auto Hatch Report",
+                embeds = {embed},
+            }),
+        })
+    end)
+end
+
+local function buildWebhookEmbed()
+    local eggName = "?"
+    for name, _ in pairs(CONFIG.selectedEggs) do eggName = name break end
+    local petCurrent, petMax = getPetCountFromData()
+    
+    local function formatPreset(presetName)
+        if not presetName then return "-" end
+        local preset = getPresetFromFile(presetName)
+        if not preset or not preset.pets then return "-" end
+        local groups = {}
+        for _, petInfo in ipairs(preset.pets) do
+            local key = petInfo.PetType or "?"
+            if petInfo.Mutation and petInfo.Mutation ~= "Normal" then
+                key = petInfo.Mutation .. " " .. key
+            end
+            groups[key] = (groups[key] or 0) + 1
+        end
+        local list = {}
+        for name, count in pairs(groups) do table.insert(list, {name = name, count = count}) end
+        table.sort(list, function(a, b) return a.count > b.count end)
+        local parts = {}
+        for _, item in ipairs(list) do
+            table.insert(parts, string.format("%d %s", item.count, item.name))
+        end
+        return table.concat(parts, ", ")
+    end
+    
+    local function formatHuntBucket(bucket)
+        local count = 0
+        local lines = {}
+        for petName, entry in pairs(bucket) do
+            count = count + entry.count
+            local weightStr
+            if math.abs(entry.minWeight - entry.maxWeight) < 0.01 then
+                weightStr = string.format("%.2f kg", entry.minWeight)
+            else
+                weightStr = string.format("%.2f-%.2f kg", entry.minWeight, entry.maxWeight)
+            end
+            table.insert(lines, string.format("• %s x%d (%s)", petName, entry.count, weightStr))
+        end
+        return count, table.concat(lines, "\n")
+    end
+    
+    local specialCount, specialList = formatHuntBucket(STATS.huntStats.Special)
+    local hugeCount, hugeList = formatHuntBucket(STATS.huntStats.Huge)
+    local titanCount, titanList = formatHuntBucket(STATS.huntStats.Titan)
+    local godlyCount, godlyList = formatHuntBucket(STATS.huntStats.Godly)
+    
+    local eggBefore = STATS.eggBeforePlace or 0
+    local eggCurrent = STATS.eggAfterSell or 0
+    local netResult = eggCurrent - eggBefore
+    local netStr = netResult >= 0 and ("+" .. netResult) or tostring(netResult)
+    
+    local totalDuration = os.time() - STATS.sessionStart
+    local hours = math.floor(totalDuration / 3600)
+    local minutes = math.floor((totalDuration % 3600) / 60)
+    local seconds = totalDuration % 60
+    local durationStr = string.format("%dh %dm %ds", hours, minutes, seconds)
+    
+    local desc = {}
+    table.insert(desc, "**Profile :**")
+    table.insert(desc, string.format("> 👤 Username : ||%s||", player.Name))
+    table.insert(desc, string.format("> 🥚 Egg Name: ``%s``", eggName))
+    table.insert(desc, string.format("> 🐾 Pet on backpack: ``%d/%d``", petCurrent, petMax))
+    table.insert(desc, "")
+    table.insert(desc, "**Teams :**")
+    table.insert(desc, "> Core: " .. formatPreset(CONFIG.speedPreset))
+    table.insert(desc, "> Hatch: " .. formatPreset(CONFIG.hatchPreset))
+    table.insert(desc, "> Sell: " .. formatPreset(CONFIG.sellPreset))
+    table.insert(desc, "")
+    table.insert(desc, "**Hunt Statistics :**")
+    table.insert(desc, string.format("> ⭐ Special: %d", specialCount))
+    if specialList ~= "" then table.insert(desc, specialList) end
+    table.insert(desc, string.format("> 🥉 Huge: %d", hugeCount))
+    if hugeList ~= "" then table.insert(desc, hugeList) end
+    table.insert(desc, string.format("> 🥈 Titan: %d", titanCount))
+    if titanList ~= "" then table.insert(desc, titanList) end
+    table.insert(desc, string.format("> 🥇 Godly: %d", godlyCount))
+    if godlyList ~= "" then table.insert(desc, godlyList) end
+    table.insert(desc, "")
+    table.insert(desc, "**Egg Statistics :**")
+    table.insert(desc, string.format("> 📦 Egg Before: ``%d``", eggBefore))
+    table.insert(desc, string.format("> 📊 Current Amount: ``%d``", eggCurrent))
+    table.insert(desc, string.format("> 📈 Net Result: ``%s``", netStr))
+    table.insert(desc, "")
+    table.insert(desc, "**Hatch Statistics :**")
+    table.insert(desc, string.format("> 🔄 Hatch Cycles: ``%d``", STATS.totalHatchCycles))
+    table.insert(desc, string.format("> 🐣 Total Hatched: ``%d``", STATS.totalHatched))
+    table.insert(desc, string.format("> ⏱️ Cycle Duration: ``%ds``", STATS.lastCycleDuration))
+    table.insert(desc, string.format("> ⏳ All Time Duration: ``%s``", durationStr))
+    
+    return {
+        title = "🥚 Auto Hatch Report",
+        description = table.concat(desc, "\n"),
+        color = 3447003,
+        footer = { text = "Auto Hatch v16.0 • " .. os.date("%Y-%m-%d %H:%M:%S") }
+    }
+end
+
+-- ==================================================================
+-- STATUS
+-- ==================================================================
+local function updateStatus(text)
+    if statusCallback and not guiDestroyed then statusCallback(text) end
+    print("[AutoHatch]", text)
+end
+
+-- ==================================================================
+-- FASE 1: PLACE EGG
+-- ==================================================================
+local function placeEggsFromBackpack()
+    local totalSlots = #CONFIG.eggGridOffsets
+    task.wait(CONFIG.scanSettleDelay)
+    local emptySlots, occupied = getEmptySlots()
+    if #emptySlots == 0 then
+        updateStatus("⚠️ Garden penuh")
+        return 0
+    end
+    updateStatus(string.format("📦 %d slot kosong", #emptySlots))
+    local eggTool = findEggTool()
+    if not eggTool then
+        updateStatus("⚠️ Tidak ada egg")
+        return 0
+    end
+    local backpack = player:FindFirstChild("Backpack")
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if eggTool.Parent == backpack and humanoid then
+        pcall(function() humanoid:EquipTool(eggTool) end)
+        task.wait(0.5)
+    end
+    local center = getCenterPoint()
+    if not center then return 0 end
+    local placed = 0
+    for _, slotIndex in ipairs(emptySlots) do
+        if not isRunning then break end
+        local currentEggTool = findEggTool()
+        if not currentEggTool then break end
+        if currentEggTool.Parent == backpack and humanoid then
+            pcall(function() humanoid:EquipTool(currentEggTool) end)
+            task.wait(0.5)
+        end
+        local pos = center.Position + CONFIG.eggGridOffsets[slotIndex]
+        local ok = pcall(function()
+            PetEggService:FireServer("CreateEgg", pos)
+        end)
+        if ok then
+            placed = placed + 1
+            updateStatus(string.format("📦 Place %d/%d", placed, #emptySlots))
+            task.wait(CONFIG.placeDelay)
+        end
+    end
+    if humanoid then
+        pcall(function() humanoid:UnequipTools() end)
+        task.wait(0.5)
+    end
+    return placed
+end
+
+-- ==================================================================
+-- FASE 2: CYCLE
+-- ==================================================================
+local function runOneCycle(cycleNum, totalCycles)
+    if cycleNum == 1 then STATS.cycleStartTime = os.time() end
+    updateStatus(string.format("[%d/%d] 📦 Place egg...", cycleNum, totalCycles))
+    local placed = placeEggsFromBackpack()
+    local existingEggs = getMyGardenEggs()
+    local allReady = false
+    if placed == 0 then
+        if #existingEggs == 0 then return false end
+        allReady = true
+        for _, egg in ipairs(existingEggs) do
+            if (egg:GetAttribute("TimeToHatch") or 999) > 0 then allReady = false break end
+        end
+    end
+    task.wait(2)
+    
+    -- ⭐ FASE TUNGGU TIMER dengan Auto Gift & Auto Accept
+    if not allReady then
+        updateStatus(string.format("[%d/%d] ⚡ Tim Speed...", cycleNum, totalCycles))
+        equipTeamByPreset(CONFIG.speedPreset, CONFIG.speedLoadout)
+        task.wait(CONFIG.delayAfterSpeed)
+    
+        updateStatus(string.format("[%d/%d] ⏳ Menunggu ready...", cycleNum, totalCycles))
+    
+        -- ⭐ SET STATE: Tunggu egg timer
+        isWaitingEggTimer = true
+    
+        -- ⭐ Process gift queue yang menumpuk
+        if #giftQueue > 0 then
+            print(string.format("[AutoHatch] Process %d gift dari queue...", #giftQueue))
+            processGiftQueue()
+        end
+    
+        -- ⭐ Auto-start auto gift
+        if giftPetUserStarted and not isGiftPetRunning and CONFIG.giftPetTarget then
+            local hasPetsToGift = false
+            for _, pet in ipairs(getBackpackPets()) do
+                if pet.weight >= CONFIG.giftPetMinWeight 
+                   and pet.weight <= CONFIG.giftPetMaxWeight
+                   and pet.level >= CONFIG.giftPetMinLevel
+                   and pet.level <= CONFIG.giftPetMaxLevel then
+                    hasPetsToGift = true
+                    break
+                end
+            end
+            if hasPetsToGift then
+                print("[AutoHatch] Auto-start Auto Gift...")
+                isGiftPetRunning = true
+                task.spawn(function()
+                    autoGiftAllFiltered()
+                    if isGiftPetRunning then
+                        isGiftPetRunning = false
+                    end
+                end)
+            end
+        end
+    
+        local waitStart = os.clock()
+        while (os.clock() - waitStart) < 900 and isRunning do
+            local eggs = getMyGardenEggs()
+            if #eggs == 0 then break end
+            local readyAll = true
+            for _, egg in ipairs(eggs) do
+                if (egg:GetAttribute("TimeToHatch") or 0) > 0 then readyAll = false break end
+            end
+            if readyAll then break end
+            task.wait(3)
+        end
+    
+        -- ⭐ TUNGGU AUTO GIFT & AUTO ACCEPT SELESAI
+        updateStatus(string.format("[%d/%d] ⏳ Menunggu gift/accept selesai...", cycleNum, totalCycles))
+        local hasActiveProcess = false
+        while (isAutoGiftActive or isAutoAcceptActive or isGiftPetRunning) and isRunning do
+            hasActiveProcess = true
+            task.wait(1)
+        end
+    
+        -- ⭐ Kalau ADA proses yang aktif → delay
+        if hasActiveProcess then
+            updateStatus(string.format("[%d/%d] ⏳ Delay %ss...", 
+                cycleNum, totalCycles, CONFIG.delayAfterGiftSync))
+            task.wait(CONFIG.delayAfterGiftSync)
+        end
+    
+        -- ⭐ CLEAR STATE
+        isWaitingEggTimer = false
+    
+        if not isRunning then return false end
+        task.wait(1)
+    end
+    
+    updateStatus(string.format("[%d/%d] 🥚 Tim Hatch...", cycleNum, totalCycles))
+    equipTeamByPreset(CONFIG.hatchPreset, CONFIG.hatchLoadout)
+    task.wait(CONFIG.delayAfterHatch)
+    local eggsToHatch = {}
+    for _, egg in ipairs(getMyGardenEggs()) do
+        if (egg:GetAttribute("TimeToHatch") or 999) <= 0 then table.insert(eggsToHatch, egg) end
+    end
+    local hatchCount = #eggsToHatch
+    for _, egg in ipairs(eggsToHatch) do
+        if not isRunning then break end
+        hatchEgg(egg)
+        task.wait(CONFIG.hatchDelay)
+    end
+    local timeout = os.clock() + 60
+    while isRunning and os.clock() < timeout do
+        local hasReadyEgg = false
+        for _, egg in ipairs(getMyGardenEggs()) do
+            if (egg:GetAttribute("TimeToHatch") or 999) <= 0 then hasReadyEgg = true break end
+        end
+        if not hasReadyEgg then break end
+        task.wait(1)
+    end
+    STATS.totalHatched = STATS.totalHatched + hatchCount
+    task.wait(CONFIG.delayAfterHatchAll)
+    STATS.totalHatchCycles = STATS.totalHatchCycles + 1
+    STATS.lastCycleDuration = os.time() - STATS.cycleStartTime
+    task.wait(2)
+    return true
+end
+
+-- ==================================================================
+-- FASE 3: FILTER + SELL
+-- ==================================================================
+local function runFilterAndSell()
+    if not CONFIG.autoSell then return end
+    updateStatus("💸 Tim Sell...")
+    equipTeamByPreset(CONFIG.sellPreset, CONFIG.sellLoadout)
+    task.wait(CONFIG.delayAfterSell)
+    updateStatus("⭐ Filter pet...")
+    local pets = getBackpackPets()
+    local favCount = 0
+    local skipCount = 0
+    local presetProtectCount = 0
+    for _, pet in ipairs(pets) do
+        if not isRunning then return end
+        local shouldBeFav = isPetInPreset(pet.name) or not isUnwantedPet(pet)
+        if shouldBeFav then
+            local ok = ensureFavorit(pet.tool, true)
+            if ok then
+                if isPetInPreset(pet.name) then presetProtectCount = presetProtectCount + 1
+                else favCount = favCount + 1 end
+            end
+        else
+            skipCount = skipCount + 1
+        end
+    end
+    updateStatus(string.format("⭐ Preset:%d Fav:%d Skip:%d", presetProtectCount, favCount, skipCount))
+    task.wait(1)
+    for _, pet in ipairs(getBackpackPets()) do
+        local shouldBeFav = isPetInPreset(pet.name) or not isUnwantedPet(pet)
+        if shouldBeFav and not pet.isFavorited then
+            ensureFavorit(pet.tool, true)
+        end
+    end
+    task.wait(CONFIG.delayBeforeSell)
+    updateStatus("💰 Sell all...")
+    sellAll()
+    task.wait(3)
+    STATS.eggAfterSell = countEggsInBackpack()
+    updateStatus("✅ Sell selesai")
+    task.wait(2)
+    scanNewPetsAfterSell()
+end
+
+-- ==================================================================
+-- MAIN LOOP
+-- ==================================================================
+local function startAutoHatch()
+    if isRunning then return end
+    refreshUnwantedMutationsCache()
+    resetStats()
+    STATS.knownUUIDs = getInventoryUUIDs()
+    STATS.eggBeforePlace = countEggsInBackpack()
+    isRunning = true
+    task.spawn(function()
+        while isRunning and not guiDestroyed do
+            for cycle = 1, CONFIG.cycleCount do
+                if not isRunning or guiDestroyed then break end
+                runOneCycle(cycle, CONFIG.cycleCount)
+            end
+            if not isRunning or guiDestroyed then break end
+            runFilterAndSell()
+            if not isRunning or guiDestroyed then break end
+            if CONFIG.webhookEnabled then
+                local embed = buildWebhookEmbed()
+                task.spawn(function() sendWebhookEmbed(embed) end)
+            end
+            updateStatus("🔄 Cycle baru...")
+            task.wait(5)
+        end
+        if not guiDestroyed then updateStatus("Status: Stopped") end
+        isRunning = false
+    end)
+end
+
+local function stopAutoHatch()
+    isRunning = false
+    updateStatus("⏹️ Stopping...")
+end
+
+-- ==================================================================
+-- GUI
+-- ==================================================================
+local oldGui = playerGui:FindFirstChild("AutoHatchGUI")
+if oldGui then oldGui:Destroy() end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoHatchGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+screenGui.Destroying:Connect(function()
+    guiDestroyed = true
+    isRunning = false
+    saveConfig()
+end)
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 580, 0, 400)
+mainFrame.Position = UDim2.new(0.5, -290, 0.5, -200)
+mainFrame.BackgroundColor3 = C.bg
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 28)
+titleBar.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
+titleLabel.Position = UDim2.new(0, 12, 0, 0)
+titleLabel.Text = "🥚 Auto Hatch v16.0"
+titleLabel.TextColor3 = C.text
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 11
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.BackgroundTransparency = 1
+titleLabel.Parent = titleBar
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 22, 0, 22)
+closeBtn.Position = UDim2.new(1, -25, 0, 3)
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 11
+closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+closeBtn.BorderSizePixel = 0
+closeBtn.Parent = titleBar
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
+closeBtn.MouseButton1Click:Connect(function() screenGui:Destroy() end)
+
+local function makeDraggable(handle, target)
+    local dragging, dragStart, startPos, dragInput
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+           or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = target.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+           or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            local delta = input.Position - dragStart
+            target.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+makeDraggable(titleBar, mainFrame)
+
+local sidebar = Instance.new("Frame")
+sidebar.Size = UDim2.new(0.2, 0, 1, -28)
+sidebar.Position = UDim2.new(0, 0, 0, 28)
+sidebar.BackgroundColor3 = C.sidebar
+sidebar.BorderSizePixel = 0
+sidebar.Parent = mainFrame
+Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 10)
+
+local menuLabel = Instance.new("TextLabel")
+menuLabel.Size = UDim2.new(1, 0, 0, 16)
+menuLabel.Position = UDim2.new(0, 0, 0, 6)
+menuLabel.Text = "MENU"
+menuLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
+menuLabel.Font = Enum.Font.GothamBold
+menuLabel.TextSize = 9
+menuLabel.TextXAlignment = Enum.TextXAlignment.Center
+menuLabel.BackgroundTransparency = 1
+menuLabel.Parent = sidebar
+
+local sep = Instance.new("Frame")
+sep.Size = UDim2.new(0.7, 0, 0, 1)
+sep.Position = UDim2.new(0.15, 0, 0, 26)
+sep.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+sep.BorderSizePixel = 0
+sep.Parent = sidebar
+
+local tabs = {
+    {name="Main", label="⚙️ Main"},
+    {name="Egg", label="📦 Egg"},
+    {name="Delay", label="⏱️ Delay"},
+    {name="Unwanted", label="🎯 Unwanted"},
+    {name="Inventory", label="🎒 Inventory"},
+}
+
+local tabBtns = {}
+local activeTab = nil
+
+for i, tab in ipairs(tabs) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.82, 0, 0, 22)
+    btn.Position = UDim2.new(0.09, 0, 0, 32 + (i-1)*27)
+    btn.Text = tab.label
+    btn.TextColor3 = C.textDim
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 8
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+    btn.BorderSizePixel = 0
+    btn.AutoButtonColor = false
+    btn.Parent = sidebar
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+    btn.MouseEnter:Connect(function()
+        if activeTab ~= tab.name then btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55) end
+    end)
+    btn.MouseLeave:Connect(function()
+        if activeTab ~= tab.name then btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40) end
+    end)
+    tabBtns[tab.name] = btn
+end
+
+local contentArea = Instance.new("Frame")
+contentArea.Size = UDim2.new(0.8, -8, 1, -34)
+contentArea.Position = UDim2.new(0.2, 4, 0, 32)
+contentArea.BackgroundTransparency = 1
+contentArea.ClipsDescendants = true
+contentArea.Parent = mainFrame
+
+local tabFrames = {}
+for _, tab in ipairs(tabs) do
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 1, 0)
+    f.BackgroundTransparency = 1
+    f.Visible = false
+    f.Parent = contentArea
+    tabFrames[tab.name] = f
+end
+
+local function switchTab(tabName)
+    for _, f in pairs(tabFrames) do f.Visible = false end
+    for _, btn in pairs(tabBtns) do
+        btn.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+        btn.TextColor3 = C.textDim
+    end
+    if tabFrames[tabName] then
+        tabFrames[tabName].Visible = true
+        tabBtns[tabName].BackgroundColor3 = C.accent
+        tabBtns[tabName].TextColor3 = C.text
+        activeTab = tabName
+    end
+end
+
+for _, tab in ipairs(tabs) do
+    tabBtns[tab.name].MouseButton1Click:Connect(function()
+        switchTab(tab.name)
+    end)
+end
+
+local function makeSection(parent, title, height, order)
+    local section = Instance.new("Frame")
+    section.Size = UDim2.new(1, -10, 0, height)
+    section.BackgroundColor3 = C.section
+    section.BorderSizePixel = 0
+    section.LayoutOrder = order or 1
+    section.Parent = parent
+    Instance.new("UICorner", section).CornerRadius = UDim.new(0, 6)
+    if title then
+        local t = Instance.new("TextLabel")
+        t.Size = UDim2.new(1, -20, 0, 20)
+        t.Position = UDim2.new(0, 10, 0, 4)
+        t.Text = title
+        t.TextColor3 = C.text
+        t.Font = Enum.Font.GothamBold
+        t.TextSize = 10
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.BackgroundTransparency = 1
+        t.Parent = section
+    end
+    return section
+end
+
+local function makeInputRow(parent, yPos, label, configKey, isNumber, min, max)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0.55, -15, 0, 16)
+    lbl.Position = UDim2.new(0, 10, 0, yPos)
+    lbl.Text = label
+    lbl.TextColor3 = C.textDim
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 8
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.BackgroundTransparency = 1
+    lbl.Parent = parent
+    
+    local input = Instance.new("TextBox")
+    input.Size = UDim2.new(0.45, -15, 0, 20)
+    input.Position = UDim2.new(0.55, 5, 0, yPos)
+    input.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    input.BorderSizePixel = 0
+    input.Font = Enum.Font.Gotham
+    input.Text = tostring(CONFIG[configKey])
+    input.TextColor3 = C.text
+    input.TextSize = 8
+    input.Parent = parent
+    Instance.new("UICorner", input).CornerRadius = UDim.new(0, 3)
+    input.FocusLost:Connect(function()
+        if isNumber then
+            local n = tonumber(input.Text)
+            if n and (min == nil or n >= min) and (max == nil or n <= max) then
+                CONFIG[configKey] = n
+                saveConfig()
+            end
+        end
+        input.Text = tostring(CONFIG[configKey])
+    end)
+    return input
+end
+
+local function makeToggle(parent, yPos, onText, offText, configKey)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -20, 0, 22)
+    btn.Position = UDim2.new(0, 10, 0, yPos)
+    btn.BackgroundColor3 = CONFIG[configKey] and C.success or Color3.fromRGB(70, 70, 85)
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.Gotham
+    btn.Text = CONFIG[configKey] and onText or offText
+    btn.TextColor3 = C.text
+    btn.TextSize = 9
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+    btn.MouseButton1Click:Connect(function()
+        CONFIG[configKey] = not CONFIG[configKey]
+        btn.Text = CONFIG[configKey] and onText or offText
+        btn.BackgroundColor3 = CONFIG[configKey] and C.success or Color3.fromRGB(70, 70, 85)
+        saveConfig()
+    end)
+    return btn
+end
+
+-- TAB: MAIN
+local mainTab = tabFrames["Main"]
+local mainScroll = Instance.new("ScrollingFrame")
+mainScroll.Size = UDim2.new(1, -10, 1, -10)
+mainScroll.Position = UDim2.new(0, 5, 0, 5)
+mainScroll.BackgroundTransparency = 1
+mainScroll.BorderSizePixel = 0
+mainScroll.ScrollBarThickness = 4
+mainScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+mainScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+mainScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+mainScroll.Parent = mainTab
+
+local mainLayout = Instance.new("UIListLayout")
+mainLayout.Padding = UDim.new(0, 6)
+mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
+mainLayout.Parent = mainScroll
+
+local presetSection = makeSection(mainScroll, "🐾 Preset Tim", 145, 1)
+
+local function makeDropdown(parent, yPos, label, configKey)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -16, 0, 14)
+    lbl.Position = UDim2.new(0, 8, 0, yPos)
+    lbl.Text = label
+    lbl.TextColor3 = C.textDim
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 8
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.BackgroundTransparency = 1
+    lbl.Parent = parent
+    
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -16, 0, 22)
+    btn.Position = UDim2.new(0, 8, 0, yPos + 15)
+    btn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.Gotham
+    btn.Text = CONFIG[configKey] and ("📂 " .. CONFIG[configKey]) or "📂 Pilih preset..."
+    btn.TextColor3 = C.text
+    btn.TextSize = 8
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 8)
+    pad.Parent = btn
+    btn.MouseButton1Click:Connect(function()
+        local names = getPresetNames()
+        if #names == 0 then
+            btn.Text = "❌ Tidak ada preset"
+            task.wait(1)
+            btn.Text = "📂 Pilih preset..."
+            return
+        end
+        local currentIdx = 1
+        if CONFIG[configKey] then
+            for i, n in ipairs(names) do
+                if n == CONFIG[configKey] then currentIdx = i + 1 break end
+            end
+        end
+        if currentIdx > #names then currentIdx = 1 end
+        CONFIG[configKey] = names[currentIdx]
+        btn.Text = "📂 " .. names[currentIdx]
+        saveConfig()
+    end)
+    return btn
+end
+
+makeDropdown(presetSection, 26, "⚡ Speed (Loadout 1)", "speedPreset")
+makeDropdown(presetSection, 68, "🥚 Hatch (Loadout 2)", "hatchPreset")
+makeDropdown(presetSection, 110, "💸 Sell (Loadout 3)", "sellPreset")
+
+local cycleSection = makeSection(mainScroll, "🔁 Cycle", 80, 2)
+makeInputRow(cycleSection, 26, "Jumlah cycle:", "cycleCount", true, 1, 50)
+makeToggle(cycleSection, 50, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
+
+local webhookSection = makeSection(mainScroll, "🔔 Discord Webhook", 125, 3)
+makeToggle(webhookSection, 26, "🔔 Webhook: ON", "🔔 Webhook: OFF", "webhookEnabled")
+
+local webhookInput = Instance.new("TextBox")
+webhookInput.Size = UDim2.new(1, -20, 0, 22)
+webhookInput.Position = UDim2.new(0, 10, 0, 52)
+webhookInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+webhookInput.BorderSizePixel = 0
+webhookInput.Font = Enum.Font.Gotham
+webhookInput.PlaceholderText = "https://discord.com/api/webhooks/..."
+webhookInput.Text = CONFIG.webhookUrl or ""
+webhookInput.TextColor3 = C.text
+webhookInput.TextSize = 8
+webhookInput.ClearTextOnFocus = false
+webhookInput.TextTruncate = Enum.TextTruncate.AtEnd
+webhookInput.ClipsDescendants = true
+webhookInput.Parent = webhookSection
+Instance.new("UICorner", webhookInput).CornerRadius = UDim.new(0, 3)
+local whPad = Instance.new("UIPadding")
+whPad.PaddingLeft = UDim.new(0, 6)
+whPad.PaddingRight = UDim.new(0, 6)
+whPad.Parent = webhookInput
+
+webhookInput.FocusLost:Connect(function()
+    CONFIG.webhookUrl = webhookInput.Text:gsub("%s+$", "")
+    saveConfig()
+end)
+
+local testWebhookBtn = Instance.new("TextButton")
+testWebhookBtn.Size = UDim2.new(1, -20, 0, 20)
+testWebhookBtn.Position = UDim2.new(0, 10, 0, 78)
+testWebhookBtn.BackgroundColor3 = C.accent
+testWebhookBtn.BorderSizePixel = 0
+testWebhookBtn.Font = Enum.Font.Gotham
+testWebhookBtn.Text = "🧪 Test Webhook"
+testWebhookBtn.TextColor3 = C.text
+testWebhookBtn.TextSize = 8
+testWebhookBtn.Parent = webhookSection
+Instance.new("UICorner", testWebhookBtn).CornerRadius = UDim.new(0, 3)
+testWebhookBtn.MouseButton1Click:Connect(function()
+    if not CONFIG.webhookUrl or CONFIG.webhookUrl == "" then
+        statusLabel.Text = "⚠️ Webhook URL kosong!"
+        return
+    end
+    sendWebhookEmbed({
+        title = "🧪 Test Webhook",
+        description = "Auto Hatch v16.0\nBerhasil terhubung!",
+        color = 3066993,
+    })
+    statusLabel.Text = "✅ Test webhook terkirim"
+end)
+
+local controlSection = makeSection(mainScroll, nil, 60, 4)
+
+local startBtn = Instance.new("TextButton")
+startBtn.Size = UDim2.new(1, -20, 0, 30)
+startBtn.Position = UDim2.new(0, 10, 0, 10)
+startBtn.BackgroundColor3 = C.success
+startBtn.BorderSizePixel = 0
+startBtn.Font = Enum.Font.GothamBold
+startBtn.Text = "▶️ MULAI"
+startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+startBtn.TextSize = 10
+startBtn.Parent = controlSection
+Instance.new("UICorner", startBtn).CornerRadius = UDim.new(0, 5)
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -20, 0, 14)
+statusLabel.Position = UDim2.new(0, 10, 0, 44)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.Text = "Status: Idle"
+statusLabel.TextColor3 = C.textDim
+statusLabel.TextSize = 8
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Parent = controlSection
+
+statusCallback = function(text) statusLabel.Text = text end
+
+startBtn.MouseButton1Click:Connect(function()
+    if isRunning then
+        stopAutoHatch()
+        startBtn.Text = "▶️ MULAI"
+        startBtn.BackgroundColor3 = C.success
+    else
+        if next(CONFIG.selectedEggs) == nil then
+            statusLabel.Text = "⚠️ Pilih egg dulu!"
+            return
+        end
+        if not CONFIG.speedPreset then
+            statusLabel.Text = "⚠️ Pilih preset Speed!"
+            return
+        end
+        if not CONFIG.hatchPreset then
+            statusLabel.Text = "⚠️ Pilih preset Hatch!"
+            return
+        end
+        if CONFIG.autoSell and not CONFIG.sellPreset then
+            statusLabel.Text = "⚠️ Pilih preset Sell!"
+            return
+        end
+        lastLoadoutSlot = nil
+        startAutoHatch()
+        startBtn.Text = "⏹️ STOP"
+        startBtn.BackgroundColor3 = C.danger
+    end
+end)
+
+-- TAB: EGG
+local eggTab = tabFrames["Egg"]
+local eggScrollOuter = Instance.new("ScrollingFrame")
+eggScrollOuter.Size = UDim2.new(1, -10, 1, -10)
+eggScrollOuter.Position = UDim2.new(0, 5, 0, 5)
+eggScrollOuter.BackgroundTransparency = 1
+eggScrollOuter.BorderSizePixel = 0
+eggScrollOuter.ScrollBarThickness = 4
+eggScrollOuter.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+eggScrollOuter.CanvasSize = UDim2.new(0, 0, 0, 0)
+eggScrollOuter.AutomaticCanvasSize = Enum.AutomaticSize.Y
+eggScrollOuter.Parent = eggTab
+
+local eggOuterLayout = Instance.new("UIListLayout")
+eggOuterLayout.Padding = UDim.new(0, 6)
+eggOuterLayout.Parent = eggScrollOuter
+
+local eggSection = makeSection(eggScrollOuter, "📦 Pilih Egg", 240, 1)
+
+local eggRefreshBtn = Instance.new("TextButton")
+eggRefreshBtn.Size = UDim2.new(1, -20, 0, 20)
+eggRefreshBtn.Position = UDim2.new(0, 10, 0, 26)
+eggRefreshBtn.BackgroundColor3 = C.accent
+eggRefreshBtn.BorderSizePixel = 0
+eggRefreshBtn.Font = Enum.Font.Gotham
+eggRefreshBtn.Text = "🔄 Refresh Egg List"
+eggRefreshBtn.TextColor3 = C.text
+eggRefreshBtn.TextSize = 8
+eggRefreshBtn.Parent = eggSection
+Instance.new("UICorner", eggRefreshBtn).CornerRadius = UDim.new(0, 4)
+
+local eggScroll = Instance.new("ScrollingFrame")
+eggScroll.Size = UDim2.new(1, -20, 0, 180)
+eggScroll.Position = UDim2.new(0, 10, 0, 52)
+eggScroll.BackgroundTransparency = 1
+eggScroll.BorderSizePixel = 0
+eggScroll.ScrollBarThickness = 3
+eggScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+eggScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+eggScroll.Parent = eggSection
+
+local eggLayout = Instance.new("UIListLayout")
+eggLayout.Padding = UDim.new(0, 3)
+eggLayout.Parent = eggScroll
+
+local function refreshEggList()
+    for _, c in ipairs(eggScroll:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    local eggList = {}
+    for _, eggInfo in ipairs(getBackpackEggs()) do
+        eggList[eggInfo.name] = (eggList[eggInfo.name] or 0) + eggInfo.count
+    end
+    local items = {}
+    for eggName, count in pairs(eggList) do
+        table.insert(items, {
+            name = eggName,
+            count = count,
+            isSelected = CONFIG.selectedEggs[eggName] == true,
+        })
+    end
+    table.sort(items, function(a, b)
+        if a.isSelected ~= b.isSelected then return a.isSelected end
+        return a.name < b.name
+    end)
+    local i = 0
+    for _, item in ipairs(items) do
+        i = i + 1
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 24)
+        btn.BackgroundColor3 = item.isSelected and C.success or Color3.fromRGB(65, 65, 80)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.Text = string.format("%s %s (x%d)", item.isSelected and "✓" or "○", item.name, item.count)
+        btn.TextColor3 = C.text
+        btn.TextSize = 9
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.LayoutOrder = i
+        btn.Parent = eggScroll
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 8)
+        pad.Parent = btn
+        btn.MouseButton1Click:Connect(function()
+            if CONFIG.selectedEggs[item.name] then
+                CONFIG.selectedEggs[item.name] = nil
+            else
+                CONFIG.selectedEggs[item.name] = true
+            end
+            saveConfig()
+            refreshEggList()
+        end)
+    end
+    if i == 0 then
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, -4, 0, 30)
+        lbl.Text = "(Tidak ada egg di backpack)"
+        lbl.TextColor3 = C.textDim
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 9
+        lbl.BackgroundTransparency = 1
+        lbl.Parent = eggScroll
+    end
+end
+eggRefreshBtn.MouseButton1Click:Connect(refreshEggList)
+
+-- TAB: DELAY
+local delayTab = tabFrames["Delay"]
+local delayScroll = Instance.new("ScrollingFrame")
+delayScroll.Size = UDim2.new(1, -10, 1, -10)
+delayScroll.Position = UDim2.new(0, 5, 0, 5)
+delayScroll.BackgroundTransparency = 1
+delayScroll.BorderSizePixel = 0
+delayScroll.ScrollBarThickness = 4
+delayScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+delayScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+delayScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+delayScroll.Parent = delayTab
+
+local delayLayout = Instance.new("UIListLayout")
+delayLayout.Padding = UDim.new(0, 6)
+delayLayout.Parent = delayScroll
+
+local delaySection = makeSection(delayScroll, "⏱️ Delay Settings", 200, 1)
+makeInputRow(delaySection, 26, "Loadout Swap:", "delayAfterLoadout", true, 0, 30)
+makeInputRow(delaySection, 50, "Setelah Hatch All:", "delayAfterHatchAll", true, 0, 30)
+makeInputRow(delaySection, 74, "Antar Hatch:", "hatchDelay", true, 0, 30)
+makeInputRow(delaySection, 98, "Place Egg:", "placeDelay", true, 0, 30)
+makeInputRow(delaySection, 122, "Scan Settle:", "scanSettleDelay", true, 0, 30)
+makeInputRow(delaySection, 146, "Sync Gift→Hatch:", "delayAfterGiftSync", true, 0, 60)
+
+local delayInfo = Instance.new("TextLabel")
+delayInfo.Size = UDim2.new(1, -20, 0, 24)
+delayInfo.Position = UDim2.new(0, 10, 0, 172)
+delayInfo.Text = "💡 Sync Gift→Hatch = delay setelah auto gift/accept selesai"
+delayInfo.TextColor3 = C.textDim
+delayInfo.Font = Enum.Font.Gotham
+delayInfo.TextSize = 7
+delayInfo.TextWrapped = true
+delayInfo.TextXAlignment = Enum.TextXAlignment.Left
+delayInfo.BackgroundTransparency = 1
+delayInfo.Parent = delaySection
+
+-- TAB: UNWANTED
+local unwantedTab = tabFrames["Unwanted"]
+local unwantedScrollOuter = Instance.new("ScrollingFrame")
+unwantedScrollOuter.Size = UDim2.new(1, -10, 1, -10)
+unwantedScrollOuter.Position = UDim2.new(0, 5, 0, 5)
+unwantedScrollOuter.BackgroundTransparency = 1
+unwantedScrollOuter.BorderSizePixel = 0
+unwantedScrollOuter.ScrollBarThickness = 4
+unwantedScrollOuter.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+unwantedScrollOuter.CanvasSize = UDim2.new(0, 0, 0, 0)
+unwantedScrollOuter.AutomaticCanvasSize = Enum.AutomaticSize.Y
+unwantedScrollOuter.Parent = unwantedTab
+
+local unwantedOuterLayout = Instance.new("UIListLayout")
+unwantedOuterLayout.Padding = UDim.new(0, 6)
+unwantedOuterLayout.Parent = unwantedScrollOuter
+
+local settingsSection = makeSection(unwantedScrollOuter, "⚙️ Filter Settings", 100, 1)
+makeInputRow(settingsSection, 26, "Max Weight (KG):", "maxWeight", true, 0, 1000)
+makeInputRow(settingsSection, 50, "Max Level:", "maxLevel", true, 0, 10000)
+
+local settingsInfo = Instance.new("TextLabel")
+settingsInfo.Size = UDim2.new(1, -20, 0, 24)
+settingsInfo.Position = UDim2.new(0, 10, 0, 74)
+settingsInfo.Text = "Unwanted = Di list ✓ DAN weight ≤ max DAN level ≤ max"
+settingsInfo.TextColor3 = C.textDim
+settingsInfo.Font = Enum.Font.Gotham
+settingsInfo.TextSize = 7
+settingsInfo.TextWrapped = true
+settingsInfo.TextXAlignment = Enum.TextXAlignment.Left
+settingsInfo.BackgroundTransparency = 1
+settingsInfo.Parent = settingsSection
+
+local petListSection = makeSection(unwantedScrollOuter, "🎯 Pilih Pet Unwanted", 300, 2)
+
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1, -20, 0, 22)
+searchBox.Position = UDim2.new(0, 10, 0, 26)
+searchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+searchBox.BorderSizePixel = 0
+searchBox.Font = Enum.Font.Gotham
+searchBox.PlaceholderText = "🔍 Cari pet..."
+searchBox.Text = ""
+searchBox.TextColor3 = C.text
+searchBox.TextSize = 9
+searchBox.Parent = petListSection
+Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0, 4)
+
+local countLabel = Instance.new("TextLabel")
+countLabel.Size = UDim2.new(1, -20, 0, 14)
+countLabel.Position = UDim2.new(0, 10, 0, 52)
+countLabel.Text = ""
+countLabel.TextColor3 = C.textDim
+countLabel.Font = Enum.Font.Gotham
+countLabel.TextSize = 7
+countLabel.TextXAlignment = Enum.TextXAlignment.Left
+countLabel.BackgroundTransparency = 1
+countLabel.Parent = petListSection
+
+local listFrame = Instance.new("ScrollingFrame")
+listFrame.Size = UDim2.new(1, -20, 0, 230)
+listFrame.Position = UDim2.new(0, 10, 0, 68)
+listFrame.BackgroundTransparency = 1
+listFrame.BorderSizePixel = 0
+listFrame.ScrollBarThickness = 3
+listFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+listFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+listFrame.Parent = petListSection
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 2)
+listLayout.Parent = listFrame
+
+local function refreshUnwantedList()
+    for _, c in ipairs(listFrame:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    local search = searchBox.Text:lower()
+    local petTypes = getAllPetTypesFromRegistry()
+    local items = {}
+    for _, petType in ipairs(petTypes) do
+        if search == "" or petType:lower():find(search) then
+            table.insert(items, {
+                name = petType,
+                isSelected = CONFIG.unwantedPetTypes[petType] == true,
+            })
+        end
+    end
+    table.sort(items, function(a, b)
+        if a.isSelected ~= b.isSelected then return a.isSelected end
+        return a.name < b.name
+    end)
+    local i = 0
+    local selectedCount = 0
+    for _, item in ipairs(items) do
+        i = i + 1
+        if item.isSelected then selectedCount = selectedCount + 1 end
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 20)
+        btn.BackgroundColor3 = item.isSelected and C.danger or Color3.fromRGB(65, 65, 80)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.Text = string.format("%s %s", item.isSelected and "✓" or "○", item.name)
+        btn.TextColor3 = C.text
+        btn.TextSize = 8
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.LayoutOrder = i
+        btn.Parent = listFrame
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 6)
+        pad.Parent = btn
+        btn.MouseButton1Click:Connect(function()
+            if CONFIG.unwantedPetTypes[item.name] then
+                CONFIG.unwantedPetTypes[item.name] = nil
+            else
+                CONFIG.unwantedPetTypes[item.name] = true
+            end
+            saveConfig()
+            refreshUnwantedList()
+        end)
+    end
+    countLabel.Text = string.format("Total: %d pet | Terpilih: %d", i, selectedCount)
+end
+searchBox:GetPropertyChangedSignal("Text"):Connect(refreshUnwantedList)
+
+-- TAB: INVENTORY
+local invTab = tabFrames["Inventory"]
+local invScroll = Instance.new("ScrollingFrame")
+invScroll.Size = UDim2.new(1, -10, 1, -10)
+invScroll.Position = UDim2.new(0, 5, 0, 5)
+invScroll.BackgroundTransparency = 1
+invScroll.BorderSizePixel = 0
+invScroll.ScrollBarThickness = 4
+invScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+invScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+invScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+invScroll.Parent = invTab
+
+local invLayout = Instance.new("UIListLayout")
+invLayout.Padding = UDim.new(0, 6)
+invLayout.SortOrder = Enum.SortOrder.LayoutOrder
+invLayout.Parent = invScroll
+
+-- Section: Auto Accept Gift
+local giftSection = makeSection(invScroll, "🎁 Auto Accept Pet Gift", 180, 1)
+
+local giftEnableBtn = Instance.new("TextButton")
+giftEnableBtn.Size = UDim2.new(1, -20, 0, 22)
+giftEnableBtn.Position = UDim2.new(0, 10, 0, 26)
+giftEnableBtn.BackgroundColor3 = CONFIG.giftEnabled and C.success or Color3.fromRGB(70, 70, 85)
+giftEnableBtn.BorderSizePixel = 0
+giftEnableBtn.Font = Enum.Font.Gotham
+giftEnableBtn.Text = CONFIG.giftEnabled and "🎁 Auto Accept: ON" or "🎁 Auto Accept: OFF"
+giftEnableBtn.TextColor3 = C.text
+giftEnableBtn.TextSize = 9
+giftEnableBtn.Parent = giftSection
+Instance.new("UICorner", giftEnableBtn).CornerRadius = UDim.new(0, 4)
+giftEnableBtn.MouseButton1Click:Connect(function()
+    CONFIG.giftEnabled = not CONFIG.giftEnabled
+    giftEnableBtn.Text = CONFIG.giftEnabled and "🎁 Auto Accept: ON" or "🎁 Auto Accept: OFF"
+    giftEnableBtn.BackgroundColor3 = CONFIG.giftEnabled and C.success or Color3.fromRGB(70, 70, 85)
+    saveConfig()
+end)
+
+local hideUIBtn = Instance.new("TextButton")
+hideUIBtn.Size = UDim2.new(1, -20, 0, 22)
+hideUIBtn.Position = UDim2.new(0, 10, 0, 50)
+hideUIBtn.BackgroundColor3 = CONFIG.giftHideUI and C.success or Color3.fromRGB(70, 70, 85)
+hideUIBtn.BorderSizePixel = 0
+hideUIBtn.Font = Enum.Font.Gotham
+hideUIBtn.Text = CONFIG.giftHideUI and "👁️ Hide UI: ON" or "👁️ Hide UI: OFF"
+hideUIBtn.TextColor3 = C.text
+hideUIBtn.TextSize = 9
+hideUIBtn.Parent = giftSection
+Instance.new("UICorner", hideUIBtn).CornerRadius = UDim.new(0, 4)
+hideUIBtn.MouseButton1Click:Connect(function()
+    CONFIG.giftHideUI = not CONFIG.giftHideUI
+    hideUIBtn.Text = CONFIG.giftHideUI and "👁️ Hide UI: ON" or "👁️ Hide UI: OFF"
+    hideUIBtn.BackgroundColor3 = CONFIG.giftHideUI and C.success or Color3.fromRGB(70, 70, 85)
+    saveConfig()
+end)
+
+makeInputRow(giftSection, 76, "Delay antar gift:", "giftDelayBetween", true, 0, 60)
+
+local giftStatsLabel = Instance.new("TextLabel")
+giftStatsLabel.Size = UDim2.new(1, -20, 0, 40)
+giftStatsLabel.Position = UDim2.new(0, 10, 0, 102)
+giftStatsLabel.BackgroundTransparency = 1
+giftStatsLabel.Font = Enum.Font.Gotham
+giftStatsLabel.TextSize = 8
+giftStatsLabel.TextColor3 = C.textDim
+giftStatsLabel.TextXAlignment = Enum.TextXAlignment.Left
+giftStatsLabel.TextYAlignment = Enum.TextYAlignment.Top
+giftStatsLabel.Text = "Stats: 0 accepted, 0 failed"
+giftStatsLabel.Parent = giftSection
+
+task.spawn(function()
+    while not guiDestroyed do
+        task.wait(2)
+        if giftStatsLabel and giftStatsLabel.Parent then
+            giftStatsLabel.Text = string.format(
+                "Stats:\n✅ Accepted: %d\n❌ Failed: %d\n📥 Queue: %d",
+                GIFT_STATS.totalAccepted, GIFT_STATS.totalFailed, #giftQueue
+            )
+        end
+    end
+end)
+
+local giftInfo = Instance.new("TextLabel")
+giftInfo.Size = UDim2.new(1, -20, 0, 24)
+giftInfo.Position = UDim2.new(0, 10, 0, 144)
+giftInfo.BackgroundTransparency = 1
+giftInfo.Font = Enum.Font.Gotham
+giftInfo.TextSize = 7
+giftInfo.TextColor3 = C.textDim
+giftInfo.TextXAlignment = Enum.TextXAlignment.Left
+giftInfo.TextYAlignment = Enum.TextYAlignment.Top
+giftInfo.TextWrapped = true
+giftInfo.Text = "💡 Auto accept hanya saat tunggu egg timer."
+giftInfo.Parent = giftSection
+
+-- Section: Auto Gift Pet
+local giftPetSection = makeSection(invScroll, "🎁 Auto Gift Pet", 340, 2)
+
+local targetLabel = Instance.new("TextLabel")
+targetLabel.Size = UDim2.new(1, -20, 0, 14)
+targetLabel.Position = UDim2.new(0, 10, 0, 26)
+targetLabel.Text = "Target Player:"
+targetLabel.TextColor3 = C.textDim
+targetLabel.Font = Enum.Font.Gotham
+targetLabel.TextSize = 8
+targetLabel.TextXAlignment = Enum.TextXAlignment.Left
+targetLabel.BackgroundTransparency = 1
+targetLabel.Parent = giftPetSection
+
+local targetBtn = Instance.new("TextButton")
+targetBtn.Size = UDim2.new(1, -20, 0, 22)
+targetBtn.Position = UDim2.new(0, 10, 0, 42)
+targetBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+targetBtn.BorderSizePixel = 0
+targetBtn.Font = Enum.Font.Gotham
+targetBtn.Text = CONFIG.giftPetTarget and ("👤 " .. CONFIG.giftPetTarget) or "👤 Pilih player..."
+targetBtn.TextColor3 = C.text
+targetBtn.TextSize = 8
+targetBtn.TextXAlignment = Enum.TextXAlignment.Left
+targetBtn.Parent = giftPetSection
+Instance.new("UICorner", targetBtn).CornerRadius = UDim.new(0, 4)
+local targetPad = Instance.new("UIPadding")
+targetPad.PaddingLeft = UDim.new(0, 8)
+targetPad.Parent = targetBtn
+
+targetBtn.MouseButton1Click:Connect(function()
+    local names = getPlayerNames()
+    if #names == 0 then
+        targetBtn.Text = "❌ Tidak ada player lain"
+        task.wait(1)
+        targetBtn.Text = CONFIG.giftPetTarget and ("👤 " .. CONFIG.giftPetTarget) or "👤 Pilih player..."
+        return
+    end
+    local currentIdx = 1
+    if CONFIG.giftPetTarget then
+        for i, n in ipairs(names) do
+            if n == CONFIG.giftPetTarget then currentIdx = i + 1 break end
+        end
+    end
+    if currentIdx > #names then currentIdx = 1 end
+    CONFIG.giftPetTarget = names[currentIdx]
+    targetBtn.Text = "👤 " .. names[currentIdx]
+    saveConfig()
+end)
+
+local refreshTargetBtn = Instance.new("TextButton")
+refreshTargetBtn.Size = UDim2.new(1, -20, 0, 18)
+refreshTargetBtn.Position = UDim2.new(0, 10, 0, 66)
+refreshTargetBtn.BackgroundColor3 = C.accent
+refreshTargetBtn.BorderSizePixel = 0
+refreshTargetBtn.Font = Enum.Font.Gotham
+refreshTargetBtn.Text = "🔄 Refresh Player List"
+refreshTargetBtn.TextColor3 = C.text
+refreshTargetBtn.TextSize = 7
+refreshTargetBtn.Parent = giftPetSection
+Instance.new("UICorner", refreshTargetBtn).CornerRadius = UDim.new(0, 3)
+refreshTargetBtn.MouseButton1Click:Connect(function()
+    local names = getPlayerNames()
+    print("[Gift Pet] Players:", #names)
+    for _, n in ipairs(names) do print("  -", n) end
+    if #names > 0 and not CONFIG.giftPetTarget then
+        CONFIG.giftPetTarget = names[1]
+        targetBtn.Text = "👤 " .. names[1]
+        saveConfig()
+    end
+end)
+
+makeInputRow(giftPetSection, 90, "Min Weight (KG):", "giftPetMinWeight", true, 0, 1000)
+makeInputRow(giftPetSection, 114, "Max Weight (KG):", "giftPetMaxWeight", true, 0, 1000)
+makeInputRow(giftPetSection, 138, "Min Level:", "giftPetMinLevel", true, 0, 10000)
+makeInputRow(giftPetSection, 162, "Max Level:", "giftPetMaxLevel", true, 0, 10000)
+
+local startGiftBtn = Instance.new("TextButton")
+startGiftBtn.Size = UDim2.new(1, -20, 0, 30)
+startGiftBtn.Position = UDim2.new(0, 10, 0, 188)
+startGiftBtn.BackgroundColor3 = C.success
+startGiftBtn.BorderSizePixel = 0
+startGiftBtn.Font = Enum.Font.GothamBold
+startGiftBtn.Text = "▶️ MULAI AUTO GIFT"
+startGiftBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+startGiftBtn.TextSize = 10
+startGiftBtn.Parent = giftPetSection
+Instance.new("UICorner", startGiftBtn).CornerRadius = UDim.new(0, 5)
+
+startGiftBtn.MouseButton1Click:Connect(function()
+    if isGiftPetRunning then
+        -- STOP
+        isGiftPetRunning = false
+        giftPetUserStarted = false   -- ⭐ user STOP → reset flag
+        startGiftBtn.Text = "▶️ MULAI AUTO GIFT"
+        startGiftBtn.BackgroundColor3 = C.success
+        return
+    end
+    
+    if not CONFIG.giftPetTarget then
+        statusLabel.Text = "⚠️ Pilih target player!"
+        return
+    end
+    if next(CONFIG.giftPetSelectedTypes) == nil then
+        statusLabel.Text = "⚠️ Pilih minimal 1 pet untuk di-gift!"
+        return
+    end
+    
+    isGiftPetRunning = true
+    giftPetUserStarted = true        -- ⭐ user klik MULAI
+    startGiftBtn.Text = "⏹️ STOP"
+    startGiftBtn.BackgroundColor3 = C.danger
+    
+    task.spawn(function()
+        autoGiftAllFiltered()
+        if isGiftPetRunning then
+            isGiftPetRunning = false
+            startGiftBtn.Text = "▶️ MULAI AUTO GIFT"
+            startGiftBtn.BackgroundColor3 = C.success
+        end
+    end)
+end)
+
+local giftFilterInfo = Instance.new("TextLabel")
+giftFilterInfo.Size = UDim2.new(1, -20, 0, 50)
+giftFilterInfo.Position = UDim2.new(0, 10, 0, 226)
+giftFilterInfo.BackgroundTransparency = 1
+giftFilterInfo.Font = Enum.Font.Gotham
+giftFilterInfo.TextSize = 7
+giftFilterInfo.TextColor3 = C.textDim
+giftFilterInfo.TextXAlignment = Enum.TextXAlignment.Left
+giftFilterInfo.TextYAlignment = Enum.TextYAlignment.Top
+giftFilterInfo.TextWrapped = true
+giftFilterInfo.Text = "💡 Harus pilih minimal 1 pet. Auto start saat tunggu egg timer (kalau auto hatch aktif)."
+giftFilterInfo.Parent = giftPetSection
+
+-- Section: Pilih Pet untuk Gift
+local giftPetSelectSection = makeSection(invScroll, "📋 Pilih Pet untuk Gift", 300, 3)
+
+local giftPetSelectInfo = Instance.new("TextLabel")
+giftPetSelectInfo.Size = UDim2.new(1, -20, 0, 14)
+giftPetSelectInfo.Position = UDim2.new(0, 10, 0, 26)
+giftPetSelectInfo.BackgroundTransparency = 1
+giftPetSelectInfo.Font = Enum.Font.Gotham
+giftPetSelectInfo.TextSize = 7
+giftPetSelectInfo.TextColor3 = C.textDim
+giftPetSelectInfo.TextXAlignment = Enum.TextXAlignment.Left
+giftPetSelectInfo.Text = "Pilih pet yang mau di-gift"
+giftPetSelectInfo.Parent = giftPetSelectSection
+
+local giftPetSearch = Instance.new("TextBox")
+giftPetSearch.Size = UDim2.new(1, -20, 0, 22)
+giftPetSearch.Position = UDim2.new(0, 10, 0, 44)
+giftPetSearch.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+giftPetSearch.BorderSizePixel = 0
+giftPetSearch.Font = Enum.Font.Gotham
+giftPetSearch.PlaceholderText = "🔍 Cari pet..."
+giftPetSearch.Text = ""
+giftPetSearch.TextColor3 = C.text
+giftPetSearch.TextSize = 9
+giftPetSearch.Parent = giftPetSelectSection
+Instance.new("UICorner", giftPetSearch).CornerRadius = UDim.new(0, 4)
+
+local giftPetListFrame = Instance.new("ScrollingFrame")
+giftPetListFrame.Size = UDim2.new(1, -20, 0, 200)
+giftPetListFrame.Position = UDim2.new(0, 10, 0, 74)
+giftPetListFrame.BackgroundTransparency = 1
+giftPetListFrame.BorderSizePixel = 0
+giftPetListFrame.ScrollBarThickness = 3
+giftPetListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+giftPetListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+giftPetListFrame.Parent = giftPetSelectSection
+
+local giftPetListLayout = Instance.new("UIListLayout")
+giftPetListLayout.Padding = UDim.new(0, 2)
+giftPetListLayout.Parent = giftPetListFrame
+
+local function refreshGiftPetList()
+    for _, c in ipairs(giftPetListFrame:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    local search = giftPetSearch.Text:lower()
+    local petTypes = getAllPetTypesFromRegistry()
+    local items = {}
+    for _, petType in ipairs(petTypes) do
+        if search == "" or petType:lower():find(search) then
+            table.insert(items, {
+                name = petType,
+                isSelected = CONFIG.giftPetSelectedTypes[petType] == true,
+            })
+        end
+    end
+    table.sort(items, function(a, b)
+        if a.isSelected ~= b.isSelected then return a.isSelected end
+        return a.name < b.name
+    end)
+    local i = 0
+    for _, item in ipairs(items) do
+        i = i + 1
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 20)
+        btn.BackgroundColor3 = item.isSelected and C.success or Color3.fromRGB(65, 65, 80)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.Text = string.format("%s %s", item.isSelected and "✓" or "○", item.name)
+        btn.TextColor3 = C.text
+        btn.TextSize = 8
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.LayoutOrder = i
+        btn.Parent = giftPetListFrame
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 6)
+        pad.Parent = btn
+        btn.MouseButton1Click:Connect(function()
+            if CONFIG.giftPetSelectedTypes[item.name] then
+                CONFIG.giftPetSelectedTypes[item.name] = nil
+            else
+                CONFIG.giftPetSelectedTypes[item.name] = true
+            end
+            saveConfig()
+            refreshGiftPetList()
+        end)
+    end
+end
+giftPetSearch:GetPropertyChangedSignal("Text"):Connect(refreshGiftPetList)
+
+local refreshGiftPetListBtn = Instance.new("TextButton")
+refreshGiftPetListBtn.Size = UDim2.new(1, -20, 0, 18)
+refreshGiftPetListBtn.Position = UDim2.new(0, 10, 0, 276)
+refreshGiftPetListBtn.BackgroundColor3 = C.accent
+refreshGiftPetListBtn.BorderSizePixel = 0
+refreshGiftPetListBtn.Font = Enum.Font.Gotham
+refreshGiftPetListBtn.Text = "🔄 Refresh Pet List"
+refreshGiftPetListBtn.TextColor3 = C.text
+refreshGiftPetListBtn.TextSize = 7
+refreshGiftPetListBtn.Parent = giftPetSelectSection
+Instance.new("UICorner", refreshGiftPetListBtn).CornerRadius = UDim.new(0, 3)
+refreshGiftPetListBtn.MouseButton1Click:Connect(refreshGiftPetList)
+
+-- Section: Inventory Info
+local invInfoSection = makeSection(invScroll, "📊 Inventory Info", 120, 4)
+
+local invInfoLabel = Instance.new("TextLabel")
+invInfoLabel.Size = UDim2.new(1, -20, 0, 90)
+invInfoLabel.Position = UDim2.new(0, 10, 0, 26)
+invInfoLabel.BackgroundTransparency = 1
+invInfoLabel.Font = Enum.Font.Gotham
+invInfoLabel.TextSize = 9
+invInfoLabel.TextColor3 = C.text
+invInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+invInfoLabel.TextYAlignment = Enum.TextYAlignment.Top
+invInfoLabel.Text = "Loading..."
+invInfoLabel.Parent = invInfoSection
+
+task.spawn(function()
+    while not guiDestroyed do
+        task.wait(3)
+        if invInfoLabel and invInfoLabel.Parent then
+            local current, max = getPetCountFromData()
+            local eggTotal = countEggsInBackpack()
+            invInfoLabel.Text = string.format(
+                "🐾 Pet: %d / %d\n🥚 Egg (selected): %d",
+                current, max, eggTotal
+            )
+        end
+    end
+end)
+
+-- ==================================================================
+-- INIT
+-- ==================================================================
+refreshEggList()
+refreshUnwantedList()
+refreshGiftPetList()
+switchTab("Main")
+
+print("✅ Auto Hatch GUI v16.0 loaded!")
+print("   • Auto Gift & Auto Accept hanya saat tunggu egg timer")
+print("   • Auto Hatch tunggu Auto Gift/Accept selesai + delay 10s")
+print("   • Auto Gift Pet: wajib pilih minimal 1 pet")
