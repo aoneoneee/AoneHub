@@ -682,32 +682,30 @@ local function hideGiftUI()
     local frame = giftGui:FindFirstChild("Frame")
     if not frame then return end
     
-    local hiddenCount = 0
+    local hideCount = 0
     
-    -- ⭐ Loop SEMUA child di Frame, hide yang namanya Gift_Notification
-    for _, obj in ipairs(frame:GetChildren()) do
-        if obj.Name == "Gift_Notification" and obj:IsA("ImageLabel") then
-            if obj.Visible then
+    -- ⭐ Cek via IsA GuiObject (punya Visible)
+    for _, child in ipairs(frame:GetChildren()) do
+        if child.Name == "Gift_Notification" then
+            if child:IsA("GuiObject") then  -- ⭐ cek punya Visible
+                child.Visible = false
+                hideCount = hideCount + 1
+            end
+        end
+    end
+    
+    -- Descendant
+    for _, obj in ipairs(frame:GetDescendants()) do
+        if obj.Name == "Gift_Notification" and obj.Parent ~= frame then
+            if obj:IsA("GuiObject") then
                 obj.Visible = false
-                hiddenCount = hiddenCount + 1
+                hideCount = hideCount + 1
             end
         end
     end
     
-    -- Fallback: cari di descendant kalau tidak ada di direct child
-    if hiddenCount == 0 then
-        for _, obj in ipairs(frame:GetDescendants()) do
-            if obj.Name == "Gift_Notification" and obj:IsA("ImageLabel") then
-                if obj.Visible then
-                    obj.Visible = false
-                    hiddenCount = hiddenCount + 1
-                end
-            end
-        end
-    end
-    
-    if hiddenCount > 0 then
-        print(string.format("[UI] Hidden %d Gift_Notification", hiddenCount))
+    if hideCount > 0 then
+        print(string.format("[UI] Hidden %d Gift_Notification", hideCount))
     end
 end
 
