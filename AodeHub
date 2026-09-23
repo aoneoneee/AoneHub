@@ -1,6 +1,9 @@
 -- ==================================================================
--- AUTO HATCH GUI v14.0 — FINAL
--- Tab baru: Inventory (Auto Accept Gift + Hide UI)
+-- AUTO HATCH GUI v15.0 — FINAL
+-- Features:
+--   • Auto Hatch
+--   • Auto Accept Gift + Hide UI
+--   • Auto Gift Pet (dengan filter + target dropdown)
 -- ==================================================================
 
 local Players = game:GetService("Players")
@@ -19,6 +22,7 @@ local FavoriteItemRE = RS.GameEvents:WaitForChild("Favorite_Item")
 local SellAllRE = RS.GameEvents:WaitForChild("SellAllPets_RE")
 local GiftPetEvent = RS.GameEvents:WaitForChild("GiftPet")
 local AcceptPetGift = RS.GameEvents:WaitForChild("AcceptPetGift")
+local PetGiftingService = RS.GameEvents:WaitForChild("PetGiftingService")
 
 -- Modules
 local DataService = require(RS.Modules.DataService)
@@ -81,11 +85,23 @@ local CONFIG = {
     webhookUrl = "",
     webhookUsername = "Auto Hatch Report",
     
-    -- ⭐ Auto Accept Gift
+    -- Auto Accept Gift
     giftEnabled = true,
     giftHideUI = true,
     giftDelayAfter = 2,
     giftDelayBetween = 3,
+    
+    -- Auto Gift Pet
+    giftPetEnabled = false,
+    giftPetTarget = nil,
+    giftPetMinWeight = 0,
+    giftPetMaxWeight = 5.0,
+    giftPetMinLevel = 0,
+    giftPetMaxLevel = 100,
+    giftPetDelayEquip = 1.0,
+    giftPetDelayUnfavorit = 0.5,
+    giftPetDelayBetween = 3.0,
+    giftPetSelectedTypes = {},
 }
 
 local SAVE_FILE = "AutoHatch_Config.json"
@@ -251,7 +267,6 @@ local function scanNewPetsAfterSell()
             else
                 local rarity = getPetRarityFromBaseWeight(petName, baseWeight)
                 addHuntStat(rarity, petName, baseWeight)
-                print(string.format("[Stats] ✅ %s | BW: %.2f | %s", petName, baseWeight, tostring(rarity)))
             end
         end
     end
@@ -491,6 +506,42 @@ local function getAllPetTypesFromRegistry()
     return types
 end
 
+-- Helper: cari pet tool by name
+local function findPetToolByName(petName)
+    local locations = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, backpack) end
+    if player.Character then table.insert(locations, player.Character) end
+    
+    for _, container in ipairs(locations) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                local name = parsePetName(tool.Name)
+                if name == petName then return tool end
+            end
+        end
+    end
+    return nil
+end
+
+-- Helper: get player names
+local function getPlayerNames()
+    local names = {}
+    for _, p in ipairs(game.Players:GetPlayers()) do
+        if p ~= player then table.insert(names, p.Name) end
+    end
+    table.sort(names)
+    return names
+end
+
+-- Helper: find player by name
+local function findPlayerByName(name)
+    for _, p in ipairs(game.Players:GetPlayers()) do
+        if p.Name == name then return p end
+    end
+    return nil
+end
+
 -- ==================================================================
 -- HELPER: DATA
 -- ==================================================================
@@ -662,7 +713,7 @@ local function sellAll()
 end
 
 -- ==================================================================
--- AUTO ACCEPT GIFT (FUNGSI)
+-- AUTO ACCEPT GIFT
 -- ==================================================================
 local GIFT_STATS = {
     totalAccepted = 0,
@@ -675,37 +726,17 @@ local isProcessingGiftQueue = false
 
 local function hideGiftUI()
     if not CONFIG.giftHideUI then return end
-    
     local giftGui = playerGui:FindFirstChild("Gift_Notification")
     if not giftGui then return end
-    
     local frame = giftGui:FindFirstChild("Frame")
     if not frame then return end
     
     local hideCount = 0
-    
-    -- ⭐ Cek via IsA GuiObject (punya Visible)
-    for _, child in ipairs(frame:GetChildren()) do
-        if child.Name == "Gift_Notification" then
-            if child:IsA("GuiObject") then  -- ⭐ cek punya Visible
-                child.Visible = false
-                hideCount = hideCount + 1
-            end
-        end
-    end
-    
-    -- Descendant
     for _, obj in ipairs(frame:GetDescendants()) do
-        if obj.Name == "Gift_Notification" and obj.Parent ~= frame then
-            if obj:IsA("GuiObject") then
-                obj.Visible = false
-                hideCount = hideCount + 1
-            end
+        if obj.Name == "Gift_Notification" and obj:IsA("GuiObject") then
+            obj.Visible = false
+            hideCount = hideCount + 1
         end
-    end
-    
-    if hideCount > 0 then
-        print(string.format("[UI] Hidden %d Gift_Notification", hideCount))
     end
 end
 
@@ -722,17 +753,19 @@ local function processGiftQueue()
             end)
             if ok then
                 GIFT_STATS.totalAccepted = GIFT_STATS.totalAccepted + 1
-                print(string.format("[Gift] ✅ Accepted (total: %d)", GIFT_STATS.totalAccepted))
             else
                 GIFT_STATS.totalFailed = GIFT_STATS.totalFailed + 1
-                print(string.format("[Gift] ❌ Failed (total: %d)", GIFT_STATS.totalFailed))
             end
             task.wait(0.5)
+            hideGiftUI()
+            task.wait(0.3)
             hideGiftUI()
             if #giftQueue > 0 then
                 task.wait(CONFIG.giftDelayBetween)
             end
         end
+        task.wait(0.5)
+        hideGiftUI()
         isProcessingGiftQueue = false
     end)
 end
@@ -740,23 +773,116 @@ end
 GiftPetEvent.OnClientEvent:Connect(function(giftId, petName, weightInfo)
     if not CONFIG.giftEnabled then return end
     if not giftId or typeof(giftId) ~= "string" then return end
-    
-    print(string.format("\n[Gift] 📥 Received: %s | %s", giftId, tostring(petName)))
-    
-    table.insert(giftQueue, {
-        id = giftId,
-        pet = petName,
-        weight = weightInfo,
-        time = os.time(),
-    })
-    table.insert(GIFT_STATS.history, {
-        id = giftId,
-        pet = petName,
-        weight = weightInfo,
-        time = os.time(),
-    })
+    table.insert(giftQueue, { id = giftId, pet = petName, weight = weightInfo, time = os.time() })
+    table.insert(GIFT_STATS.history, { id = giftId, pet = petName, weight = weightInfo, time = os.time() })
     processGiftQueue()
 end)
+
+-- ==================================================================
+-- AUTO GIFT PET
+-- ==================================================================
+local function autoGiftOnePet(petName, targetUsername)
+    local target = findPlayerByName(targetUsername)
+    if not target then
+        warn("[Gift Pet] Target tidak ditemukan:", targetUsername)
+        return false
+    end
+    
+    local petTool = findPetToolByName(petName)
+    if not petTool then
+        warn("[Gift Pet] Pet tidak ditemukan:", petName)
+        return false
+    end
+    
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    
+    -- Equip
+    pcall(function() humanoid:EquipTool(petTool) end)
+    task.wait(CONFIG.giftPetDelayEquip)
+    
+    -- Unfavorit kalau perlu
+    if petTool:GetAttribute("d") == true then
+        pcall(function() FavoriteItemRE:FireServer(petTool) end)
+        task.wait(CONFIG.giftPetDelayUnfavorit)
+    end
+    
+    -- Fire gift
+    print(string.format("[Gift Pet] Kirim %s → %s", petName, targetUsername))
+    local ok = pcall(function()
+        PetGiftingService:FireServer("GivePet", target)
+    end)
+    
+    task.wait(CONFIG.giftPetDelayBetween)
+    return ok
+end
+
+local function autoGiftAllFiltered()
+    if not CONFIG.giftPetEnabled then
+        print("[Gift Pet] Auto Gift OFF")
+        return
+    end
+    
+    if not CONFIG.giftPetTarget then
+        print("[Gift Pet] Target belum dipilih!")
+        return
+    end
+    
+    local target = findPlayerByName(CONFIG.giftPetTarget)
+    if not target then
+        print("[Gift Pet] Target tidak ditemukan:", CONFIG.giftPetTarget)
+        return
+    end
+    
+    print(string.format("\n[Gift Pet] === AUTO GIFT → %s ===", CONFIG.giftPetTarget))
+    
+    local pets = getBackpackPets()
+    local toGift = {}
+    
+    for _, pet in ipairs(pets) do
+        local skip = false
+        if pet.weight < CONFIG.giftPetMinWeight then skip = true end
+        if pet.weight > CONFIG.giftPetMaxWeight then skip = true end
+        if pet.level < CONFIG.giftPetMinLevel then skip = true end
+        if pet.level > CONFIG.giftPetMaxLevel then skip = true end
+        
+        if not skip and next(CONFIG.giftPetSelectedTypes) ~= nil then
+            local baseName = splitPetName(pet.name)
+            if not CONFIG.giftPetSelectedTypes[baseName] and not CONFIG.giftPetSelectedTypes[pet.name] then
+                skip = true
+            end
+        end
+        
+        if not skip then table.insert(toGift, pet) end
+    end
+    
+    print(string.format("[Gift Pet] %d pet lolos filter", #toGift))
+    
+    if #toGift == 0 then
+        print("[Gift Pet] Tidak ada pet untuk digift")
+        return
+    end
+    
+    local successCount = 0
+    local failCount = 0
+    
+    for i, pet in ipairs(toGift) do
+        if not CONFIG.giftPetEnabled then
+            print("[Gift Pet] Stopped")
+            break
+        end
+        
+        print(string.format("\n[Gift Pet] [%d/%d] %s (%.2f kg, Lv.%d)", 
+            i, #toGift, pet.name, pet.weight, pet.level))
+        
+        local ok = autoGiftOnePet(pet.name, CONFIG.giftPetTarget)
+        if ok then successCount = successCount + 1
+        else failCount = failCount + 1 end
+    end
+    
+    print(string.format("\n[Gift Pet] Selesai: %d berhasil, %d gagal", successCount, failCount))
+end
 
 -- ==================================================================
 -- WEBHOOK
@@ -882,7 +1008,7 @@ local function buildWebhookEmbed()
         title = "🥚 Auto Hatch Report",
         description = table.concat(desc, "\n"),
         color = 3447003,
-        footer = { text = "Auto Hatch v14.0 • " .. os.date("%Y-%m-%d %H:%M:%S") }
+        footer = { text = "Auto Hatch v15.0 • " .. os.date("%Y-%m-%d %H:%M:%S") }
     }
 end
 
@@ -1044,7 +1170,6 @@ local function runFilterAndSell()
     end
     updateStatus(string.format("⭐ Preset:%d Fav:%d Skip:%d", presetProtectCount, favCount, skipCount))
     task.wait(1)
-    updateStatus("🔍 Final check...")
     for _, pet in ipairs(getBackpackPets()) do
         local shouldBeFav = isPetInPreset(pet.name) or not isUnwantedPet(pet)
         if shouldBeFav and not pet.isFavorited then
@@ -1134,7 +1259,7 @@ Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 10)
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
 titleLabel.Position = UDim2.new(0, 12, 0, 0)
-titleLabel.Text = "🥚 Auto Hatch v14.0"
+titleLabel.Text = "🥚 Auto Hatch v15.0"
 titleLabel.TextColor3 = C.text
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 11
@@ -1153,7 +1278,6 @@ closeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
 closeBtn.BorderSizePixel = 0
 closeBtn.Parent = titleBar
 Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
-
 closeBtn.MouseButton1Click:Connect(function() screenGui:Destroy() end)
 
 local function makeDraggable(handle, target)
@@ -1185,7 +1309,6 @@ local function makeDraggable(handle, target)
         end
     end)
 end
-
 makeDraggable(titleBar, mainFrame)
 
 local sidebar = Instance.new("Frame")
@@ -1219,7 +1342,7 @@ local tabs = {
     {name="Egg", label="📦 Egg"},
     {name="Delay", label="⏱️ Delay"},
     {name="Unwanted", label="🎯 Unwanted"},
-    {name="Inventory", label="🎒 Inventory"},   -- ⭐ TAB BARU
+    {name="Inventory", label="🎒 Inventory"},
 }
 
 local tabBtns = {}
@@ -1331,7 +1454,6 @@ local function makeInputRow(parent, yPos, label, configKey, isNumber, min, max)
     input.TextSize = 8
     input.Parent = parent
     Instance.new("UICorner", input).CornerRadius = UDim.new(0, 3)
-    
     input.FocusLost:Connect(function()
         if isNumber then
             local n = tonumber(input.Text)
@@ -1366,9 +1488,7 @@ local function makeToggle(parent, yPos, onText, offText, configKey)
     return btn
 end
 
--- ==================================================================
 -- TAB: MAIN
--- ==================================================================
 local mainTab = tabFrames["Main"]
 local mainScroll = Instance.new("ScrollingFrame")
 mainScroll.Size = UDim2.new(1, -10, 1, -10)
@@ -1460,11 +1580,9 @@ webhookInput.TextColor3 = C.text
 webhookInput.TextSize = 8
 webhookInput.ClearTextOnFocus = false
 webhookInput.TextTruncate = Enum.TextTruncate.AtEnd
-webhookInput.TextXAlignment = Enum.TextXAlignment.Left
 webhookInput.ClipsDescendants = true
 webhookInput.Parent = webhookSection
 Instance.new("UICorner", webhookInput).CornerRadius = UDim.new(0, 3)
-
 local whPad = Instance.new("UIPadding")
 whPad.PaddingLeft = UDim.new(0, 6)
 whPad.PaddingRight = UDim.new(0, 6)
@@ -1494,7 +1612,7 @@ testWebhookBtn.MouseButton1Click:Connect(function()
     end
     sendWebhookEmbed({
         title = "🧪 Test Webhook",
-        description = "Auto Hatch v14.0\nBerhasil terhubung!",
+        description = "Auto Hatch v15.0\nBerhasil terhubung!",
         color = 3066993,
     })
     statusLabel.Text = "✅ Test webhook terkirim"
@@ -1556,9 +1674,7 @@ startBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ==================================================================
 -- TAB: EGG
--- ==================================================================
 local eggTab = tabFrames["Egg"]
 local eggScrollOuter = Instance.new("ScrollingFrame")
 eggScrollOuter.Size = UDim2.new(1, -10, 1, -10)
@@ -1662,12 +1778,9 @@ local function refreshEggList()
         lbl.Parent = eggScroll
     end
 end
-
 eggRefreshBtn.MouseButton1Click:Connect(refreshEggList)
 
--- ==================================================================
 -- TAB: DELAY
--- ==================================================================
 local delayTab = tabFrames["Delay"]
 local delayScroll = Instance.new("ScrollingFrame")
 delayScroll.Size = UDim2.new(1, -10, 1, -10)
@@ -1703,9 +1816,7 @@ delayInfo.TextXAlignment = Enum.TextXAlignment.Left
 delayInfo.BackgroundTransparency = 1
 delayInfo.Parent = delaySection
 
--- ==================================================================
 -- TAB: UNWANTED
--- ==================================================================
 local unwantedTab = tabFrames["Unwanted"]
 local unwantedScrollOuter = Instance.new("ScrollingFrame")
 unwantedScrollOuter.Size = UDim2.new(1, -10, 1, -10)
@@ -1829,11 +1940,10 @@ local function refreshUnwantedList()
     end
     countLabel.Text = string.format("Total: %d pet | Terpilih: %d", i, selectedCount)
 end
-
 searchBox:GetPropertyChangedSignal("Text"):Connect(refreshUnwantedList)
 
 -- ==================================================================
--- TAB: INVENTORY (BARU)
+-- TAB: INVENTORY
 -- ==================================================================
 local invTab = tabFrames["Inventory"]
 local invScroll = Instance.new("ScrollingFrame")
@@ -1855,7 +1965,6 @@ invLayout.Parent = invScroll
 -- Section: Auto Accept Gift
 local giftSection = makeSection(invScroll, "🎁 Auto Accept Pet Gift", 210, 1)
 
--- Enable toggle
 local giftEnableBtn = Instance.new("TextButton")
 giftEnableBtn.Size = UDim2.new(1, -20, 0, 22)
 giftEnableBtn.Position = UDim2.new(0, 10, 0, 26)
@@ -1867,7 +1976,6 @@ giftEnableBtn.TextColor3 = C.text
 giftEnableBtn.TextSize = 9
 giftEnableBtn.Parent = giftSection
 Instance.new("UICorner", giftEnableBtn).CornerRadius = UDim.new(0, 4)
-
 giftEnableBtn.MouseButton1Click:Connect(function()
     CONFIG.giftEnabled = not CONFIG.giftEnabled
     giftEnableBtn.Text = CONFIG.giftEnabled and "🎁 Auto Accept: ON" or "🎁 Auto Accept: OFF"
@@ -1875,7 +1983,6 @@ giftEnableBtn.MouseButton1Click:Connect(function()
     saveConfig()
 end)
 
--- Hide UI toggle
 local hideUIBtn = Instance.new("TextButton")
 hideUIBtn.Size = UDim2.new(1, -20, 0, 22)
 hideUIBtn.Position = UDim2.new(0, 10, 0, 50)
@@ -1887,7 +1994,6 @@ hideUIBtn.TextColor3 = C.text
 hideUIBtn.TextSize = 9
 hideUIBtn.Parent = giftSection
 Instance.new("UICorner", hideUIBtn).CornerRadius = UDim.new(0, 4)
-
 hideUIBtn.MouseButton1Click:Connect(function()
     CONFIG.giftHideUI = not CONFIG.giftHideUI
     hideUIBtn.Text = CONFIG.giftHideUI and "👁️ Hide UI: ON" or "👁️ Hide UI: OFF"
@@ -1895,73 +2001,9 @@ hideUIBtn.MouseButton1Click:Connect(function()
     saveConfig()
 end)
 
--- Delay After
-local giftDelayAfterLabel = Instance.new("TextLabel")
-giftDelayAfterLabel.Size = UDim2.new(0.55, -15, 0, 16)
-giftDelayAfterLabel.Position = UDim2.new(0, 10, 0, 76)
-giftDelayAfterLabel.Text = "Delay setelah gift:"
-giftDelayAfterLabel.TextColor3 = C.textDim
-giftDelayAfterLabel.Font = Enum.Font.Gotham
-giftDelayAfterLabel.TextSize = 8
-giftDelayAfterLabel.TextXAlignment = Enum.TextXAlignment.Left
-giftDelayAfterLabel.BackgroundTransparency = 1
-giftDelayAfterLabel.Parent = giftSection
+makeInputRow(giftSection, 76, "Delay setelah gift:", "giftDelayAfter", true, 0, 60)
+makeInputRow(giftSection, 100, "Delay antar gift:", "giftDelayBetween", true, 0, 60)
 
-local giftDelayAfterInput = Instance.new("TextBox")
-giftDelayAfterInput.Size = UDim2.new(0.45, -15, 0, 20)
-giftDelayAfterInput.Position = UDim2.new(0.55, 5, 0, 76)
-giftDelayAfterInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-giftDelayAfterInput.BorderSizePixel = 0
-giftDelayAfterInput.Font = Enum.Font.Gotham
-giftDelayAfterInput.Text = tostring(CONFIG.giftDelayAfter)
-giftDelayAfterInput.TextColor3 = C.text
-giftDelayAfterInput.TextSize = 8
-giftDelayAfterInput.Parent = giftSection
-Instance.new("UICorner", giftDelayAfterInput).CornerRadius = UDim.new(0, 3)
-
-giftDelayAfterInput.FocusLost:Connect(function()
-    local n = tonumber(giftDelayAfterInput.Text)
-    if n and n >= 0 and n <= 60 then
-        CONFIG.giftDelayAfter = n
-        saveConfig()
-    end
-    giftDelayAfterInput.Text = tostring(CONFIG.giftDelayAfter)
-end)
-
--- Delay Between
-local giftDelayBetweenLabel = Instance.new("TextLabel")
-giftDelayBetweenLabel.Size = UDim2.new(0.55, -15, 0, 16)
-giftDelayBetweenLabel.Position = UDim2.new(0, 10, 0, 100)
-giftDelayBetweenLabel.Text = "Delay antar gift:"
-giftDelayBetweenLabel.TextColor3 = C.textDim
-giftDelayBetweenLabel.Font = Enum.Font.Gotham
-giftDelayBetweenLabel.TextSize = 8
-giftDelayBetweenLabel.TextXAlignment = Enum.TextXAlignment.Left
-giftDelayBetweenLabel.BackgroundTransparency = 1
-giftDelayBetweenLabel.Parent = giftSection
-
-local giftDelayBetweenInput = Instance.new("TextBox")
-giftDelayBetweenInput.Size = UDim2.new(0.45, -15, 0, 20)
-giftDelayBetweenInput.Position = UDim2.new(0.55, 5, 0, 100)
-giftDelayBetweenInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-giftDelayBetweenInput.BorderSizePixel = 0
-giftDelayBetweenInput.Font = Enum.Font.Gotham
-giftDelayBetweenInput.Text = tostring(CONFIG.giftDelayBetween)
-giftDelayBetweenInput.TextColor3 = C.text
-giftDelayBetweenInput.TextSize = 8
-giftDelayBetweenInput.Parent = giftSection
-Instance.new("UICorner", giftDelayBetweenInput).CornerRadius = UDim.new(0, 3)
-
-giftDelayBetweenInput.FocusLost:Connect(function()
-    local n = tonumber(giftDelayBetweenInput.Text)
-    if n and n >= 0 and n <= 60 then
-        CONFIG.giftDelayBetween = n
-        saveConfig()
-    end
-    giftDelayBetweenInput.Text = tostring(CONFIG.giftDelayBetween)
-end)
-
--- Stats
 local giftStatsLabel = Instance.new("TextLabel")
 giftStatsLabel.Size = UDim2.new(1, -20, 0, 40)
 giftStatsLabel.Position = UDim2.new(0, 10, 0, 126)
@@ -1974,22 +2016,18 @@ giftStatsLabel.TextYAlignment = Enum.TextYAlignment.Top
 giftStatsLabel.Text = "Stats: 0 accepted, 0 failed"
 giftStatsLabel.Parent = giftSection
 
--- Update stats setiap 2 detik
 task.spawn(function()
     while not guiDestroyed do
         task.wait(2)
         if giftStatsLabel and giftStatsLabel.Parent then
             giftStatsLabel.Text = string.format(
                 "Stats:\n✅ Accepted: %d\n❌ Failed: %d\n📥 Queue: %d",
-                GIFT_STATS.totalAccepted,
-                GIFT_STATS.totalFailed,
-                #giftQueue
+                GIFT_STATS.totalAccepted, GIFT_STATS.totalFailed, #giftQueue
             )
         end
     end
 end)
 
--- Info
 local giftInfo = Instance.new("TextLabel")
 giftInfo.Size = UDim2.new(1, -20, 0, 40)
 giftInfo.Position = UDim2.new(0, 10, 0, 168)
@@ -2003,8 +2041,262 @@ giftInfo.TextWrapped = true
 giftInfo.Text = "💡 Auto accept gift real-time.\nHide UI untuk sembunyikan notifikasi gift."
 giftInfo.Parent = giftSection
 
+-- Section: Auto Gift Pet
+local giftPetSection = makeSection(invScroll, "🎁 Auto Gift Pet", 380, 2)
+
+local giftPetEnableBtn = Instance.new("TextButton")
+giftPetEnableBtn.Size = UDim2.new(1, -20, 0, 22)
+giftPetEnableBtn.Position = UDim2.new(0, 10, 0, 26)
+giftPetEnableBtn.BackgroundColor3 = CONFIG.giftPetEnabled and C.success or Color3.fromRGB(70, 70, 85)
+giftPetEnableBtn.BorderSizePixel = 0
+giftPetEnableBtn.Font = Enum.Font.Gotham
+giftPetEnableBtn.Text = CONFIG.giftPetEnabled and "🎁 Auto Gift: ON" or "🎁 Auto Gift: OFF"
+giftPetEnableBtn.TextColor3 = C.text
+giftPetEnableBtn.TextSize = 9
+giftPetEnableBtn.Parent = giftPetSection
+Instance.new("UICorner", giftPetEnableBtn).CornerRadius = UDim.new(0, 4)
+giftPetEnableBtn.MouseButton1Click:Connect(function()
+    CONFIG.giftPetEnabled = not CONFIG.giftPetEnabled
+    giftPetEnableBtn.Text = CONFIG.giftPetEnabled and "🎁 Auto Gift: ON" or "🎁 Auto Gift: OFF"
+    giftPetEnableBtn.BackgroundColor3 = CONFIG.giftPetEnabled and C.success or Color3.fromRGB(70, 70, 85)
+    saveConfig()
+end)
+
+local targetLabel = Instance.new("TextLabel")
+targetLabel.Size = UDim2.new(1, -20, 0, 14)
+targetLabel.Position = UDim2.new(0, 10, 0, 52)
+targetLabel.Text = "Target Player:"
+targetLabel.TextColor3 = C.textDim
+targetLabel.Font = Enum.Font.Gotham
+targetLabel.TextSize = 8
+targetLabel.TextXAlignment = Enum.TextXAlignment.Left
+targetLabel.BackgroundTransparency = 1
+targetLabel.Parent = giftPetSection
+
+local targetBtn = Instance.new("TextButton")
+targetBtn.Size = UDim2.new(1, -20, 0, 22)
+targetBtn.Position = UDim2.new(0, 10, 0, 68)
+targetBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+targetBtn.BorderSizePixel = 0
+targetBtn.Font = Enum.Font.Gotham
+targetBtn.Text = CONFIG.giftPetTarget and ("👤 " .. CONFIG.giftPetTarget) or "👤 Pilih player..."
+targetBtn.TextColor3 = C.text
+targetBtn.TextSize = 8
+targetBtn.TextXAlignment = Enum.TextXAlignment.Left
+targetBtn.Parent = giftPetSection
+Instance.new("UICorner", targetBtn).CornerRadius = UDim.new(0, 4)
+local targetPad = Instance.new("UIPadding")
+targetPad.PaddingLeft = UDim.new(0, 8)
+targetPad.Parent = targetBtn
+
+targetBtn.MouseButton1Click:Connect(function()
+    local names = getPlayerNames()
+    if #names == 0 then
+        targetBtn.Text = "❌ Tidak ada player lain"
+        task.wait(1)
+        targetBtn.Text = CONFIG.giftPetTarget and ("👤 " .. CONFIG.giftPetTarget) or "👤 Pilih player..."
+        return
+    end
+    local currentIdx = 1
+    if CONFIG.giftPetTarget then
+        for i, n in ipairs(names) do
+            if n == CONFIG.giftPetTarget then currentIdx = i + 1 break end
+        end
+    end
+    if currentIdx > #names then currentIdx = 1 end
+    CONFIG.giftPetTarget = names[currentIdx]
+    targetBtn.Text = "👤 " .. names[currentIdx]
+    saveConfig()
+end)
+
+local refreshTargetBtn = Instance.new("TextButton")
+refreshTargetBtn.Size = UDim2.new(1, -20, 0, 18)
+refreshTargetBtn.Position = UDim2.new(0, 10, 0, 92)
+refreshTargetBtn.BackgroundColor3 = C.accent
+refreshTargetBtn.BorderSizePixel = 0
+refreshTargetBtn.Font = Enum.Font.Gotham
+refreshTargetBtn.Text = "🔄 Refresh Player List"
+refreshTargetBtn.TextColor3 = C.text
+refreshTargetBtn.TextSize = 7
+refreshTargetBtn.Parent = giftPetSection
+Instance.new("UICorner", refreshTargetBtn).CornerRadius = UDim.new(0, 3)
+refreshTargetBtn.MouseButton1Click:Connect(function()
+    local names = getPlayerNames()
+    print("[Gift Pet] Players:", #names)
+    for _, n in ipairs(names) do print("  -", n) end
+    if #names > 0 and not CONFIG.giftPetTarget then
+        CONFIG.giftPetTarget = names[1]
+        targetBtn.Text = "👤 " .. names[1]
+        saveConfig()
+    end
+end)
+
+makeInputRow(giftPetSection, 116, "Min Weight (KG):", "giftPetMinWeight", true, 0, 1000)
+makeInputRow(giftPetSection, 140, "Max Weight (KG):", "giftPetMaxWeight", true, 0, 1000)
+makeInputRow(giftPetSection, 164, "Min Level:", "giftPetMinLevel", true, 0, 10000)
+makeInputRow(giftPetSection, 188, "Max Level:", "giftPetMaxLevel", true, 0, 10000)
+makeInputRow(giftPetSection, 212, "Delay Equip:", "giftPetDelayEquip", true, 0, 60)
+makeInputRow(giftPetSection, 236, "Delay Antar Gift:", "giftPetDelayBetween", true, 0, 60)
+
+local startGiftBtn = Instance.new("TextButton")
+startGiftBtn.Size = UDim2.new(1, -20, 0, 28)
+startGiftBtn.Position = UDim2.new(0, 10, 0, 262)
+startGiftBtn.BackgroundColor3 = C.success
+startGiftBtn.BorderSizePixel = 0
+startGiftBtn.Font = Enum.Font.GothamBold
+startGiftBtn.Text = "🎁 MULAI AUTO GIFT"
+startGiftBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+startGiftBtn.TextSize = 10
+startGiftBtn.Parent = giftPetSection
+Instance.new("UICorner", startGiftBtn).CornerRadius = UDim.new(0, 5)
+
+startGiftBtn.MouseButton1Click:Connect(function()
+    if not CONFIG.giftPetTarget then
+        statusLabel.Text = "⚠️ Pilih target player!"
+        return
+    end
+    if next(CONFIG.giftPetSelectedTypes) == nil then
+        statusLabel.Text = "⚠️ Pilih minimal 1 pet untuk di-gift!"
+        return
+    end
+    if not CONFIG.giftPetEnabled then
+        statusLabel.Text = "⚠️ Aktifkan Auto Gift dulu!"
+        return
+    end
+    
+    task.spawn(function()
+        autoGiftAllFiltered()
+    end)
+end)
+
+local giftFilterInfo = Instance.new("TextLabel")
+giftFilterInfo.Size = UDim2.new(1, -20, 0, 40)
+giftFilterInfo.Position = UDim2.new(0, 10, 0, 296)
+giftFilterInfo.BackgroundTransparency = 1
+giftFilterInfo.Font = Enum.Font.Gotham
+giftFilterInfo.TextSize = 7
+giftFilterInfo.TextColor3 = C.textDim
+giftFilterInfo.TextXAlignment = Enum.TextXAlignment.Left
+giftFilterInfo.TextYAlignment = Enum.TextYAlignment.Top
+giftFilterInfo.TextWrapped = true
+giftFilterInfo.Text = "💡 Harus pilih minimal 1 pet.\nPet favorit di-unfavorit otomatis."
+giftFilterInfo.Parent = giftPetSection
+
+-- Section: Pilih Pet untuk Gift
+local giftPetSelectSection = makeSection(invScroll, "📋 Pilih Pet untuk Gift", 300, 3)
+
+local giftPetSelectInfo = Instance.new("TextLabel")
+giftPetSelectInfo.Size = UDim2.new(1, -20, 0, 14)
+giftPetSelectInfo.Position = UDim2.new(0, 10, 0, 26)
+giftPetSelectInfo.BackgroundTransparency = 1
+giftPetSelectInfo.Font = Enum.Font.Gotham
+giftPetSelectInfo.TextSize = 7
+giftPetSelectInfo.TextColor3 = C.textDim
+giftPetSelectInfo.TextXAlignment = Enum.TextXAlignment.Left
+giftPetSelectInfo.Text = "Pilih pet yang mau di-gift"
+giftPetSelectInfo.Parent = giftPetSelectSection
+
+local giftPetSearch = Instance.new("TextBox")
+giftPetSearch.Size = UDim2.new(1, -20, 0, 22)
+giftPetSearch.Position = UDim2.new(0, 10, 0, 44)
+giftPetSearch.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+giftPetSearch.BorderSizePixel = 0
+giftPetSearch.Font = Enum.Font.Gotham
+giftPetSearch.PlaceholderText = "🔍 Cari pet..."
+giftPetSearch.Text = ""
+giftPetSearch.TextColor3 = C.text
+giftPetSearch.TextSize = 9
+giftPetSearch.Parent = giftPetSelectSection
+Instance.new("UICorner", giftPetSearch).CornerRadius = UDim.new(0, 4)
+
+local giftPetListFrame = Instance.new("ScrollingFrame")
+giftPetListFrame.Size = UDim2.new(1, -20, 0, 200)
+giftPetListFrame.Position = UDim2.new(0, 10, 0, 74)
+giftPetListFrame.BackgroundTransparency = 1
+giftPetListFrame.BorderSizePixel = 0
+giftPetListFrame.ScrollBarThickness = 3
+giftPetListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+giftPetListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+giftPetListFrame.Parent = giftPetSelectSection
+
+local giftPetListLayout = Instance.new("UIListLayout")
+giftPetListLayout.Padding = UDim.new(0, 2)
+giftPetListLayout.Parent = giftPetListFrame
+
+local function refreshGiftPetList()
+    for _, c in ipairs(giftPetListFrame:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    
+    local search = giftPetSearch.Text:lower()
+    local petTypes = getAllPetTypesFromRegistry()
+    local items = {}
+    
+    for _, petType in ipairs(petTypes) do
+        if search == "" or petType:lower():find(search) then
+            table.insert(items, {
+                name = petType,
+                isSelected = CONFIG.giftPetSelectedTypes[petType] == true,
+            })
+        end
+    end
+    
+    table.sort(items, function(a, b)
+        if a.isSelected ~= b.isSelected then return a.isSelected end
+        return a.name < b.name
+    end)
+    
+    local i = 0
+    local selectedCount = 0
+    for _, item in ipairs(items) do
+        i = i + 1
+        if item.isSelected then selectedCount = selectedCount + 1 end
+        
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 20)
+        btn.BackgroundColor3 = item.isSelected and C.success or Color3.fromRGB(65, 65, 80)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.Text = string.format("%s %s", item.isSelected and "✓" or "○", item.name)
+        btn.TextColor3 = C.text
+        btn.TextSize = 8
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.LayoutOrder = i
+        btn.Parent = giftPetListFrame
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 6)
+        pad.Parent = btn
+        
+        btn.MouseButton1Click:Connect(function()
+            if CONFIG.giftPetSelectedTypes[item.name] then
+                CONFIG.giftPetSelectedTypes[item.name] = nil
+            else
+                CONFIG.giftPetSelectedTypes[item.name] = true
+            end
+            saveConfig()
+            refreshGiftPetList()
+        end)
+    end
+end
+
+giftPetSearch:GetPropertyChangedSignal("Text"):Connect(refreshGiftPetList)
+
+local refreshGiftPetListBtn = Instance.new("TextButton")
+refreshGiftPetListBtn.Size = UDim2.new(1, -20, 0, 18)
+refreshGiftPetListBtn.Position = UDim2.new(0, 10, 0, 276)
+refreshGiftPetListBtn.BackgroundColor3 = C.accent
+refreshGiftPetListBtn.BorderSizePixel = 0
+refreshGiftPetListBtn.Font = Enum.Font.Gotham
+refreshGiftPetListBtn.Text = "🔄 Refresh Pet List"
+refreshGiftPetListBtn.TextColor3 = C.text
+refreshGiftPetListBtn.TextSize = 7
+refreshGiftPetListBtn.Parent = giftPetSelectSection
+Instance.new("UICorner", refreshGiftPetListBtn).CornerRadius = UDim.new(0, 3)
+refreshGiftPetListBtn.MouseButton1Click:Connect(refreshGiftPetList)
+
 -- Section: Inventory Info
-local invInfoSection = makeSection(invScroll, "📊 Inventory Info", 120, 2)
+local invInfoSection = makeSection(invScroll, "📊 Inventory Info", 120, 4)
 
 local invInfoLabel = Instance.new("TextLabel")
 invInfoLabel.Size = UDim2.new(1, -20, 0, 90)
@@ -2018,7 +2310,6 @@ invInfoLabel.TextYAlignment = Enum.TextYAlignment.Top
 invInfoLabel.Text = "Loading..."
 invInfoLabel.Parent = invInfoSection
 
--- Update info setiap 3 detik
 task.spawn(function()
     while not guiDestroyed do
         task.wait(3)
@@ -2026,8 +2317,8 @@ task.spawn(function()
             local current, max = getPetCountFromData()
             local eggTotal = countEggsInBackpack()
             invInfoLabel.Text = string.format(
-                "🐾 Pet: %d / %d\n🥚 Egg (selected): %d\n📦 Total Egg: %d",
-                current, max, eggTotal, eggTotal
+                "🐾 Pet: %d / %d\n🥚 Egg (selected): %d",
+                current, max, eggTotal
             )
         end
     end
@@ -2038,8 +2329,9 @@ end)
 -- ==================================================================
 refreshEggList()
 refreshUnwantedList()
+refreshGiftPetList()
 switchTab("Main")
 
-print("✅ Auto Hatch GUI v14.0 loaded!")
-print("   • Tab Inventory: Auto Accept Gift + Hide UI")
-print("   • Tab Inventory: Info pet/egg count")
+print("✅ Auto Hatch GUI v15.0 loaded!")
+print("   • Tab Inventory: Auto Accept Gift")
+print("   • Tab Inventory: Auto Gift Pet (minimal 1 pet harus dipilih)")
