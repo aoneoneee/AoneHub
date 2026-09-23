@@ -744,8 +744,13 @@ end
 
 local function processGiftQueue()
     if isProcessingGiftQueue then return end
+    if #giftQueue == 0 then return end  -- ⭐ skip kalau kosong
+    
     isProcessingGiftQueue = true
     isAutoAcceptActive = true
+    
+    -- ⭐ SAVE previous state
+    local wasWaitingEggTimer = isWaitingEggTimer
     
     task.spawn(function()
         while #giftQueue > 0 do
@@ -782,16 +787,32 @@ end
 
 GiftPetEvent.OnClientEvent:Connect(function(giftId, petName, weightInfo)
     if not CONFIG.giftEnabled then return end
+    if not giftId or typeof(giftId) ~= "string" then return end
     
-    -- ⭐ HANYA process kalau tunggu egg timer ATAU auto hatch OFF
+    -- ⭐ SELALU tambahkan ke queue
+    table.insert(giftQueue, { 
+        id = giftId, 
+        pet = petName, 
+        weight = weightInfo, 
+        time = os.time() 
+    })
+    table.insert(GIFT_STATS.history, { 
+        id = giftId, 
+        pet = petName, 
+        weight = weightInfo, 
+        time = os.time() 
+    })
+    
+    print(string.format("[Gift] 📥 Queued: %s | %s (queue: %d)", 
+        giftId, tostring(petName), #giftQueue))
+    
+    -- ⭐ HANYA process kalau SEDANG TUNGGU EGG TIMER
     if isRunning and not isWaitingEggTimer then
-        print("[Gift] Skip — bukan waktu tunggu egg timer")
+        print("[Gift] Skip process — tunggu fase tunggu egg timer")
         return
     end
     
-    if not giftId or typeof(giftId) ~= "string" then return end
-    table.insert(giftQueue, { id = giftId, pet = petName, weight = weightInfo, time = os.time() })
-    table.insert(GIFT_STATS.history, { id = giftId, pet = petName, weight = weightInfo, time = os.time() })
+    -- Process queue (hanya kalau tunggu timer atau auto hatch OFF)
     processGiftQueue()
 end)
 
@@ -1085,14 +1106,19 @@ local function runOneCycle(cycleNum, totalCycles)
         updateStatus(string.format("[%d/%d] ⚡ Tim Speed...", cycleNum, totalCycles))
         equipTeamByPreset(CONFIG.speedPreset, CONFIG.speedLoadout)
         task.wait(CONFIG.delayAfterSpeed)
-        
+    
         updateStatus(string.format("[%d/%d] ⏳ Menunggu ready...", cycleNum, totalCycles))
-        
+    
         -- ⭐ SET STATE: Tunggu egg timer
         isWaitingEggTimer = true
-        
-        -- ⭐ Auto-start auto gift saat tunggu timer
-        -- ⭐ Auto-start HANYA kalau user pernah klik MULAI
+    
+        -- ⭐ Process gift queue yang menumpuk
+        if #giftQueue > 0 then
+            print(string.format("[AutoHatch] Process %d gift dari queue...", #giftQueue))
+            processGiftQueue()
+        end
+    
+        -- ⭐ Auto-start auto gift
         if giftPetUserStarted and not isGiftPetRunning and CONFIG.giftPetTarget then
             local hasPetsToGift = false
             for _, pet in ipairs(getBackpackPets()) do
@@ -1115,7 +1141,7 @@ local function runOneCycle(cycleNum, totalCycles)
                 end)
             end
         end
-        
+    
         local waitStart = os.clock()
         while (os.clock() - waitStart) < 900 and isRunning do
             local eggs = getMyGardenEggs()
@@ -1127,7 +1153,7 @@ local function runOneCycle(cycleNum, totalCycles)
             if readyAll then break end
             task.wait(3)
         end
-        
+    
         -- ⭐ TUNGGU AUTO GIFT & AUTO ACCEPT SELESAI
         updateStatus(string.format("[%d/%d] ⏳ Menunggu gift/accept selesai...", cycleNum, totalCycles))
         local hasActiveProcess = false
@@ -1135,17 +1161,17 @@ local function runOneCycle(cycleNum, totalCycles)
             hasActiveProcess = true
             task.wait(1)
         end
-        
-        -- ⭐ Kalau ADA proses yang aktif → delay 10s
+    
+        -- ⭐ Kalau ADA proses yang aktif → delay
         if hasActiveProcess then
-            updateStatus(string.format("[%d/%d] ⏳ Delay %ss sebelum hatch...", 
+            updateStatus(string.format("[%d/%d] ⏳ Delay %ss...", 
                 cycleNum, totalCycles, CONFIG.delayAfterGiftSync))
             task.wait(CONFIG.delayAfterGiftSync)
         end
-        
+    
         -- ⭐ CLEAR STATE
         isWaitingEggTimer = false
-        
+    
         if not isRunning then return false end
         task.wait(1)
     end
