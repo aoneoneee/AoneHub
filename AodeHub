@@ -184,6 +184,7 @@ end
 -- ==================================================================
 local isRunning = false
 local isGiftPetRunning = false
+local giftPetUserStarted = false
 local isWaitingEggTimer = false
 local isAutoGiftActive = false
 local isAutoAcceptActive = false
@@ -1091,7 +1092,8 @@ local function runOneCycle(cycleNum, totalCycles)
         isWaitingEggTimer = true
         
         -- ⭐ Auto-start auto gift saat tunggu timer
-        if not isGiftPetRunning and CONFIG.giftPetTarget then
+        -- ⭐ Auto-start HANYA kalau user pernah klik MULAI
+        if giftPetUserStarted and not isGiftPetRunning and CONFIG.giftPetTarget then
             local hasPetsToGift = false
             for _, pet in ipairs(getBackpackPets()) do
                 if pet.weight >= CONFIG.giftPetMinWeight 
@@ -1107,7 +1109,9 @@ local function runOneCycle(cycleNum, totalCycles)
                 isGiftPetRunning = true
                 task.spawn(function()
                     autoGiftAllFiltered()
-                    isGiftPetRunning = false
+                    if isGiftPetRunning then
+                        isGiftPetRunning = false
+                    end
                 end)
             end
         end
@@ -2162,7 +2166,9 @@ Instance.new("UICorner", startGiftBtn).CornerRadius = UDim.new(0, 5)
 
 startGiftBtn.MouseButton1Click:Connect(function()
     if isGiftPetRunning then
+        -- STOP
         isGiftPetRunning = false
+        giftPetUserStarted = false   -- ⭐ user STOP → reset flag
         startGiftBtn.Text = "▶️ MULAI AUTO GIFT"
         startGiftBtn.BackgroundColor3 = C.success
         return
@@ -2178,6 +2184,7 @@ startGiftBtn.MouseButton1Click:Connect(function()
     end
     
     isGiftPetRunning = true
+    giftPetUserStarted = true        -- ⭐ user klik MULAI
     startGiftBtn.Text = "⏹️ STOP"
     startGiftBtn.BackgroundColor3 = C.danger
     
