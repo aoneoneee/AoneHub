@@ -30,6 +30,8 @@ local PetsService = require(RS.Modules.PetServices.PetsService)
 local PetRegistry = require(RS.Data.PetRegistry)
 local PetList = PetRegistry.PetList or {}
 
+local isGiftPetRunning = false
+
 -- ==================================================================
 -- CONFIG
 -- ==================================================================
@@ -92,7 +94,6 @@ local CONFIG = {
     giftDelayBetween = 3,
     
     -- Auto Gift Pet
-    giftPetEnabled = false,
     giftPetTarget = nil,
     giftPetMinWeight = 0,
     giftPetMaxWeight = 5.0,
@@ -798,17 +799,19 @@ local function autoGiftOnePet(petName, targetUsername)
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     if not humanoid then return false end
     
-    -- Equip
+    -- ⭐ Equip pet
     pcall(function() humanoid:EquipTool(petTool) end)
+    
+    -- ⭐ Delay setelah equip (default 1s) sebelum cek favorit
     task.wait(CONFIG.giftPetDelayEquip)
     
-    -- Unfavorit kalau perlu
+    -- ⭐ Cek & unfavorit kalau perlu
     if petTool:GetAttribute("d") == true then
         pcall(function() FavoriteItemRE:FireServer(petTool) end)
         task.wait(CONFIG.giftPetDelayUnfavorit)
     end
     
-    -- Fire gift
+    -- ⭐ Fire gift
     print(string.format("[Gift Pet] Kirim %s → %s", petName, targetUsername))
     local ok = pcall(function()
         PetGiftingService:FireServer("GivePet", target)
@@ -819,19 +822,14 @@ local function autoGiftOnePet(petName, targetUsername)
 end
 
 local function autoGiftAllFiltered()
-    if not CONFIG.giftPetEnabled then
-        print("[Gift Pet] Auto Gift OFF")
-        return
-    end
-    
     if not CONFIG.giftPetTarget then
-        print("[Gift Pet] Target belum dipilih!")
+        warn("[Gift Pet] Target belum dipilih!")
         return
     end
     
     local target = findPlayerByName(CONFIG.giftPetTarget)
     if not target then
-        print("[Gift Pet] Target tidak ditemukan:", CONFIG.giftPetTarget)
+        warn("[Gift Pet] Target tidak ditemukan:", CONFIG.giftPetTarget)
         return
     end
     
@@ -868,8 +866,8 @@ local function autoGiftAllFiltered()
     local failCount = 0
     
     for i, pet in ipairs(toGift) do
-        if not CONFIG.giftPetEnabled then
-            print("[Gift Pet] Stopped")
+        if not isGiftPetRunning then
+            print("[Gift Pet] Stopped oleh user")
             break
         end
         
@@ -2044,24 +2042,6 @@ giftInfo.Parent = giftSection
 -- Section: Auto Gift Pet
 local giftPetSection = makeSection(invScroll, "🎁 Auto Gift Pet", 380, 2)
 
-local giftPetEnableBtn = Instance.new("TextButton")
-giftPetEnableBtn.Size = UDim2.new(1, -20, 0, 22)
-giftPetEnableBtn.Position = UDim2.new(0, 10, 0, 26)
-giftPetEnableBtn.BackgroundColor3 = CONFIG.giftPetEnabled and C.success or Color3.fromRGB(70, 70, 85)
-giftPetEnableBtn.BorderSizePixel = 0
-giftPetEnableBtn.Font = Enum.Font.Gotham
-giftPetEnableBtn.Text = CONFIG.giftPetEnabled and "🎁 Auto Gift: ON" or "🎁 Auto Gift: OFF"
-giftPetEnableBtn.TextColor3 = C.text
-giftPetEnableBtn.TextSize = 9
-giftPetEnableBtn.Parent = giftPetSection
-Instance.new("UICorner", giftPetEnableBtn).CornerRadius = UDim.new(0, 4)
-giftPetEnableBtn.MouseButton1Click:Connect(function()
-    CONFIG.giftPetEnabled = not CONFIG.giftPetEnabled
-    giftPetEnableBtn.Text = CONFIG.giftPetEnabled and "🎁 Auto Gift: ON" or "🎁 Auto Gift: OFF"
-    giftPetEnableBtn.BackgroundColor3 = CONFIG.giftPetEnabled and C.success or Color3.fromRGB(70, 70, 85)
-    saveConfig()
-end)
-
 local targetLabel = Instance.new("TextLabel")
 targetLabel.Size = UDim2.new(1, -20, 0, 14)
 targetLabel.Position = UDim2.new(0, 10, 0, 52)
@@ -2135,38 +2115,55 @@ makeInputRow(giftPetSection, 116, "Min Weight (KG):", "giftPetMinWeight", true, 
 makeInputRow(giftPetSection, 140, "Max Weight (KG):", "giftPetMaxWeight", true, 0, 1000)
 makeInputRow(giftPetSection, 164, "Min Level:", "giftPetMinLevel", true, 0, 10000)
 makeInputRow(giftPetSection, 188, "Max Level:", "giftPetMaxLevel", true, 0, 10000)
-makeInputRow(giftPetSection, 212, "Delay Equip:", "giftPetDelayEquip", true, 0, 60)
-makeInputRow(giftPetSection, 236, "Delay Antar Gift:", "giftPetDelayBetween", true, 0, 60)
+makeInputRow(giftPetSection, 212, "Delay Antar Gift:", "giftPetDelayBetween", true, 0, 60)
 
+-- Tombol Mulai/Stop
 local startGiftBtn = Instance.new("TextButton")
-startGiftBtn.Size = UDim2.new(1, -20, 0, 28)
-startGiftBtn.Position = UDim2.new(0, 10, 0, 262)
+startGiftBtn.Size = UDim2.new(1, -20, 0, 30)
+startGiftBtn.Position = UDim2.new(0, 10, 0, 240)  -- adjust posisi
 startGiftBtn.BackgroundColor3 = C.success
 startGiftBtn.BorderSizePixel = 0
 startGiftBtn.Font = Enum.Font.GothamBold
-startGiftBtn.Text = "🎁 MULAI AUTO GIFT"
+startGiftBtn.Text = "▶️ MULAI AUTO GIFT"
 startGiftBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 startGiftBtn.TextSize = 10
 startGiftBtn.Parent = giftPetSection
 Instance.new("UICorner", startGiftBtn).CornerRadius = UDim.new(0, 5)
 
 startGiftBtn.MouseButton1Click:Connect(function()
-    if not CONFIG.giftPetTarget then
-        statusLabel.Text = "⚠️ Pilih target player!"
-        return
+    if isGiftPetRunning then
+        -- STOP
+        isGiftPetRunning = false
+        startGiftBtn.Text = "▶️ MULAI AUTO GIFT"
+        startGiftBtn.BackgroundColor3 = C.success
+        statusLabel.Text = "⏹️ Auto Gift stopped"
+    else
+        -- START
+        if not CONFIG.giftPetTarget then
+            statusLabel.Text = "⚠️ Pilih target player!"
+            return
+        end
+        if next(CONFIG.giftPetSelectedTypes) == nil then
+            statusLabel.Text = "⚠️ Pilih minimal 1 pet untuk di-gift!"
+            return
+        end
+        
+        isGiftPetRunning = true
+        startGiftBtn.Text = "⏹️ STOP"
+        startGiftBtn.BackgroundColor3 = C.danger
+        
+        task.spawn(function()
+            autoGiftAllFiltered()
+            
+            -- Selesai → reset button
+            if isGiftPetRunning then
+                isGiftPetRunning = false
+                startGiftBtn.Text = "▶️ MULAI AUTO GIFT"
+                startGiftBtn.BackgroundColor3 = C.success
+                statusLabel.Text = "✅ Auto Gift selesai"
+            end
+        end)
     end
-    if next(CONFIG.giftPetSelectedTypes) == nil then
-        statusLabel.Text = "⚠️ Pilih minimal 1 pet untuk di-gift!"
-        return
-    end
-    if not CONFIG.giftPetEnabled then
-        statusLabel.Text = "⚠️ Aktifkan Auto Gift dulu!"
-        return
-    end
-    
-    task.spawn(function()
-        autoGiftAllFiltered()
-    end)
 end)
 
 local giftFilterInfo = Instance.new("TextLabel")
