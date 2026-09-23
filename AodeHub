@@ -675,20 +675,39 @@ local isProcessingGiftQueue = false
 
 local function hideGiftUI()
     if not CONFIG.giftHideUI then return end
+    
     local giftGui = playerGui:FindFirstChild("Gift_Notification")
     if not giftGui then return end
+    
     local frame = giftGui:FindFirstChild("Frame")
     if not frame then return end
-    local notification = frame:FindFirstChild("Gift_Notification")
-    if notification then
-        notification.Visible = false
-    else
-        for _, obj in ipairs(frame:GetDescendants()) do
-            if obj.Name == "Gift_Notification" and obj:IsA("ImageLabel") then
+    
+    local hiddenCount = 0
+    
+    -- ⭐ Loop SEMUA child di Frame, hide yang namanya Gift_Notification
+    for _, obj in ipairs(frame:GetChildren()) do
+        if obj.Name == "Gift_Notification" and obj:IsA("ImageLabel") then
+            if obj.Visible then
                 obj.Visible = false
-                return
+                hiddenCount = hiddenCount + 1
             end
         end
+    end
+    
+    -- Fallback: cari di descendant kalau tidak ada di direct child
+    if hiddenCount == 0 then
+        for _, obj in ipairs(frame:GetDescendants()) do
+            if obj.Name == "Gift_Notification" and obj:IsA("ImageLabel") then
+                if obj.Visible then
+                    obj.Visible = false
+                    hiddenCount = hiddenCount + 1
+                end
+            end
+        end
+    end
+    
+    if hiddenCount > 0 then
+        print(string.format("[UI] Hidden %d Gift_Notification", hiddenCount))
     end
 end
 
