@@ -5,14 +5,26 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
+local CollectionService = game:GetService("CollectionService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+
+-- Remotes
+local PetEggService = ReplicatedStorage.GameEvents:WaitForChild("PetEggService")
+local PetsServiceRE = ReplicatedStorage.GameEvents:WaitForChild("PetsService")
+local FavoriteItemRE = ReplicatedStorage.GameEvents:WaitForChild("Favorite_Item")
+local SellAllRE = ReplicatedStorage.GameEvents:WaitForChild("SellAllPets_RE")
+local GiftPetEvent = ReplicatedStorage.GameEvents:WaitForChild("GiftPet")
+local AcceptPetGift = ReplicatedStorage.GameEvents:WaitForChild("AcceptPetGift")
+local PetGiftingService = ReplicatedStorage.GameEvents:WaitForChild("PetGiftingService")
 
 -- Services untuk Auto Leveling
 local DataService = require(ReplicatedStorage.Modules.DataService)
 local PetsService = require(ReplicatedStorage.Modules.PetServices.PetsService)
 local PetShardService_RE = ReplicatedStorage:WaitForChild("GameEvents"):WaitForChild("PetShardService_RE")
+local PetRegistry = require(ReplicatedStorage.Data.PetRegistry)
+local PetList = PetRegistry.PetList or {}
 
 -- Constants
 local MAX_PET_SLOTS = 8
@@ -31,6 +43,7 @@ local C = {
     success = Color3.fromRGB(50, 180, 50),
     danger = Color3.fromRGB(200, 50, 50),
     warning = Color3.fromRGB(255, 200, 0),
+    section = Color3.fromRGB(38, 38, 48),
 }
 
 -- ==================================================================
@@ -45,6 +58,75 @@ end
 local SAVE_FILE = getConfigPath()
 
 local config = {
+    eggGridOffsets = {
+        Vector3.new(13.63, -4.97, 7.74),
+        Vector3.new(13.63, -4.97, 1.74),
+        Vector3.new(13.63, -4.97, -5.74),
+        Vector3.new(13.63, -4.97, -11.74),
+        Vector3.new(31.63, -4.97, 7.74),
+        Vector3.new(31.63, -4.97, 1.74),
+        Vector3.new(31.63, -4.97, -5.74),
+        Vector3.new(31.63, -4.97, -11.74),
+        Vector3.new(19.63, -4.97, -2.74),
+        Vector3.new(25.63, -4.97, -2.74),
+        Vector3.new(18.13, -4.97, -16.24),
+        Vector3.new(22.63, -4.97, -16.24),
+        Vector3.new(27.13, -4.97, -16.24),
+    },
+    
+    speedLoadout = 1,
+    hatchLoadout = 2,
+    sellLoadout = 3,
+    
+    speedPreset = nil,
+    hatchPreset = nil,
+    sellPreset = nil,
+    
+    selectedEggs = {},
+    cycleCount = 1,
+    autoSell = true,
+    
+    -- Delay
+    delayAfterLoadout = 6.0,
+    hatchDelay = 1.5,
+    placeDelay = 1.5,
+    scanSettleDelay = 1.5,
+    delayAfterHatchAll = 2.0,
+    delayAfterSpeed = 2.0,
+    delayAfterHatch = 3.0,
+    delayAfterSell = 2.0,
+    delayBeforeSell = 3.0,
+    equipDelay = 0.4,
+    syncWaitTime = 2.0,
+    
+    -- Filter
+    maxWeight = 3.5,
+    maxLevel = 1,
+    unwantedPetTypes = {},
+    
+    -- Webhook
+    webhookEnabled = false,
+    webhookUrl = "",
+    webhookUsername = "Auto Hatch Report",
+    
+    -- Auto Accept Gift (giftDelayAfter default, bukan di GUI)
+    giftEnabled = true,
+    giftHideUI = true,
+    giftDelayAfter = 2,
+    giftDelayBetween = 3,
+    
+    -- Auto Gift Pet
+    giftPetTarget = nil,
+    giftPetMinWeight = 0,
+    giftPetMaxWeight = 5.0,
+    giftPetMinLevel = 0,
+    giftPetMaxLevel = 100,
+    giftPetDelayEquip = 1.0,
+    giftPetDelayUnfavorit = 0.5,
+    giftPetDelayBetween = 3.0,
+    giftPetSelectedTypes = {},
+    delayAfterGiftSync = 10,
+    
     teamPresets = {},
     weightPresets = {},
     mutationPresets = {},
@@ -100,13 +182,40 @@ local function loadConfig()
 end
 
 local function saveConfig()
-    local s, json = pcall(HttpService.JSONEncode, HttpService, config)
+    local data = {}
+    for k, v in pairs(config) do
+        if k ~= "eggGridOffsets" then
+            data[k] = v
+        end
+    end
+    local s, json = pcall(HttpService.JSONEncode, HttpService, data)
     if s then 
         pcall(writefile, SAVE_FILE, json) 
     end
 end
 
 loadConfig()
+
+-- ==================================================================
+-- MUTATION HELPERS
+-- ==================================================================
+local function getUnwantedMutations()
+    return config.unwantedMutations or {}
+end
+
+local function splitPetName(petName)
+    if not petName then
+        return petName, nil
+    end
+
+    for _, mutName in ipairs(getUnwantedMutations()) do
+        if petName:sub(1, #mutName + 1) == mutName .. " " then
+            return petName:sub(#mutName + 2), mutName
+        end
+    end
+
+    return petName, nil
+end
 
 -- ==================================================================
 -- DISCORD WEBHOOK
@@ -212,6 +321,15 @@ local availableMutations = {}
 local editingPresetName = nil
 local isGuiDestroyed = false  -- ⭐ TAMBAHKAN INI
 
+-- Auto Hatch State
+local isRunning = false
+local isGiftPetRunning = false
+local giftPetUserStarted = false
+local isWaitingEggTimer = false
+local isAutoGiftActive = false
+local isAutoAcceptActive = false
+local statusCallback = nil
+
 -- Forward declarations
 local StatusLabel
 local updateStatus
@@ -238,7 +356,364 @@ local rainbowColors = {
 }
 
 local colorIndex = 1
-    
+
+-- ==================================================================
+-- STATISTICS TRACKING
+-- ==================================================================
+local STATS = {}
+
+local function resetStats()
+    STATS = {
+        sessionStart = os.time(),
+        totalHatchCycles = 0,
+        totalHatched = 0,
+        cycleStartTime = 0,
+        lastCycleDuration = 0,
+        huntStats = { Huge = {}, Titan = {}, Godly = {}, Special = {} },
+        eggBeforePlace = 0,
+        eggAfterSell = 0,
+        knownUUIDs = {},
+    }
+end
+
+resetStats()
+
+local function extractPetInfo(petData)
+    if typeof(petData) ~= "table" then return nil end
+    local petName = petData.PetType or petData.Name or (petData.PetData and petData.PetData.PetType) or "?"
+    local baseWeight = petData.BaseWeight or (petData.PetData and petData.PetData.BaseWeight) or 0
+    local level = petData.Level or (petData.PetData and petData.PetData.Level) or 0
+    local isFav = petData.IsFavorite or (petData.PetData and petData.PetData.IsFavorite) or false
+    return { petName = petName, baseWeight = baseWeight, level = level, isFavorited = isFav }
+end
+
+local function getInventoryUUIDs()
+    local uuids = {}
+    local data = DataService:GetData()
+    if not data or not data.PetsData then return uuids end
+    local inventory = data.PetsData.PetInventory and data.PetsData.PetInventory.Data
+    if not inventory then return uuids end
+    for uuid, _ in pairs(inventory) do uuids[uuid] = true end
+    return uuids
+end
+
+local function getPetRarityFromBaseWeight(petName, baseWeight)
+    if baseWeight then
+        if baseWeight >= 10 and baseWeight <= 12 then return "Godly" end
+        if baseWeight >= 7 and baseWeight <= 9 then return "Titan" end
+        if baseWeight >= 4 and baseWeight <= 6 then return "Huge" end
+    end
+    if petName and not config.unwantedPetTypes[petName] then return "Special" end
+    return nil
+end
+
+local function addHuntStat(rarity, petName, weight)
+    if not rarity then return end
+    local bucket = STATS.huntStats[rarity]
+    if not bucket then return end
+    if not bucket[petName] then
+        bucket[petName] = { count = 0, minWeight = weight, maxWeight = weight }
+    end
+    local entry = bucket[petName]
+    entry.count = entry.count + 1
+    if weight < entry.minWeight then entry.minWeight = weight end
+    if weight > entry.maxWeight then entry.maxWeight = weight end
+end
+
+local function scanNewPetsAfterSell()
+    local data = DataService:GetData()
+    if not data or not data.PetsData then return 0 end
+    local inventory = data.PetsData.PetInventory and data.PetsData.PetInventory.Data
+    if not inventory then return 0 end
+    local newCount = 0
+    for uuid, petData in pairs(inventory) do
+        if not STATS.knownUUIDs[uuid] then
+            STATS.knownUUIDs[uuid] = true
+            newCount = newCount + 1
+            local info = extractPetInfo(petData)
+            if not info then continue end
+            local petName = info.petName
+            local baseWeight = info.baseWeight
+            local baseName = splitPetName(petName)
+            if config.unwantedPetTypes[baseName] 
+               and baseWeight <= config.maxWeight 
+               and info.level <= config.maxLevel then
+                print(string.format("[Stats] Skip unwanted: %s", petName))
+            else
+                local rarity = getPetRarityFromBaseWeight(petName, baseWeight)
+                addHuntStat(rarity, petName, baseWeight)
+            end
+        end
+    end
+    return newCount
+end
+
+-- ==================================================================
+-- HELPER: Pet Count
+-- ==================================================================
+local function getPetCountFromData()
+    local data = DataService:GetData()
+    if not data or not data.PetsData then return 0, 0 end
+    local petsData = data.PetsData
+    local current = 0
+    if petsData.PetInventory and petsData.PetInventory.Data then
+        for _ in pairs(petsData.PetInventory.Data) do current = current + 1 end
+    end
+    local max = 0
+    if petsData.MutableStats and petsData.MutableStats.MaxPetsInInventory then
+        max = petsData.MutableStats.MaxPetsInInventory
+    end
+    return current, max
+end
+
+
+-- ==================================================================
+-- HELPER: Count Egg
+-- ==================================================================
+local function countEggsInBackpack()
+    local total = 0
+    local seen = {}
+    local locations = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, backpack) end
+    if player.Character then table.insert(locations, player.Character) end
+    for _, container in ipairs(locations) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") and tool:GetAttribute("b") == "c" then
+                if not seen[tool] then
+                    seen[tool] = true
+                    local eggName = tool:GetAttribute("h")
+                    local isSelected = false
+                    if next(config.selectedEggs) == nil then
+                        isSelected = true
+                    else
+                        for name, val in pairs(config.selectedEggs) do
+                            if name == eggName and val then isSelected = true break end
+                        end
+                    end
+                    if isSelected then
+                        total = total + (tool:GetAttribute("e") or 0)
+                    end
+                end
+            end
+        end
+    end
+    return total
+end
+
+-- ==================================================================
+-- HELPER: FARM
+-- ==================================================================
+local function getMyFarm()
+    local farmContainer = workspace:FindFirstChild("Farm")
+    if not farmContainer then return nil end
+    for _, farm in ipairs(farmContainer:GetChildren()) do
+        local important = farm:FindFirstChild("Important")
+        local dataFolder = important and important:FindFirstChild("Data")
+        if dataFolder then
+            for _, obj in ipairs(dataFolder:GetChildren()) do
+                if obj:IsA("StringValue") and obj.Value == player.Name then
+                    return farm
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function getCenterPoint()
+    local farm = getMyFarm()
+    if not farm then return nil end
+    local center = farm:FindFirstChild("Center_Point")
+    if center then return center end
+    for _, obj in ipairs(farm:GetDescendants()) do
+        if obj.Name == "Center_Point" then return obj end
+    end
+    return nil
+end
+
+-- ==================================================================
+-- HELPER: EGG
+-- ==================================================================
+local function getMyGardenEggs()
+    local eggs = {}
+    for _, egg in CollectionService:GetTagged("PetEggServer") do
+        if egg:GetAttribute("OWNER") == player.Name then
+            table.insert(eggs, egg)
+        end
+    end
+    return eggs
+end
+
+local function getOccupiedSlots()
+    local center = getCenterPoint()
+    if not center then return {} end
+    local occupied = {}
+    local centerPos = center.Position
+    local THRESHOLD = 3
+    for _, egg in ipairs(getMyGardenEggs()) do
+        local offset = egg:GetPivot().Position - centerPos
+        for i, gridOffset in ipairs(config.eggGridOffsets) do
+            if (offset - gridOffset).Magnitude < THRESHOLD then
+                occupied[i] = true
+                break
+            end
+        end
+    end
+    return occupied
+end
+
+local function getEmptySlots()
+    local occupied = getOccupiedSlots()
+    local emptySlots = {}
+    for i = 1, #config.eggGridOffsets do
+        if not occupied[i] then table.insert(emptySlots, i) end
+    end
+    return emptySlots, occupied
+end
+
+local function hatchEgg(eggModel)
+    pcall(function()
+        PetEggService:FireServer("HatchPet", eggModel)
+    end)
+end
+
+-- ==================================================================
+-- HELPER: BACKPACK
+-- ==================================================================
+local function isEggTool(tool)
+    return tool:IsA("Tool") and tool:GetAttribute("b") == "c"
+end
+
+local function isPetTool(tool)
+    return tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet"
+end
+
+local function findEggTool()
+    local locations = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, {name="Backpack", container=backpack}) end
+    if player.Character then table.insert(locations, {name="Tangan", container=player.Character}) end
+    for _, loc in ipairs(locations) do
+        for _, tool in ipairs(loc.container:GetChildren()) do
+            if isEggTool(tool) then
+                local eggName = tool:GetAttribute("h")
+                local count = tool:GetAttribute("e") or 0
+                local isSelected = false
+                if next(config.selectedEggs) == nil then
+                    isSelected = true
+                else
+                    for name, val in pairs(config.selectedEggs) do
+                        if name == eggName and val then isSelected = true break end
+                    end
+                end
+                if count > 0 and isSelected then return tool end
+            end
+        end
+    end
+    return nil
+end
+
+local function getBackpackEggs()
+    local eggs = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return eggs end
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if isEggTool(tool) then
+            local name = tool:GetAttribute("h")
+            local count = tool:GetAttribute("e") or 0
+            if name and count > 0 then
+                table.insert(eggs, { tool = tool, name = name, count = count })
+            end
+        end
+    end
+    return eggs
+end
+
+local function parsePetName(toolName)
+    local name, weight, level = toolName:match("^(.+) %[([%d%.]+) KG%] %[Age (%d+)%]$")
+    if not name then
+        name, weight, level = toolName:match("^(.+)%s+%[([%d%.]+) KG%]%s+%[Age (%d+)%]")
+    end
+    if name then
+        return name:gsub("%s+$", ""), tonumber(weight) or 0, tonumber(level) or 0
+    end
+    name, weight = toolName:match("^(.+) %[([%d%.]+) KG%]$")
+    if name then
+        return name:gsub("%s+$", ""), tonumber(weight) or 0, 0
+    end
+    return nil, 0, 0
+end
+
+local function getBackpackPets()
+    local pets = {}
+    local seen = {}
+    local locations = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, {name="Backpack", container=backpack}) end
+    if player.Character then table.insert(locations, {name="Tangan", container=player.Character}) end
+    for _, loc in ipairs(locations) do
+        for _, tool in ipairs(loc.container:GetChildren()) do
+            if isPetTool(tool) and not seen[tool] then
+                seen[tool] = true
+                local name, weight, level = parsePetName(tool.Name)
+                if name then
+                    table.insert(pets, {
+                        tool = tool,
+                        name = name,
+                        weight = weight,
+                        level = level,
+                        isFavorited = tool:GetAttribute("d") == true,
+                        location = loc.name,
+                    })
+                end
+            end
+        end
+    end
+    return pets
+end
+
+local function getAllPetTypesFromRegistry()
+    local types = {}
+    for petName, _ in pairs(PetList) do
+        table.insert(types, petName)
+    end
+    table.sort(types)
+    return types
+end
+
+local function findPetToolByName(petName)
+    local locations = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, backpack) end
+    if player.Character then table.insert(locations, player.Character) end
+    for _, container in ipairs(locations) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                local name = parsePetName(tool.Name)
+                if name == petName then return tool end
+            end
+        end
+    end
+    return nil
+end
+
+local function getPlayerNames()
+    local names = {}
+    for _, p in ipairs(game.Players:GetPlayers()) do
+        if p ~= player then table.insert(names, p.Name) end
+    end
+    table.sort(names)
+    return names
+end
+
+local function findPlayerByName(name)
+    for _, p in ipairs(game.Players:GetPlayers()) do
+        if p.Name == name then return p end
+    end
+    return nil
+end
+
 -- ==================================================================
 -- PET DATA FUNCTIONS
 -- ==================================================================
@@ -248,6 +723,12 @@ local function getPlayerPetData()
         return playerData.PetsData
     end
     return nil
+end
+
+local function isPetUUIDValid(uuid)
+    local petsData = getPlayerPetData()
+    if not petsData or not petsData.PetInventory then return false end
+    return petsData.PetInventory.Data[uuid] ~= nil
 end
 
 local function getPetType(petUUID)
@@ -601,6 +1082,78 @@ local function deletePreset(presetName)
         saveConfig()
         return true
     end
+    return false
+end
+
+local function getPresetNames()
+    if not config or not config.teamPresets then
+        return {}
+    end
+
+    local names = {}
+
+    for name, _ in pairs(config.teamPresets) do
+        table.insert(names, name)
+    end
+
+    table.sort(names)
+    return names
+end
+
+local function getPreset(presetName)
+    if not config or not config.teamPresets then
+        return nil
+    end
+
+    return config.teamPresets[presetName]
+end
+
+local function getPresetUUIDs(presetName)
+    local preset = getPreset(presetName)
+
+    if not preset or not preset.pets then
+        return {}
+    end
+
+    local uuids = {}
+
+    for _, petInfo in ipairs(preset.pets) do
+        if isPetUUIDValid(petInfo.UUID) then
+            table.insert(uuids, petInfo.UUID)
+        end
+    end
+
+    return uuids
+end
+
+local function isPetInPreset(petDisplayName)
+    local baseName = splitPetName(petDisplayName)
+
+    for _, presetName in ipairs({
+        config.speedPreset,
+        config.hatchPreset,
+        config.sellPreset
+    }) do
+        if presetName then
+            local preset = getPreset(presetName)
+
+            if preset and preset.pets then
+                for _, petInfo in ipairs(preset.pets) do
+                    if petInfo.PetType == baseName
+                        or petInfo.PetType == petDisplayName then
+                        return true
+                    end
+
+                    if petInfo.Mutation
+                        and petInfo.Mutation ~= "Normal"
+                        and (petInfo.Mutation .. " " .. petInfo.PetType) == petDisplayName then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+
     return false
 end
 
