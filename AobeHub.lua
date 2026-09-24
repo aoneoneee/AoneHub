@@ -88,8 +88,8 @@ local config = {
     
     -- Delay
     delayAfterLoadout = 6.0,
-    hatchDelay = 1.5,
-    placeDelay = 1.5,
+    hatchDelay = 1.0,
+    placeDelay = 1.0,
     scanSettleDelay = 1.5,
     delayAfterHatchAll = 2.0,
     delayAfterSpeed = 2.0,
@@ -1770,6 +1770,125 @@ local function autoGiftAllFiltered()
 end
 
 -- ==================================================================
+-- MONITOR TAB
+-- ==================================================================
+local monitorLabels = {}
+
+local function refreshMonitor()
+    if not monitorLabels.profileLabel then return end
+    
+    -- Profile
+    local eggName = "?"
+    for name, _ in pairs(config.selectedEggs) do eggName = name break end
+    local petCurrent, petMax = getPetCountFromData()
+    
+    monitorLabels.profileLabel.Text = string.format(
+        "**Profile :**\n" ..
+        "👤 Username: %s\n" ..
+        "🥚 Egg Name: %s\n" ..
+        "🐾 Pet on backpack: %d/%d",
+        player.Name, eggName, petCurrent, petMax
+    )
+    
+    -- Teams
+    local function formatPreset(presetName)
+        if not presetName then return "-" end
+        local preset = getPresetFromFile(presetName)
+        if not preset or not preset.pets then return "-" end
+        local groups = {}
+        for _, petInfo in ipairs(preset.pets) do
+            local key = petInfo.PetType or "?"
+            if petInfo.Mutation and petInfo.Mutation ~= "Normal" then
+                key = petInfo.Mutation .. " " .. key
+            end
+            groups[key] = (groups[key] or 0) + 1
+        end
+        local list = {}
+        for name, count in pairs(groups) do
+            table.insert(list, {name = name, count = count})
+        end
+        table.sort(list, function(a, b) return a.count > b.count end)
+        local parts = {}
+        for _, item in ipairs(list) do
+            table.insert(parts, string.format("%d %s", item.count, item.name))
+        end
+        return table.concat(parts, ", ")
+    end
+    
+    monitorLabels.teamsLabel.Text = string.format(
+        "**Teams :**\n" ..
+        "> Core: %s\n" ..
+        "> Hatch: %s\n" ..
+        "> Sell: %s",
+        formatPreset(config.speedPreset),
+        formatPreset(config.hatchPreset),
+        formatPreset(config.sellPreset)
+    )
+    
+    -- Hunt Statistics
+    local function formatHuntBucket(bucket, emoji, label)
+        local count = 0
+        local lines = {}
+        for petName, entry in pairs(bucket) do
+            count = count + entry.count
+            local weightStr
+            if math.abs(entry.minWeight - entry.maxWeight) < 0.01 then
+                weightStr = string.format("%.2f kg", entry.minWeight)
+            else
+                weightStr = string.format("%.2f-%.2f kg", entry.minWeight, entry.maxWeight)
+            end
+            table.insert(lines, string.format("  • %s x%d (%s)", petName, entry.count, weightStr))
+        end
+        table.sort(lines)
+        local result = string.format("%s %s: %d", emoji, label, count)
+        if #lines > 0 then
+            result = result .. "\n" .. table.concat(lines, "\n")
+        end
+        return result
+    end
+    
+    monitorLabels.huntLabel.Text = "**Hunt Statistics :**\n" ..
+        formatHuntBucket(STATS.huntStats.Special, "⭐", "Special") .. "\n" ..
+        formatHuntBucket(STATS.huntStats.Huge, "🥉", "Huge") .. "\n" ..
+        formatHuntBucket(STATS.huntStats.Titan, "🥈", "Titan") .. "\n" ..
+        formatHuntBucket(STATS.huntStats.Godly, "🥇", "Godly")
+    
+    -- Egg Statistics
+    local eggBefore = STATS.eggBeforePlace or 0
+    local eggCurrent = STATS.eggAfterSell or 0
+    local netResult = eggCurrent - eggBefore
+    local netStr = netResult >= 0 and ("+" .. netResult) or tostring(netResult)
+    
+    monitorLabels.eggLabel.Text = string.format(
+        "**Egg Statistics :**\n" ..
+        "> 📦 Egg Before: %d\n" ..
+        "> 📊 Current Amount: %d\n" ..
+        "> 📈 Net Result: %s",
+        eggBefore, eggCurrent, netStr
+    )
+    
+    -- Hatch Statistics
+    local totalDuration = os.time() - STATS.sessionStart
+    local hours = math.floor(totalDuration / 3600)
+    local minutes = math.floor((totalDuration % 3600) / 60)
+    local seconds = totalDuration % 60
+    local durationStr = string.format("%dh %dm %ds", hours, minutes, seconds)
+    
+    monitorLabels.hatchLabel.Text = string.format(
+        "**Hatch Statistics :**\n" ..
+        "> 🔄 Hatch Cycles: %d\n" ..
+        "> 🐣 Total Hatched: %d\n" ..
+        "> ⏱️ Cycle Duration: %ds\n" ..
+        "> ⏳ All Time Duration: %s",
+        STATS.totalHatchCycles, STATS.totalHatched,
+        STATS.lastCycleDuration, durationStr
+    )
+    
+    -- Updated timestamp
+    monitorLabels.timestamp.Text = "🕐 Updated: " .. os.date("%H:%M:%S")
+end
+
+-- ==================================================================
 -- STATUS
 -- ==================================================================
 local function updatesStatus(text)
@@ -1948,6 +2067,7 @@ local function runOneCycle(cycleNum, totalCycles)
     task.wait(config.delayAfterHatchAll)
     STATS.totalHatchCycles = STATS.totalHatchCycles + 1
     STATS.lastCycleDuration = os.time() - STATS.cycleStartTime
+    refreshMonitor()
     task.wait(2)
     return true
 end
@@ -1994,6 +2114,7 @@ local function runFilterAndSell()
     updatesStatus("✅ Sell selesai")
     task.wait(2)
     scanNewPetsAfterSell()
+    refreshMonitor()
 end
 
 -- ==================================================================
@@ -4958,16 +5079,168 @@ hatchLayout.Padding = UDim.new(0, 6)
 hatchLayout.SortOrder = Enum.SortOrder.LayoutOrder
 hatchLayout.Parent = hatchScroll
 
-local MonitorSection = createSection(hatchScroll, "🖥 Hatch Monitoring", "monitorPreset")
+local ConfigSection = createSection(hatchScroll, "⚙️ Configuration", "configPreset")
+ConfigSection.LayoutOrder = 2
+ConfigSection.Size = UDim2.new(1, -10, 0, 219)
+
+makeInputRow(ConfigSection, 28, "Loadout Swap:", "delayAfterLoadout", true, 0, 30)
+makeInputRow(ConfigSection, 49, "Setelah Hatch All:", "delayAfterHatchAll", true, 0, 30)
+makeInputRow(ConfigSection, 70, "Antar Hatch:", "hatchDelay", true, 0, 30)
+makeInputRow(ConfigSection, 91, "Place Egg:", "placeDelay", true, 0, 30)
+makeInputRow(ConfigSection, 112, "Jumlah cycle:", "cycleCount", true, 1, 10)
+makeToggle(ConfigSection, 133, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
+
+local startBtn = Instance.new("TextButton")
+startBtn.Size = UDim2.new(1, -20, 0, 30)
+startBtn.Position = UDim2.new(0, 10, 0, 160)
+startBtn.BackgroundColor3 = C.success
+startBtn.BorderSizePixel = 0
+startBtn.Font = Enum.Font.GothamBold
+startBtn.Text = "▶️ MULAI"
+startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+startBtn.TextSize = 10
+startBtn.Parent = ConfigSection
+Instance.new("UICorner", startBtn).CornerRadius = UDim.new(0, 5)
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -20, 0, 14)
+statusLabel.Position = UDim2.new(0, 10, 0, 195)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Font = Enum.Font.GothamBold
+statusLabel.Text = "Status: Idle"
+statusLabel.TextColor3 = C.textDim
+statusLabel.TextSize = 10
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Parent = ConfigSection
+
+statusCallback = function(text) statusLabel.Text = text end
+
+startBtn.MouseButton1Click:Connect(function()
+    if isRunning then
+        stopAutoHatch()
+        startBtn.Text = "▶️ MULAI"
+        startBtn.BackgroundColor3 = C.success
+    else
+        if next(config.selectedEggs) == nil then
+            statusLabel.Text = "⚠️ Pilih egg dulu!"
+            return
+        end
+        if not config.speedPreset then
+            statusLabel.Text = "⚠️ Pilih preset Speed!"
+            return
+        end
+        if not config.hatchPreset then
+            statusLabel.Text = "⚠️ Pilih preset Hatch!"
+            return
+        end
+        if config.autoSell and not config.sellPreset then
+            statusLabel.Text = "⚠️ Pilih preset Sell!"
+            return
+        end
+        lastLoadoutSlot = nil
+        startAutoHatch()
+        startBtn.Text = "⏹️ STOP"
+        startBtn.BackgroundColor3 = C.danger
+    end
+end)
+
+local MonitorSection = createSection(hatchScroll, "📊 Hatch Monitoring", "monitorPreset")
 MonitorSection.LayoutOrder = 1
-MonitorSection.Size = UDim2.new(1, -10, 0, 180)
+MonitorSection.Size = UDim2.new(1, -10, 0, 531)
 
+monitorLabels.profileLabel = Instance.new("TextLabel")
+monitorLabels.profileLabel.Size = UDim2.new(1, -20, 1, -32)
+monitorLabels.profileLabel.Position = UDim2.new(0, 10, 0, 28)
+monitorLabels.profileLabel.BackgroundTransparency = 1
+monitorLabels.profileLabel.Font = Enum.Font.Code
+monitorLabels.profileLabel.TextSize = 9
+monitorLabels.profileLabel.TextColor3 = C.text
+monitorLabels.profileLabel.TextXAlignment = Enum.TextXAlignment.Left
+monitorLabels.profileLabel.TextYAlignment = Enum.TextYAlignment.Top
+monitorLabels.profileLabel.Text = "Loading..."
+monitorLabels.profileLabel.Parent = MonitorSection
 
+monitorLabels.teamsLabel = Instance.new("TextLabel")
+monitorLabels.teamsLabel.Size = UDim2.new(1, -20, 1, -32)
+monitorLabels.teamsLabel.Position = UDim2.new(0, 10, 0, 100)
+monitorLabels.teamsLabel.BackgroundTransparency = 1
+monitorLabels.teamsLabel.Font = Enum.Font.Code
+monitorLabels.teamsLabel.TextSize = 9
+monitorLabels.teamsLabel.TextColor3 = C.text
+monitorLabels.teamsLabel.TextXAlignment = Enum.TextXAlignment.Left
+monitorLabels.teamsLabel.TextYAlignment = Enum.TextYAlignment.Top
+monitorLabels.teamsLabel.TextWrapped = true
+monitorLabels.teamsLabel.Text = "Loading..."
+monitorLabels.teamsLabel.Parent = MonitorSection
 
+monitorLabels.huntLabel = Instance.new("TextLabel")
+monitorLabels.huntLabel.Size = UDim2.new(1, -20, 1, -32)
+monitorLabels.huntLabel.Position = UDim2.new(0, 10, 0, 164)
+monitorLabels.huntLabel.BackgroundTransparency = 1
+monitorLabels.huntLabel.Font = Enum.Font.Code
+monitorLabels.huntLabel.TextSize = 9
+monitorLabels.huntLabel.TextColor3 = C.text
+monitorLabels.huntLabel.TextXAlignment = Enum.TextXAlignment.Left
+monitorLabels.huntLabel.TextYAlignment = Enum.TextYAlignment.Top
+monitorLabels.huntLabel.TextWrapped = true
+monitorLabels.huntLabel.Text = "Loading..."
+monitorLabels.huntLabel.Parent = MonitorSection
+
+monitorLabels.eggLabel = Instance.new("TextLabel")
+monitorLabels.eggLabel.Size = UDim2.new(1, -20, 1, -32)
+monitorLabels.eggLabel.Position = UDim2.new(0, 10, 0, 358)
+monitorLabels.eggLabel.BackgroundTransparency = 1
+monitorLabels.eggLabel.Font = Enum.Font.Code
+monitorLabels.eggLabel.TextSize = 9
+monitorLabels.eggLabel.TextColor3 = C.text
+monitorLabels.eggLabel.TextXAlignment = Enum.TextXAlignment.Left
+monitorLabels.eggLabel.TextYAlignment = Enum.TextYAlignment.Top
+monitorLabels.eggLabel.TextWrapped = true
+monitorLabels.eggLabel.Text = "Loading..."
+monitorLabels.eggLabel.Parent = MonitorSection
+
+monitorLabels.hatchLabel = Instance.new("TextLabel")
+monitorLabels.hatchLabel.Size = UDim2.new(1, -20, 1, -32)
+monitorLabels.hatchLabel.Position = UDim2.new(0, 10, 0, 402)
+monitorLabels.hatchLabel.BackgroundTransparency = 1
+monitorLabels.hatchLabel.Font = Enum.Font.Code
+monitorLabels.hatchLabel.TextSize = 9
+monitorLabels.hatchLabel.TextColor3 = C.text
+monitorLabels.hatchLabel.TextXAlignment = Enum.TextXAlignment.Left
+monitorLabels.hatchLabel.TextYAlignment = Enum.TextYAlignment.Top
+monitorLabels.hatchLabel.TextWrapped = true
+monitorLabels.hatchLabel.Text = "Loading..."
+monitorLabels.hatchLabel.Parent = MonitorSection
+
+monitorLabels.timestamp = Instance.new("TextLabel")
+monitorLabels.timestamp.Size = UDim2.new(1, -20, 0, 14)
+monitorLabels.timestamp.Position = UDim2.new(0, 10, 0, 476)
+monitorLabels.timestamp.BackgroundTransparency = 1
+monitorLabels.timestamp.Font = Enum.Font.Gotham
+monitorLabels.timestamp.TextSize = 7
+monitorLabels.timestamp.TextColor3 = C.textDim
+monitorLabels.timestamp.TextXAlignment = Enum.TextXAlignment.Left
+monitorLabels.timestamp.Text = "🕐 Belum ada data"
+monitorLabels.timestamp.Parent = MonitorSection
+
+local refreshMonitorBtn = Instance.new("TextButton")
+refreshMonitorBtn.Size = UDim2.new(1, -20, 0, 22)
+refreshMonitorBtn.Position = UDim2.new(0, 10, 0, 499)
+refreshMonitorBtn.BackgroundColor3 = C.accent
+refreshMonitorBtn.BorderSizePixel = 0
+refreshMonitorBtn.Font = Enum.Font.GothamBold
+refreshMonitorBtn.Text = "🔄 Refresh Monitor"
+refreshMonitorBtn.TextColor3 = C.text
+refreshMonitorBtn.TextSize = 9
+refreshMonitorBtn.Parent = MonitorSection
+Instance.new("UICorner", refreshMonitorBtn).CornerRadius = UDim.new(0, 4)
+refreshMonitorBtn.MouseButton1Click:Connect(function()
+    refreshMonitor()
+end)
 
 local PresetSection = createSection(hatchScroll, "🐣 Tim Preset", "teamPreset")
-PresetSection.LayoutOrder = 2
-PresetSection.Size = UDim2.new(1, -10, 0, 180)
+PresetSection.LayoutOrder = 3
+PresetSection.Size = UDim2.new(1, -10, 0, 132)
 
 -- Dropdown Tim Leveling
 local TeamSpeedDropdown = createDynamicDropdown(
@@ -4975,7 +5248,7 @@ local TeamSpeedDropdown = createDynamicDropdown(
     UDim2.new(0, 10, 0, 28),
     speedPreset and string.format("📂 %s", speedPreset) or "📂 Pilih Preset Tim Utama",
     PresetSection,
-    180,
+    132,
     hatchScroll
 )
 
@@ -4985,7 +5258,7 @@ local TeamHatchDropdown = createDynamicDropdown(
     UDim2.new(0, 10, 0, 61),
     hatchPreset and string.format("📂 %s", hatchPreset) or "📂 Pilih Preset Tim Hatch",
     PresetSection,
-    180,
+    132,
     hatchScroll
 )
 
@@ -4995,15 +5268,12 @@ local TeamSellDropdown = createDynamicDropdown(
     UDim2.new(0, 10, 0, 94),
     sellPreset and string.format("📂 %s", sellPreset) or "📂 Pilih Preset Tim Sell",
     PresetSection,
-    180,
+    132,
     hatchScroll
 )
 
-makeInputRow(PresetSection, 127, "Jumlah cycle:", "cycleCount", true, 1, 10)
-makeToggle(PresetSection, 148, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
-
 local EggSection = createSection(hatchScroll, "🥚 Pilih Egg", "selectEgg")
-EggSection.LayoutOrder = 3
+EggSection.LayoutOrder = 4
 EggSection.Size = UDim2.new(1, -10, 0, 243)
 
 local eggRefreshBtn = Instance.new("TextButton")
@@ -5094,7 +5364,7 @@ end
 eggRefreshBtn.MouseButton1Click:Connect(refreshEggList)
 
 local FilterSection = createSection(hatchScroll, "😺 Filter Pet", "petFilter")
-FilterSection.LayoutOrder = 4
+FilterSection.LayoutOrder = 5
 FilterSection.Size = UDim2.new(1, -10, 0, 368)
 
 makeInputRow(FilterSection, 28, "Max Weight (KG):", "maxWeight", true, 0, 1000)
@@ -5191,8 +5461,367 @@ local function refreshUnwantedList()
 end
 searchBox:GetPropertyChangedSignal("Text"):Connect(refreshUnwantedList)
 
+-- Populate team speed dropdown
+local function populateTeamSpeedDropdown()
+    populateDynamicDropdown(TeamSpeedDropdown, speedPreset, function(name)
+        speedPreset = name
+        config.speedPreset = name
+        saveConfig()
+        TeamSpeedDropdown.HeaderButton.Text = string.format("📂 %s", name)
+    end)
+end
 
+-- Populate team hatch dropdown
+local function populateTeamHatchDropdown()
+    populateDynamicDropdown(TeamHatchDropdown, hatchPreset, function(name)
+        hatchPreset = name
+        config.hatchPreset = name
+        saveConfig()
+        TeamHatchDropdown.HeaderButton.Text = string.format("📂 %s", name)
+    end)
+end
 
+-- Populate team sell dropdown
+local function populateTeamSellDropdown()
+    populateDynamicDropdown(TeamSellDropdown, sellPreset, function(name)
+        sellPreset = name
+        config.sellPreset = name
+        saveConfig()
+        TeamSellDropdown.HeaderButton.Text = string.format("📂 %s", name)
+    end)
+end
+
+TeamSpeedDropdown.HeaderButton.MouseButton1Click:Connect(function()
+    if not TeamSpeedDropdown.IsOpen() then
+        populateTeamSpeedDropdown()
+    end
+end)
+
+TeamHatchDropdown.HeaderButton.MouseButton1Click:Connect(function()
+    if not TeamHatchDropdown.IsOpen() then
+        populateTeamHatchDropdown()
+    end
+end)
+
+TeamSellDropdown.HeaderButton.MouseButton1Click:Connect(function()
+    if not TeamSellDropdown.IsOpen() then
+        populateTeamSellDropdown()
+    end
+end)
+
+-- ==================================================================
+-- TAB INVENTORY
+-- ==================================================================
+local invTab = tabFrames["Inventory"]
+
+local invScroll = Instance.new("ScrollingFrame")
+invScroll.Size = UDim2.new(1, -10, 1, -10)
+invScroll.Position = UDim2.new(0, 5, 0, 5)
+invScroll.BackgroundTransparency = 1
+invScroll.BorderSizePixel = 0
+invScroll.ScrollBarThickness = 4
+invScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+invScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+invScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+invScroll.Parent = invTab
+
+local invLayout = Instance.new("UIListLayout")
+invLayout.Padding = UDim.new(0, 6)
+invLayout.SortOrder = Enum.SortOrder.LayoutOrder
+invLayout.Parent = invScroll
+
+local AccSection = createSection(invScroll, "😘 Auto Accept", "acceptEgg")
+AccSection.LayoutOrder = 1
+AccSection.Size = UDim2.new(1, -10, 0, 154)
+
+local giftEnableBtn = Instance.new("TextButton")
+giftEnableBtn.Size = UDim2.new(1, -20, 0, 22)
+giftEnableBtn.Position = UDim2.new(0, 10, 0, 28)
+giftEnableBtn.BackgroundColor3 = config.giftEnabled and C.success or Color3.fromRGB(70, 70, 85)
+giftEnableBtn.BorderSizePixel = 0
+giftEnableBtn.Font = Enum.Font.Gotham
+giftEnableBtn.Text = config.giftEnabled and "😘 Auto Accept: ON" or "😘 Auto Accept: OFF"
+giftEnableBtn.TextColor3 = C.text
+giftEnableBtn.TextSize = 9
+giftEnableBtn.Parent = AccSection
+Instance.new("UICorner", giftEnableBtn).CornerRadius = UDim.new(0, 4)
+giftEnableBtn.MouseButton1Click:Connect(function()
+    config.giftEnabled = not config.giftEnabled
+    giftEnableBtn.Text = config.giftEnabled and "😘 Auto Accept: ON" or "😘 Auto Accept: OFF"
+    giftEnableBtn.BackgroundColor3 = config.giftEnabled and C.success or Color3.fromRGB(70, 70, 85)
+    saveConfig()
+end)
+
+local hideUIBtn = Instance.new("TextButton")
+hideUIBtn.Size = UDim2.new(1, -20, 0, 22)
+hideUIBtn.Position = UDim2.new(0, 10, 0, 55)
+hideUIBtn.BackgroundColor3 = config.giftHideUI and C.success or Color3.fromRGB(70, 70, 85)
+hideUIBtn.BorderSizePixel = 0
+hideUIBtn.Font = Enum.Font.Gotham
+hideUIBtn.Text = config.giftHideUI and "👁️ Hide UI: ON" or "👁️ Hide UI: OFF"
+hideUIBtn.TextColor3 = C.text
+hideUIBtn.TextSize = 9
+hideUIBtn.Parent = AccSection
+Instance.new("UICorner", hideUIBtn).CornerRadius = UDim.new(0, 4)
+hideUIBtn.MouseButton1Click:Connect(function()
+    config.giftHideUI = not config.giftHideUI
+    hideUIBtn.Text = config.giftHideUI and "👁️ Hide UI: ON" or "👁️ Hide UI: OFF"
+    hideUIBtn.BackgroundColor3 = config.giftHideUI and C.success or Color3.fromRGB(70, 70, 85)
+    saveConfig()
+end)
+
+makeInputRow(AccSection, 83, "Delay antar gift:", "giftDelayBetween", true, 0, 60)
+
+local giftStatsLabel = Instance.new("TextLabel")
+giftStatsLabel.Size = UDim2.new(1, -20, 0, 40)
+giftStatsLabel.Position = UDim2.new(0, 10, 0, 104)
+giftStatsLabel.BackgroundTransparency = 1
+giftStatsLabel.Font = Enum.Font.Gotham
+giftStatsLabel.TextSize = 8
+giftStatsLabel.TextColor3 = C.textDim
+giftStatsLabel.TextXAlignment = Enum.TextXAlignment.Left
+giftStatsLabel.TextYAlignment = Enum.TextYAlignment.Top
+giftStatsLabel.Text = "Stats: 0 accepted, 0 failed"
+giftStatsLabel.Parent = AccSection
+
+task.spawn(function()
+    while not guiDestroyed do
+        task.wait(2)
+        if giftStatsLabel and giftStatsLabel.Parent then
+            giftStatsLabel.Text = string.format(
+                "Stats:\n✅ Accepted: %d\n❌ Failed: %d\n📥 Queue: %d",
+                GIFT_STATS.totalAccepted, GIFT_STATS.totalFailed, #giftQueue
+            )
+        end
+    end
+end)
+
+local GiftSection = createSection(invScroll, "🎁 Auto Gift", "giftEgg")
+GiftSection.LayoutOrder = 2
+GiftSection.Size = UDim2.new(1, -10, 0, 516)
+
+local targetLabel = Instance.new("TextLabel")
+targetLabel.Size = UDim2.new(1, -20, 0, 14)
+targetLabel.Position = UDim2.new(0, 10, 0, 28)
+targetLabel.Text = "Target Player:"
+targetLabel.TextColor3 = C.textDim
+targetLabel.Font = Enum.Font.Gotham
+targetLabel.TextSize = 8
+targetLabel.TextXAlignment = Enum.TextXAlignment.Left
+targetLabel.BackgroundTransparency = 1
+targetLabel.Parent = GiftSection
+
+local targetBtn = Instance.new("TextButton")
+targetBtn.Size = UDim2.new(1, -20, 0, 22)
+targetBtn.Position = UDim2.new(0, 10, 0, 47)
+targetBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+targetBtn.BorderSizePixel = 0
+targetBtn.Font = Enum.Font.Gotham
+targetBtn.Text = config.giftPetTarget and ("👤 " .. config.giftPetTarget) or "👤 Pilih player..."
+targetBtn.TextColor3 = C.text
+targetBtn.TextSize = 8
+targetBtn.TextXAlignment = Enum.TextXAlignment.Left
+targetBtn.Parent = GiftSection
+Instance.new("UICorner", targetBtn).CornerRadius = UDim.new(0, 4)
+local targetPad = Instance.new("UIPadding")
+targetPad.PaddingLeft = UDim.new(0, 8)
+targetPad.Parent = targetBtn
+
+targetBtn.MouseButton1Click:Connect(function()
+    local names = getPlayerNames()
+    if #names == 0 then
+        targetBtn.Text = "❌ Tidak ada player lain"
+        task.wait(1)
+        targetBtn.Text = config.giftPetTarget and ("👤 " .. config.giftPetTarget) or "👤 Pilih player..."
+        return
+    end
+    local currentIdx = 1
+    if config.giftPetTarget then
+        for i, n in ipairs(names) do
+            if n == config.giftPetTarget then currentIdx = i + 1 break end
+        end
+    end
+    if currentIdx > #names then currentIdx = 1 end
+    config.giftPetTarget = names[currentIdx]
+    targetBtn.Text = "👤 " .. names[currentIdx]
+    saveConfig()
+end)
+
+local refreshTargetBtn = Instance.new("TextButton")
+refreshTargetBtn.Size = UDim2.new(1, -20, 0, 18)
+refreshTargetBtn.Position = UDim2.new(0, 10, 0, 74)
+refreshTargetBtn.BackgroundColor3 = C.accent
+refreshTargetBtn.BorderSizePixel = 0
+refreshTargetBtn.Font = Enum.Font.Gotham
+refreshTargetBtn.Text = "🔄 Refresh Player List"
+refreshTargetBtn.TextColor3 = C.text
+refreshTargetBtn.TextSize = 7
+refreshTargetBtn.Parent = GiftSection
+Instance.new("UICorner", refreshTargetBtn).CornerRadius = UDim.new(0, 3)
+refreshTargetBtn.MouseButton1Click:Connect(function()
+    local names = getPlayerNames()
+    print("[Gift Pet] Players:", #names)
+    for _, n in ipairs(names) do print("  -", n) end
+    if #names > 0 and not config.giftPetTarget then
+        config.giftPetTarget = names[1]
+        targetBtn.Text = "👤 " .. names[1]
+        saveConfig()
+    end
+end)
+
+makeInputRow(GiftSection, 97, "Min Weight (KG):", "giftPetMinWeight", true, 0, 1000)
+makeInputRow(GiftSection, 118, "Max Weight (KG):", "giftPetMaxWeight", true, 0, 1000)
+makeInputRow(GiftSection, 139, "Min Level:", "giftPetMinLevel", true, 0, 1000)
+makeInputRow(GiftSection, 160, "Max Level:", "giftPetMaxLevel", true, 0, 1000)
+
+local giftPetSelectInfo = Instance.new("TextLabel")
+giftPetSelectInfo.Size = UDim2.new(1, -20, 0, 14)
+giftPetSelectInfo.Position = UDim2.new(0, 10, 0, 181)
+giftPetSelectInfo.BackgroundTransparency = 1
+giftPetSelectInfo.Font = Enum.Font.Gotham
+giftPetSelectInfo.TextSize = 7
+giftPetSelectInfo.TextColor3 = C.textDim
+giftPetSelectInfo.TextXAlignment = Enum.TextXAlignment.Left
+giftPetSelectInfo.Text = "Pilih pet yang mau di-gift"
+giftPetSelectInfo.Parent = GiftSection
+
+local giftPetSearch = Instance.new("TextBox")
+giftPetSearch.Size = UDim2.new(1, -20, 0, 22)
+giftPetSearch.Position = UDim2.new(0, 10, 0, 200)
+giftPetSearch.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+giftPetSearch.BorderSizePixel = 0
+giftPetSearch.Font = Enum.Font.Gotham
+giftPetSearch.PlaceholderText = "🔍 Cari pet..."
+giftPetSearch.Text = ""
+giftPetSearch.TextColor3 = C.text
+giftPetSearch.TextSize = 9
+giftPetSearch.Parent = GiftSection
+Instance.new("UICorner", giftPetSearch).CornerRadius = UDim.new(0, 4)
+
+local giftPetListFrame = Instance.new("ScrollingFrame")
+giftPetListFrame.Size = UDim2.new(1, -20, 0, 200)
+giftPetListFrame.Position = UDim2.new(0, 10, 0, 227)
+giftPetListFrame.BackgroundTransparency = 1
+giftPetListFrame.BorderSizePixel = 0
+giftPetListFrame.ScrollBarThickness = 3
+giftPetListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+giftPetListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+giftPetListFrame.Parent = GiftSection
+
+local giftPetListLayout = Instance.new("UIListLayout")
+giftPetListLayout.Padding = UDim.new(0, 2)
+giftPetListLayout.Parent = giftPetListFrame
+
+local function refreshGiftPetList()
+    for _, c in ipairs(giftPetListFrame:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    local search = giftPetSearch.Text:lower()
+    local petTypes = getAllPetTypesFromRegistry()
+    local items = {}
+    for _, petType in ipairs(petTypes) do
+        if search == "" or petType:lower():find(search) then
+            table.insert(items, {
+                name = petType,
+                isSelected = CONFIG.giftPetSelectedTypes[petType] == true,
+            })
+        end
+    end
+    table.sort(items, function(a, b)
+        if a.isSelected ~= b.isSelected then return a.isSelected end
+        return a.name < b.name
+    end)
+    local i = 0
+    for _, item in ipairs(items) do
+        i = i + 1
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 20)
+        btn.BackgroundColor3 = item.isSelected and C.success or Color3.fromRGB(65, 65, 80)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.Text = string.format("%s %s", item.isSelected and "✓" or "○", item.name)
+        btn.TextColor3 = C.text
+        btn.TextSize = 8
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.LayoutOrder = i
+        btn.Parent = giftPetListFrame
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 6)
+        pad.Parent = btn
+        btn.MouseButton1Click:Connect(function()
+            if config.giftPetSelectedTypes[item.name] then
+                config.giftPetSelectedTypes[item.name] = nil
+            else
+                config.giftPetSelectedTypes[item.name] = true
+            end
+            saveConfig()
+            refreshGiftPetList()
+        end)
+    end
+end
+giftPetSearch:GetPropertyChangedSignal("Text"):Connect(refreshGiftPetList)
+
+local refreshGiftPetListBtn = Instance.new("TextButton")
+refreshGiftPetListBtn.Size = UDim2.new(1, -20, 0, 18)
+refreshGiftPetListBtn.Position = UDim2.new(0, 10, 0, 432)
+refreshGiftPetListBtn.BackgroundColor3 = C.accent
+refreshGiftPetListBtn.BorderSizePixel = 0
+refreshGiftPetListBtn.Font = Enum.Font.Gotham
+refreshGiftPetListBtn.Text = "🔄 Refresh Pet List"
+refreshGiftPetListBtn.TextColor3 = C.text
+refreshGiftPetListBtn.TextSize = 7
+refreshGiftPetListBtn.Parent = GiftSection
+Instance.new("UICorner", refreshGiftPetListBtn).CornerRadius = UDim.new(0, 3)
+refreshGiftPetListBtn.MouseButton1Click:Connect(refreshGiftPetList)
+
+makeInputRow(GiftSection, 455, "Delay antar gift:", "giftPetDelayBetween", true, 0, 100)
+
+local startGiftBtn = Instance.new("TextButton")
+startGiftBtn.Size = UDim2.new(1, -20, 0, 30)
+startGiftBtn.Position = UDim2.new(0, 10, 0, 476)
+startGiftBtn.BackgroundColor3 = C.success
+startGiftBtn.BorderSizePixel = 0
+startGiftBtn.Font = Enum.Font.GothamBold
+startGiftBtn.Text = "▶️ MULAI AUTO GIFT"
+startGiftBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+startGiftBtn.TextSize = 10
+startGiftBtn.Parent = GiftSection
+Instance.new("UICorner", startGiftBtn).CornerRadius = UDim.new(0, 5)
+
+startGiftBtn.MouseButton1Click:Connect(function()
+    if isGiftPetRunning then
+        -- STOP
+        isGiftPetRunning = false
+        giftPetUserStarted = false   -- ⭐ user STOP → reset flag
+        startGiftBtn.Text = "▶️ MULAI AUTO GIFT"
+        startGiftBtn.BackgroundColor3 = C.success
+        return
+    end
+    
+    if not config.giftPetTarget then
+        statusLabel.Text = "⚠️ Pilih target player!"
+        return
+    end
+    if next(config.giftPetSelectedTypes) == nil then
+        statusLabel.Text = "⚠️ Pilih minimal 1 pet untuk di-gift!"
+        return
+    end
+    
+    isGiftPetRunning = true
+    giftPetUserStarted = true        -- ⭐ user klik MULAI
+    startGiftBtn.Text = "⏹️ STOP"
+    startGiftBtn.BackgroundColor3 = C.danger
+    
+    task.spawn(function()
+        autoGiftAllFiltered()
+        if isGiftPetRunning then
+            isGiftPetRunning = false
+            startGiftBtn.Text = "▶️ MULAI AUTO GIFT"
+            startGiftBtn.BackgroundColor3 = C.success
+        end
+    end)
+end)
 
 -- ==================================================================
 -- TAB EKSTRA
@@ -5374,6 +6003,15 @@ WebhookUrlInput.FocusLost:Connect(function()
     WebhookUrlInput.Text = config.discordWebhook
     print("[AoneHub] ✅ Discord Webhook URL tersimpan")
 end)
+
+-- ==================================================================
+-- INIT
+-- ==================================================================
+refreshEggList()
+refreshUnwantedList()
+refreshGiftPetList()
+refreshMonitor()
+switchTab("Hatch")
 
 -- ==================================================================
 -- ANTI-AFK SYSTEM
