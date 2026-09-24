@@ -1395,6 +1395,379 @@ local function finishDiscordSession(reason)
     sessionStats.active = false
 end
 
+local function buildWebhookEmbed()
+    local eggName = "?"
+    for name, _ in pairs(config.selectedEggs) do eggName = name break end
+    local petCurrent, petMax = getPetCountFromData()
+    
+    local function formatPreset(presetName)
+        if not presetName then return "-" end
+        local preset = getPresetFromFile(presetName)
+        if not preset or not preset.pets then return "-" end
+        local groups = {}
+        for _, petInfo in ipairs(preset.pets) do
+            local key = petInfo.PetType or "?"
+            if petInfo.Mutation and petInfo.Mutation ~= "Normal" then
+                key = petInfo.Mutation .. " " .. key
+            end
+            groups[key] = (groups[key] or 0) + 1
+        end
+        local list = {}
+        for name, count in pairs(groups) do table.insert(list, {name = name, count = count}) end
+        table.sort(list, function(a, b) return a.count > b.count end)
+        local parts = {}
+        for _, item in ipairs(list) do
+            table.insert(parts, string.format("%d %s", item.count, item.name))
+        end
+        return table.concat(parts, ", ")
+    end
+    
+    local function formatHuntBucket(bucket)
+        local count = 0
+        local lines = {}
+        for petName, entry in pairs(bucket) do
+            count = count + entry.count
+            local weightStr
+            if math.abs(entry.minWeight - entry.maxWeight) < 0.01 then
+                weightStr = string.format("%.2f kg", entry.minWeight)
+            else
+                weightStr = string.format("%.2f-%.2f kg", entry.minWeight, entry.maxWeight)
+            end
+            table.insert(lines, string.format("• %s x%d (%s)", petName, entry.count, weightStr))
+        end
+        return count, table.concat(lines, "\n")
+    end
+    
+    local specialCount, specialList = formatHuntBucket(STATS.huntStats.Special)
+    local hugeCount, hugeList = formatHuntBucket(STATS.huntStats.Huge)
+    local titanCount, titanList = formatHuntBucket(STATS.huntStats.Titan)
+    local godlyCount, godlyList = formatHuntBucket(STATS.huntStats.Godly)
+    
+    local eggBefore = STATS.eggBeforePlace or 0
+    local eggCurrent = STATS.eggAfterSell or 0
+    local netResult = eggCurrent - eggBefore
+    local netStr = netResult >= 0 and ("+" .. netResult) or tostring(netResult)
+    
+    local totalDuration = os.time() - STATS.sessionStart
+    local hours = math.floor(totalDuration / 3600)
+    local minutes = math.floor((totalDuration % 3600) / 60)
+    local seconds = totalDuration % 60
+    local durationStr = string.format("%dh %dm %ds", hours, minutes, seconds)
+    
+    local desc = {}
+    table.insert(desc, "**Profile :**")
+    table.insert(desc, string.format("> 👤 Username : ||%s||", player.Name))
+    table.insert(desc, string.format("> 🥚 Egg Name: ``%s``", eggName))
+    table.insert(desc, string.format("> 🐾 Pet on backpack: ``%d/%d``", petCurrent, petMax))
+    table.insert(desc, "")
+    table.insert(desc, "**Teams :**")
+    table.insert(desc, "> Core: " .. formatPreset(CONFIG.speedPreset))
+    table.insert(desc, "> Hatch: " .. formatPreset(CONFIG.hatchPreset))
+    table.insert(desc, "> Sell: " .. formatPreset(CONFIG.sellPreset))
+    table.insert(desc, "")
+    table.insert(desc, "**Hunt Statistics :**")
+    table.insert(desc, string.format("> ⭐ Special: %d", specialCount))
+    if specialList ~= "" then table.insert(desc, specialList) end
+    table.insert(desc, string.format("> 🥉 Huge: %d", hugeCount))
+    if hugeList ~= "" then table.insert(desc, hugeList) end
+    table.insert(desc, string.format("> 🥈 Titan: %d", titanCount))
+    if titanList ~= "" then table.insert(desc, titanList) end
+    table.insert(desc, string.format("> 🥇 Godly: %d", godlyCount))
+    if godlyList ~= "" then table.insert(desc, godlyList) end
+    table.insert(desc, "")
+    table.insert(desc, "**Egg Statistics :**")
+    table.insert(desc, string.format("> 📦 Egg Before: ``%d``", eggBefore))
+    table.insert(desc, string.format("> 📊 Current Amount: ``%d``", eggCurrent))
+    table.insert(desc, string.format("> 📈 Net Result: ``%s``", netStr))
+    table.insert(desc, "")
+    table.insert(desc, "**Hatch Statistics :**")
+    table.insert(desc, string.format("> 🔄 Hatch Cycles: ``%d``", STATS.totalHatchCycles))
+    table.insert(desc, string.format("> 🐣 Total Hatched: ``%d``", STATS.totalHatched))
+    table.insert(desc, string.format("> ⏱️ Cycle Duration: ``%ds``", STATS.lastCycleDuration))
+    table.insert(desc, string.format("> ⏳ All Time Duration: ``%s``", durationStr))
+    
+    return {
+        title = "🥚 Auto Hatch Report",
+        description = table.concat(desc, "\n"),
+        color = 3447003,
+        footer = { text = "AoneHub" .. os.date("%Y-%m-%d %H:%M:%S") }
+    }
+end
+
+-- ==================================================================
+-- HELPER: LOADOUT SWAP
+-- ==================================================================
+local lastLoadoutSlot = nil
+
+local function swapLoadout(slotNumber)
+    if not slotNumber then return false end
+    pcall(function()
+        PetsServiceRE:FireServer("SwapPetLoadout", slotNumber)
+    end)
+    task.wait(config.delayAfterLoadout)
+    return true
+end
+
+local function verifyEquippedMatchesPreset(presetName)
+    if not presetName then return true, {}, {} end
+    local expectedUUIDs = getPresetUUIDs(presetName)
+    local equippedUUIDs = getEquippedPets()
+    local equippedSet = {}
+    for _, uuid in ipairs(equippedUUIDs) do equippedSet[uuid] = true end
+    local presetSet = {}
+    for _, uuid in ipairs(expectedUUIDs) do presetSet[uuid] = true end
+    local toUnequip = {}
+    for _, uuid in ipairs(equippedUUIDs) do
+        if not presetSet[uuid] then table.insert(toUnequip, uuid) end
+    end
+    local toEquip = {}
+    for _, uuid in ipairs(expectedUUIDs) do
+        if not equippedSet[uuid] then table.insert(toEquip, uuid) end
+    end
+    return (#toUnequip == 0 and #toEquip == 0), toUnequip, toEquip
+end
+
+local function fixEquippedToMatchPreset(presetName)
+    local isMatch, toUnequip, toEquip = verifyEquippedMatchesPreset(presetName)
+    if isMatch then return true end
+    for _, uuid in ipairs(toUnequip) do
+        pcall(function() PetsService:UnequipPet(uuid) end)
+        task.wait(config.equipDelay)
+    end
+    for _, uuid in ipairs(toEquip) do
+        if isPetUUIDValid(uuid) then
+            pcall(function() PetsService:EquipPet(uuid, CFrame.new(0, 10, 0)) end)
+            task.wait(config.equipDelay)
+        end
+    end
+    task.wait(config.syncWaitTime)
+    return verifyEquippedMatchesPreset(presetName)
+end
+
+local function equipTeamByPreset(presetName, loadoutSlot, forceRefresh)
+    if not presetName then return false end
+    if not loadoutSlot then return false end
+    if not forceRefresh and lastLoadoutSlot == loadoutSlot then
+        local isMatch = verifyEquippedMatchesPreset(presetName)
+        if isMatch then return true end
+    end
+    swapLoadout(loadoutSlot)
+    lastLoadoutSlot = loadoutSlot
+    local isMatch = verifyEquippedMatchesPreset(presetName)
+    if isMatch then return true end
+    fixEquippedToMatchPreset(presetName)
+    return true
+end
+
+-- ==================================================================
+-- HELPER: FAVORIT
+-- ==================================================================
+local function ensureFavorit(tool, shouldBeFavorite, timeout)
+    timeout = timeout or 2
+    local current = tool:GetAttribute("d") == true
+    if current == shouldBeFavorite then return true end
+    pcall(function() FavoriteItemRE:FireServer(tool) end)
+    local startTime = os.clock()
+    while os.clock() - startTime < timeout do
+        if (tool:GetAttribute("d") == true) == shouldBeFavorite then return true end
+        task.wait(0.1)
+    end
+    return false
+end
+
+-- ==================================================================
+-- HELPER: UNWANTED
+-- ==================================================================
+local function isUnwantedPet(pet)
+    local baseName, mutation = splitPetName(pet.name)
+    if not config.unwantedPetTypes[baseName] then return false end
+    if pet.weight > config.maxWeight then return false end
+    if pet.level > config.maxLevel then return false end
+    return true
+end
+
+local function sellAll()
+    pcall(function() SellAllRE:FireServer() end)
+    task.wait(3)
+end
+
+-- ==================================================================
+-- AUTO ACCEPT GIFT
+-- ==================================================================
+local GIFT_STATS = {
+    totalAccepted = 0,
+    totalFailed = 0,
+    history = {},
+}
+
+local giftQueue = {}
+local isProcessingGiftQueue = false
+
+local function hideGiftUI()
+    if not config.giftHideUI then return end
+    local giftGui = playerGui:FindFirstChild("Gift_Notification")
+    if not giftGui then return end
+    local frame = giftGui:FindFirstChild("Frame")
+    if not frame then return end
+    for _, obj in ipairs(frame:GetDescendants()) do
+        if obj.Name == "Gift_Notification" and obj:IsA("GuiObject") then
+            obj.Visible = false
+        end
+    end
+end
+
+local function processGiftQueue()
+    if isProcessingGiftQueue then return end
+    if #giftQueue == 0 then return end  -- ⭐ skip kalau kosong
+    
+    isProcessingGiftQueue = true
+    isAutoAcceptActive = true
+    
+    -- ⭐ SAVE previous state
+    local wasWaitingEggTimer = isWaitingEggTimer
+    
+    task.spawn(function()
+        while #giftQueue > 0 do
+            local gift = table.remove(giftQueue, 1)
+            print(string.format("[Gift] Process: %s | %s", gift.id, gift.pet))
+            
+            task.wait(CONFIG.giftDelayAfter)
+            
+            local ok = pcall(function()
+                AcceptPetGift:FireServer(true, gift.id)
+            end)
+            
+            if ok then
+                GIFT_STATS.totalAccepted = GIFT_STATS.totalAccepted + 1
+            else
+                GIFT_STATS.totalFailed = GIFT_STATS.totalFailed + 1
+            end
+            
+            task.wait(0.5)
+            hideGiftUI()
+            task.wait(0.3)
+            hideGiftUI()
+            
+            if #giftQueue > 0 then
+                task.wait(CONFIG.giftDelayBetween)
+            end
+        end
+        task.wait(0.5)
+        hideGiftUI()
+        isProcessingGiftQueue = false
+        isAutoAcceptActive = false
+    end)
+end
+
+GiftPetEvent.OnClientEvent:Connect(function(giftId, petName, weightInfo)
+    if not CONFIG.giftEnabled then return end
+    if not giftId or typeof(giftId) ~= "string" then return end
+    
+    -- ⭐ SELALU tambahkan ke queue
+    table.insert(giftQueue, { 
+        id = giftId, 
+        pet = petName, 
+        weight = weightInfo, 
+        time = os.time() 
+    })
+    table.insert(GIFT_STATS.history, { 
+        id = giftId, 
+        pet = petName, 
+        weight = weightInfo, 
+        time = os.time() 
+    })
+    
+    print(string.format("[Gift] 📥 Queued: %s | %s (queue: %d)", 
+        giftId, tostring(petName), #giftQueue))
+    
+    -- ⭐ HANYA process kalau SEDANG TUNGGU EGG TIMER
+    if isRunning and not isWaitingEggTimer then
+        print("[Gift] Skip process — tunggu fase tunggu egg timer")
+        return
+    end
+    
+    -- Process queue (hanya kalau tunggu timer atau auto hatch OFF)
+    processGiftQueue()
+end)
+
+-- ==================================================================
+-- AUTO GIFT PET
+-- ==================================================================
+local function autoGiftOnePet(petName, targetUsername)
+    local target = findPlayerByName(targetUsername)
+    if not target then return false end
+    
+    local petTool = findPetToolByName(petName)
+    if not petTool then return false end
+    
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    
+    -- Equip
+    pcall(function() humanoid:EquipTool(petTool) end)
+    
+    -- ⭐ Delay setelah equip sebelum cek favorit
+    task.wait(CONFIG.giftPetDelayEquip)
+    
+    -- Cek & unfavorit
+    if petTool:GetAttribute("d") == true then
+        pcall(function() FavoriteItemRE:FireServer(petTool) end)
+        task.wait(CONFIG.giftPetDelayUnfavorit)
+    end
+    
+    -- Fire gift
+    print(string.format("[Gift Pet] Kirim %s → %s", petName, targetUsername))
+    local ok = pcall(function()
+        PetGiftingService:FireServer("GivePet", target)
+    end)
+    
+    task.wait(CONFIG.giftPetDelayBetween)
+    return ok
+end
+
+local function autoGiftAllFiltered()
+    if not CONFIG.giftPetTarget then return end
+    local target = findPlayerByName(CONFIG.giftPetTarget)
+    if not target then return end
+    
+    isAutoGiftActive = true
+    
+    local pets = getBackpackPets()
+    local toGift = {}
+    
+    for _, pet in ipairs(pets) do
+        local skip = false
+        if pet.weight < CONFIG.giftPetMinWeight then skip = true end
+        if pet.weight > CONFIG.giftPetMaxWeight then skip = true end
+        if pet.level < CONFIG.giftPetMinLevel then skip = true end
+        if pet.level > CONFIG.giftPetMaxLevel then skip = true end
+        
+        if not skip and next(CONFIG.giftPetSelectedTypes) ~= nil then
+            local baseName = splitPetName(pet.name)
+            if not CONFIG.giftPetSelectedTypes[baseName] and not CONFIG.giftPetSelectedTypes[pet.name] then
+                skip = true
+            end
+        end
+        
+        if not skip then table.insert(toGift, pet) end
+    end
+    
+    print(string.format("[Gift Pet] %d pet lolos filter", #toGift))
+    
+    if #toGift == 0 then
+        isAutoGiftActive = false
+        return
+    end
+    
+    for i, pet in ipairs(toGift) do
+        if not isGiftPetRunning then break end
+        print(string.format("[Gift Pet] [%d/%d] %s", i, #toGift, pet.name))
+        autoGiftOnePet(pet.name, CONFIG.giftPetTarget)
+    end
+    
+    isAutoGiftActive = false
+end
 
 -- ==================================================================
 -- GUI SKELETON
