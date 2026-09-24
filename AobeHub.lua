@@ -1402,7 +1402,7 @@ local function buildWebhookEmbed()
     
     local function formatPreset(presetName)
         if not presetName then return "-" end
-        local preset = getPresetFromFile(presetName)
+        local preset = getPreset(presetName)
         if not preset or not preset.pets then return "-" end
         local groups = {}
         for _, petInfo in ipairs(preset.pets) do
@@ -1631,7 +1631,7 @@ local function processGiftQueue()
             local gift = table.remove(giftQueue, 1)
             print(string.format("[Gift] Process: %s | %s", gift.id, gift.pet))
             
-            task.wait(CONFIG.giftDelayAfter)
+            task.wait(config.giftDelayAfter)
             
             local ok = pcall(function()
                 AcceptPetGift:FireServer(true, gift.id)
@@ -1649,7 +1649,7 @@ local function processGiftQueue()
             hideGiftUI()
             
             if #giftQueue > 0 then
-                task.wait(CONFIG.giftDelayBetween)
+                task.wait(config.giftDelayBetween)
             end
         end
         task.wait(0.5)
@@ -1660,7 +1660,7 @@ local function processGiftQueue()
 end
 
 GiftPetEvent.OnClientEvent:Connect(function(giftId, petName, weightInfo)
-    if not CONFIG.giftEnabled then return end
+    if not config.giftEnabled then return end
     if not giftId or typeof(giftId) ~= "string" then return end
     
     -- ⭐ SELALU tambahkan ke queue
@@ -1708,12 +1708,12 @@ local function autoGiftOnePet(petName, targetUsername)
     pcall(function() humanoid:EquipTool(petTool) end)
     
     -- ⭐ Delay setelah equip sebelum cek favorit
-    task.wait(CONFIG.giftPetDelayEquip)
+    task.wait(config.giftPetDelayEquip)
     
     -- Cek & unfavorit
     if petTool:GetAttribute("d") == true then
         pcall(function() FavoriteItemRE:FireServer(petTool) end)
-        task.wait(CONFIG.giftPetDelayUnfavorit)
+        task.wait(config.giftPetDelayUnfavorit)
     end
     
     -- Fire gift
@@ -1722,13 +1722,13 @@ local function autoGiftOnePet(petName, targetUsername)
         PetGiftingService:FireServer("GivePet", target)
     end)
     
-    task.wait(CONFIG.giftPetDelayBetween)
+    task.wait(config.giftPetDelayBetween)
     return ok
 end
 
 local function autoGiftAllFiltered()
-    if not CONFIG.giftPetTarget then return end
-    local target = findPlayerByName(CONFIG.giftPetTarget)
+    if not config.giftPetTarget then return end
+    local target = findPlayerByName(config.giftPetTarget)
     if not target then return end
     
     isAutoGiftActive = true
@@ -1738,14 +1738,14 @@ local function autoGiftAllFiltered()
     
     for _, pet in ipairs(pets) do
         local skip = false
-        if pet.weight < CONFIG.giftPetMinWeight then skip = true end
-        if pet.weight > CONFIG.giftPetMaxWeight then skip = true end
-        if pet.level < CONFIG.giftPetMinLevel then skip = true end
-        if pet.level > CONFIG.giftPetMaxLevel then skip = true end
+        if pet.weight < config.giftPetMinWeight then skip = true end
+        if pet.weight > config.giftPetMaxWeight then skip = true end
+        if pet.level < config.giftPetMinLevel then skip = true end
+        if pet.level > config.giftPetMaxLevel then skip = true end
         
-        if not skip and next(CONFIG.giftPetSelectedTypes) ~= nil then
+        if not skip and next(config.giftPetSelectedTypes) ~= nil then
             local baseName = splitPetName(pet.name)
-            if not CONFIG.giftPetSelectedTypes[baseName] and not CONFIG.giftPetSelectedTypes[pet.name] then
+            if not config.giftPetSelectedTypes[baseName] and not config.giftPetSelectedTypes[pet.name] then
                 skip = true
             end
         end
@@ -1763,10 +1763,273 @@ local function autoGiftAllFiltered()
     for i, pet in ipairs(toGift) do
         if not isGiftPetRunning then break end
         print(string.format("[Gift Pet] [%d/%d] %s", i, #toGift, pet.name))
-        autoGiftOnePet(pet.name, CONFIG.giftPetTarget)
+        autoGiftOnePet(pet.name, config.giftPetTarget)
     end
     
     isAutoGiftActive = false
+end
+
+-- ==================================================================
+-- STATUS
+-- ==================================================================
+local function updatesStatus(text)
+    if statusCallback and not isguiDestroyed then statusCallback(text) end
+    print("[AutoHatch]", text)
+end
+
+-- ==================================================================
+-- FASE 1: PLACE EGG
+-- ==================================================================
+local function placeEggsFromBackpack()
+    local totalSlots = #config.eggGridOffsets
+    task.wait(config.scanSettleDelay)
+    local emptySlots, occupied = getEmptySlots()
+    if #emptySlots == 0 then
+        updatesStatus("⚠️ Garden penuh")
+        return 0
+    end
+    updatesStatus(string.format("📦 %d slot kosong", #emptySlots))
+    local eggTool = findEggTool()
+    if not eggTool then
+        updatesStatus("⚠️ Tidak ada egg")
+        return 0
+    end
+    local backpack = player:FindFirstChild("Backpack")
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if eggTool.Parent == backpack and humanoid then
+        pcall(function() humanoid:EquipTool(eggTool) end)
+        task.wait(0.5)
+    end
+    local center = getCenterPoint()
+    if not center then return 0 end
+    local placed = 0
+    for _, slotIndex in ipairs(emptySlots) do
+        if not isRunning then break end
+        local currentEggTool = findEggTool()
+        if not currentEggTool then break end
+        if currentEggTool.Parent == backpack and humanoid then
+            pcall(function() humanoid:EquipTool(currentEggTool) end)
+            task.wait(0.5)
+        end
+        local pos = center.Position + config.eggGridOffsets[slotIndex]
+        local ok = pcall(function()
+            PetEggService:FireServer("CreateEgg", pos)
+        end)
+        if ok then
+            placed = placed + 1
+            updatesStatus(string.format("📦 Place %d/%d", placed, #emptySlots))
+            task.wait(config.placeDelay)
+        end
+    end
+    if humanoid then
+        pcall(function() humanoid:UnequipTools() end)
+        task.wait(0.5)
+    end
+    return placed
+end
+
+-- ==================================================================
+-- FASE 2: CYCLE
+-- ==================================================================
+local function runOneCycle(cycleNum, totalCycles)
+    if cycleNum == 1 then STATS.cycleStartTime = os.time() end
+    updatesStatus(string.format("[%d/%d] 📦 Place egg...", cycleNum, totalCycles))
+    local placed = placeEggsFromBackpack()
+    local existingEggs = getMyGardenEggs()
+    local allReady = false
+    if placed == 0 then
+        if #existingEggs == 0 then return false end
+        allReady = true
+        for _, egg in ipairs(existingEggs) do
+            if (egg:GetAttribute("TimeToHatch") or 999) > 0 then allReady = false break end
+        end
+    end
+    task.wait(2)
+    
+    -- ⭐ FASE TUNGGU TIMER dengan Auto Gift & Auto Accept
+    if not allReady then
+        updatesStatus(string.format("[%d/%d] ⚡ Tim Speed...", cycleNum, totalCycles))
+        equipTeamByPreset(config.speedPreset, CONFIG.speedLoadout)
+        task.wait(config.delayAfterSpeed)
+    
+        updatesStatus(string.format("[%d/%d] ⏳ Menunggu ready...", cycleNum, totalCycles))
+    
+        -- ⭐ SET STATE: Tunggu egg timer
+        isWaitingEggTimer = true
+    
+        -- ⭐ Process gift queue yang menumpuk
+        if #giftQueue > 0 then
+            print(string.format("[AutoHatch] Process %d gift dari queue...", #giftQueue))
+            processGiftQueue()
+        end
+    
+        -- ⭐ Auto-start auto gift
+        if giftPetUserStarted and not isGiftPetRunning and config.giftPetTarget then
+            local hasPetsToGift = false
+            for _, pet in ipairs(getBackpackPets()) do
+                if pet.weight >= config.giftPetMinWeight 
+                   and pet.weight <= config.giftPetMaxWeight
+                   and pet.level >= config.giftPetMinLevel
+                   and pet.level <= config.giftPetMaxLevel then
+                    hasPetsToGift = true
+                    break
+                end
+            end
+            if hasPetsToGift then
+                print("[AutoHatch] Auto-start Auto Gift...")
+                isGiftPetRunning = true
+                task.spawn(function()
+                    autoGiftAllFiltered()
+                    if isGiftPetRunning then
+                        isGiftPetRunning = false
+                    end
+                end)
+            end
+        end
+    
+        local waitStart = os.clock()
+        while (os.clock() - waitStart) < 900 and isRunning do
+            local eggs = getMyGardenEggs()
+            if #eggs == 0 then break end
+            local readyAll = true
+            for _, egg in ipairs(eggs) do
+                if (egg:GetAttribute("TimeToHatch") or 0) > 0 then readyAll = false break end
+            end
+            if readyAll then break end
+            task.wait(3)
+        end
+    
+        -- ⭐ TUNGGU AUTO GIFT & AUTO ACCEPT SELESAI
+        updatesStatus(string.format("[%d/%d] ⏳ Menunggu gift/accept selesai...", cycleNum, totalCycles))
+        local hasActiveProcess = false
+        while (isAutoGiftActive or isAutoAcceptActive or isGiftPetRunning) and isRunning do
+            hasActiveProcess = true
+            task.wait(1)
+        end
+    
+        -- ⭐ Kalau ADA proses yang aktif → delay
+        if hasActiveProcess then
+            updatesStatus(string.format("[%d/%d] ⏳ Delay %ss...", 
+                cycleNum, totalCycles, config.delayAfterGiftSync))
+            task.wait(config.delayAfterGiftSync)
+        end
+    
+        -- ⭐ CLEAR STATE
+        isWaitingEggTimer = false
+    
+        if not isRunning then return false end
+        task.wait(1)
+    end
+    
+    updatesStatus(string.format("[%d/%d] 🥚 Tim Hatch...", cycleNum, totalCycles))
+    equipTeamByPreset(config.hatchPreset, config.hatchLoadout)
+    task.wait(config.delayAfterHatch)
+    local eggsToHatch = {}
+    for _, egg in ipairs(getMyGardenEggs()) do
+        if (egg:GetAttribute("TimeToHatch") or 999) <= 0 then table.insert(eggsToHatch, egg) end
+    end
+    local hatchCount = #eggsToHatch
+    for _, egg in ipairs(eggsToHatch) do
+        if not isRunning then break end
+        hatchEgg(egg)
+        task.wait(config.hatchDelay)
+    end
+    local timeout = os.clock() + 60
+    while isRunning and os.clock() < timeout do
+        local hasReadyEgg = false
+        for _, egg in ipairs(getMyGardenEggs()) do
+            if (egg:GetAttribute("TimeToHatch") or 999) <= 0 then hasReadyEgg = true break end
+        end
+        if not hasReadyEgg then break end
+        task.wait(1)
+    end
+    STATS.totalHatched = STATS.totalHatched + hatchCount
+    task.wait(config.delayAfterHatchAll)
+    STATS.totalHatchCycles = STATS.totalHatchCycles + 1
+    STATS.lastCycleDuration = os.time() - STATS.cycleStartTime
+    task.wait(2)
+    return true
+end
+
+-- ==================================================================
+-- FASE 3: FILTER + SELL
+-- ==================================================================
+local function runFilterAndSell()
+    if not config.autoSell then return end
+    updatesStatus("💸 Tim Sell...")
+    equipTeamByPreset(config.sellPreset, config.sellLoadout)
+    task.wait(config.delayAfterSell)
+    updatesStatus("⭐ Filter pet...")
+    local pets = getBackpackPets()
+    local favCount = 0
+    local skipCount = 0
+    local presetProtectCount = 0
+    for _, pet in ipairs(pets) do
+        if not isRunning then return end
+        local shouldBeFav = isPetInPreset(pet.name) or not isUnwantedPet(pet)
+        if shouldBeFav then
+            local ok = ensureFavorit(pet.tool, true)
+            if ok then
+                if isPetInPreset(pet.name) then presetProtectCount = presetProtectCount + 1
+                else favCount = favCount + 1 end
+            end
+        else
+            skipCount = skipCount + 1
+        end
+    end
+    updatesStatus(string.format("⭐ Preset:%d Fav:%d Skip:%d", presetProtectCount, favCount, skipCount))
+    task.wait(1)
+    for _, pet in ipairs(getBackpackPets()) do
+        local shouldBeFav = isPetInPreset(pet.name) or not isUnwantedPet(pet)
+        if shouldBeFav and not pet.isFavorited then
+            ensureFavorit(pet.tool, true)
+        end
+    end
+    task.wait(config.delayBeforeSell)
+    updatesStatus("💰 Sell all...")
+    sellAll()
+    task.wait(3)
+    STATS.eggAfterSell = countEggsInBackpack()
+    updatesStatus("✅ Sell selesai")
+    task.wait(2)
+    scanNewPetsAfterSell()
+end
+
+-- ==================================================================
+-- MAIN LOOP
+-- ==================================================================
+local function startAutoHatch()
+    if isRunning then return end
+    refreshUnwantedMutationsCache()
+    resetStats()
+    STATS.knownUUIDs = getInventoryUUIDs()
+    STATS.eggBeforePlace = countEggsInBackpack()
+    isRunning = true
+    task.spawn(function()
+        while isRunning and not isguiDestroyed do
+            for cycle = 1, config.cycleCount do
+                if not isRunning or isguiDestroyed then break end
+                runOneCycle(cycle, config.cycleCount)
+            end
+            if not isRunning or isguiDestroyed then break end
+            runFilterAndSell()
+            if not isRunning or isguiDestroyed then break end
+            if config.webhookEnabled then
+                local embed = buildWebhookEmbed()
+                task.spawn(function() sendDiscordWebhook(payload) end)
+            end
+            updatesStatus("🔄 Cycle baru...")
+            task.wait(5)
+        end
+        if not isguiDestroyed then updatesStatus("Status: Stopped") end
+        isRunning = false
+    end)
+end
+
+local function stopAutoHatch()
+    isRunning = false
+    updatesStatus("⏹️ Stopping...")
 end
 
 -- ==================================================================
@@ -2104,6 +2367,63 @@ for _, tab in ipairs(tabs) do
     f.Visible = false
     f.Parent = contentArea
     tabFrames[tab.name] = f
+end
+
+local function makeInputRow(parent, yPos, label, configKey, isNumber, min, max)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0.55, -15, 0, 16)
+    lbl.Position = UDim2.new(0, 10, 0, yPos)
+    lbl.Text = label
+    lbl.TextColor3 = C.textDim
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 8
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.BackgroundTransparency = 1
+    lbl.Parent = parent
+    
+    local input = Instance.new("TextBox")
+    input.Size = UDim2.new(0.45, -15, 0, 20)
+    input.Position = UDim2.new(0.55, 5, 0, yPos)
+    input.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    input.BorderSizePixel = 0
+    input.Font = Enum.Font.Gotham
+    input.Text = tostring(config[configKey])
+    input.TextColor3 = C.text
+    input.TextSize = 8
+    input.Parent = parent
+    Instance.new("UICorner", input).CornerRadius = UDim.new(0, 3)
+    input.FocusLost:Connect(function()
+        if isNumber then
+            local n = tonumber(input.Text)
+            if n and (min == nil or n >= min) and (max == nil or n <= max) then
+                config[configKey] = n
+                saveConfig()
+            end
+        end
+        input.Text = tostring(config[configKey])
+    end)
+    return input
+end
+
+local function makeToggle(parent, yPos, onText, offText, configKey)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -20, 0, 22)
+    btn.Position = UDim2.new(0, 10, 0, yPos)
+    btn.BackgroundColor3 = config[configKey] and C.success or Color3.fromRGB(70, 70, 85)
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.Gotham
+    btn.Text = config[configKey] and onText or offText
+    btn.TextColor3 = C.text
+    btn.TextSize = 9
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+    btn.MouseButton1Click:Connect(function()
+        config[configKey] = not config[configKey]
+        btn.Text = config[configKey] and onText or offText
+        btn.BackgroundColor3 = config[configKey] and C.success or Color3.fromRGB(70, 70, 85)
+        saveConfig()
+    end)
+    return btn
 end
 
 -- ==================================================================
@@ -4617,8 +4937,266 @@ end
 switchTab("Weight")
 
 print("✅ AoneHub Auto Leveling loaded! Config:", SAVE_FILE)
+-- ==================================================================
+-- TAB HATCH
+-- ==================================================================
+local hatchTab = tabFrames["Hatch"]
 
--- Setup Extra Tab dengan Scroll
+local hatchScroll = Instance.new("ScrollingFrame")
+hatchScroll.Size = UDim2.new(1, -10, 1, -10)
+hatchScroll.Position = UDim2.new(0, 5, 0, 5)
+hatchScroll.BackgroundTransparency = 1
+hatchScroll.BorderSizePixel = 0
+hatchScroll.ScrollBarThickness = 4
+hatchScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+hatchScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+hatchScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y  -- Auto size
+hatchScroll.Parent = hatchTab
+
+local hatchLayout = Instance.new("UIListLayout")
+hatchLayout.Padding = UDim.new(0, 6)
+hatchLayout.SortOrder = Enum.SortOrder.LayoutOrder
+hatchLayout.Parent = hatchScroll
+
+local MonitorSection = createSection(hatchScroll, "🖥 Hatch Monitoring", "monitorPreset")
+MonitorSection.LayoutOrder = 1
+MonitorSection.Size = UDim2.new(1, -10, 0, 180)
+
+
+
+
+local PresetSection = createSection(hatchScroll, "🐣 Tim Preset", "teamPreset")
+PresetSection.LayoutOrder = 2
+PresetSection.Size = UDim2.new(1, -10, 0, 180)
+
+-- Dropdown Tim Leveling
+local TeamSpeedDropdown = createDynamicDropdown(
+    PresetSection,
+    UDim2.new(0, 10, 0, 28),
+    speedPreset and string.format("📂 %s", speedPreset) or "📂 Pilih Preset Tim Utama",
+    PresetSection,
+    180,
+    hatchScroll
+)
+
+-- Dropdown Tim Leveling
+local TeamHatchDropdown = createDynamicDropdown(
+    PresetSection,
+    UDim2.new(0, 10, 0, 61),
+    hatchPreset and string.format("📂 %s", hatchPreset) or "📂 Pilih Preset Tim Hatch",
+    PresetSection,
+    180,
+    hatchScroll
+)
+
+-- Dropdown Tim Leveling
+local TeamSellDropdown = createDynamicDropdown(
+    PresetSection,
+    UDim2.new(0, 10, 0, 94),
+    sellPreset and string.format("📂 %s", sellPreset) or "📂 Pilih Preset Tim Sell",
+    PresetSection,
+    180,
+    hatchScroll
+)
+
+makeInputRow(PresetSection, 127, "Jumlah cycle:", "cycleCount", true, 1, 10)
+makeToggle(PresetSection, 148, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
+
+local EggSection = createSection(hatchScroll, "🥚 Pilih Egg", "selectEgg")
+EggSection.LayoutOrder = 3
+EggSection.Size = UDim2.new(1, -10, 0, 243)
+
+local eggRefreshBtn = Instance.new("TextButton")
+eggRefreshBtn.Size = UDim2.new(1, -20, 0, 20)
+eggRefreshBtn.Position = UDim2.new(0, 10, 0, 28)
+eggRefreshBtn.BackgroundColor3 = C.accent
+eggRefreshBtn.BorderSizePixel = 0
+eggRefreshBtn.Font = Enum.Font.Gotham
+eggRefreshBtn.Text = "🔄 Refresh Egg List"
+eggRefreshBtn.TextColor3 = C.text
+eggRefreshBtn.TextSize = 8
+eggRefreshBtn.Parent = EggSection
+Instance.new("UICorner", eggRefreshBtn).CornerRadius = UDim.new(0, 4)
+
+local eggScroll = Instance.new("ScrollingFrame")
+eggScroll.Size = UDim2.new(1, -20, 0, 180)
+eggScroll.Position = UDim2.new(0, 10, 0, 53)
+eggScroll.BackgroundTransparency = 1
+eggScroll.BorderSizePixel = 0
+eggScroll.ScrollBarThickness = 3
+eggScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+eggScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+eggScroll.Parent = EggSection
+
+local eggLayout = Instance.new("UIListLayout")
+eggLayout.Padding = UDim.new(0, 3)
+eggLayout.Parent = eggScroll
+
+local function refreshEggList()
+    for _, c in ipairs(eggScroll:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    local eggList = {}
+    for _, eggInfo in ipairs(getBackpackEggs()) do
+        eggList[eggInfo.name] = (eggList[eggInfo.name] or 0) + eggInfo.count
+    end
+    local items = {}
+    for eggName, count in pairs(eggList) do
+        table.insert(items, {
+            name = eggName,
+            count = count,
+            isSelected = config.selectedEggs[eggName] == true,
+        })
+    end
+    table.sort(items, function(a, b)
+        if a.isSelected ~= b.isSelected then return a.isSelected end
+        return a.name < b.name
+    end)
+    local i = 0
+    for _, item in ipairs(items) do
+        i = i + 1
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 24)
+        btn.BackgroundColor3 = item.isSelected and C.success or Color3.fromRGB(65, 65, 80)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.Text = string.format("%s %s (x%d)", item.isSelected and "✓" or "○", item.name, item.count)
+        btn.TextColor3 = C.text
+        btn.TextSize = 9
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.LayoutOrder = i
+        btn.Parent = eggScroll
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 8)
+        pad.Parent = btn
+        btn.MouseButton1Click:Connect(function()
+            if config.selectedEggs[item.name] then
+                config.selectedEggs[item.name] = nil
+            else
+                config.selectedEggs[item.name] = true
+            end
+            saveConfig()
+            refreshEggList()
+        end)
+    end
+    if i == 0 then
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, -4, 0, 30)
+        lbl.Text = "(Tidak ada egg di backpack)"
+        lbl.TextColor3 = C.textDim
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 9
+        lbl.BackgroundTransparency = 1
+        lbl.Parent = eggScroll
+    end
+end
+eggRefreshBtn.MouseButton1Click:Connect(refreshEggList)
+
+local FilterSection = createSection(hatchScroll, "😺 Filter Pet", "petFilter")
+FilterSection.LayoutOrder = 4
+FilterSection.Size = UDim2.new(1, -10, 0, 368)
+
+makeInputRow(FilterSection, 28, "Max Weight (KG):", "maxWeight", true, 0, 1000)
+makeInputRow(FilterSection, 49, "Max Level:", "maxLevel", true, 0, 1000)
+
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1, -20, 0, 22)
+searchBox.Position = UDim2.new(0, 10, 0, 76)
+searchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+searchBox.BorderSizePixel = 0
+searchBox.Font = Enum.Font.Gotham
+searchBox.PlaceholderText = "🔍 Cari pet..."
+searchBox.Text = ""
+searchBox.TextColor3 = C.text
+searchBox.TextSize = 9
+searchBox.Parent = FilterSection
+Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0, 4)
+
+local countLabel = Instance.new("TextLabel")
+countLabel.Size = UDim2.new(1, -20, 0, 14)
+countLabel.Position = UDim2.new(0, 10, 0, 103)
+countLabel.Text = ""
+countLabel.TextColor3 = C.textDim
+countLabel.Font = Enum.Font.Gotham
+countLabel.TextSize = 7
+countLabel.TextXAlignment = Enum.TextXAlignment.Left
+countLabel.BackgroundTransparency = 1
+countLabel.Parent = FilterSection
+
+local listFrame = Instance.new("ScrollingFrame")
+listFrame.Size = UDim2.new(1, -20, 0, 230)
+listFrame.Position = UDim2.new(0, 10, 0, 122)
+listFrame.BackgroundTransparency = 1
+listFrame.BorderSizePixel = 0
+listFrame.ScrollBarThickness = 3
+listFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+listFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+listFrame.Parent = FilterSection
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 2)
+listLayout.Parent = listFrame
+
+local function refreshUnwantedList()
+    for _, c in ipairs(listFrame:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    local search = searchBox.Text:lower()
+    local petTypes = getAllPetTypesFromRegistry()
+    local items = {}
+    for _, petType in ipairs(petTypes) do
+        if search == "" or petType:lower():find(search) then
+            table.insert(items, {
+                name = petType,
+                isSelected = config.unwantedPetTypes[petType] == true,
+            })
+        end
+    end
+    table.sort(items, function(a, b)
+        if a.isSelected ~= b.isSelected then return a.isSelected end
+        return a.name < b.name
+    end)
+    local i = 0
+    local selectedCount = 0
+    for _, item in ipairs(items) do
+        i = i + 1
+        if item.isSelected then selectedCount = selectedCount + 1 end
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 20)
+        btn.BackgroundColor3 = item.isSelected and C.danger or Color3.fromRGB(65, 65, 80)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.Text = string.format("%s %s", item.isSelected and "✓" or "○", item.name)
+        btn.TextColor3 = C.text
+        btn.TextSize = 8
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.LayoutOrder = i
+        btn.Parent = listFrame
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 6)
+        pad.Parent = btn
+        btn.MouseButton1Click:Connect(function()
+            if config.unwantedPetTypes[item.name] then
+                config.unwantedPetTypes[item.name] = nil
+            else
+                config.unwantedPetTypes[item.name] = true
+            end
+            saveConfig()
+            refreshUnwantedList()
+        end)
+    end
+    countLabel.Text = string.format("Total: %d pet | Terpilih: %d", i, selectedCount)
+end
+searchBox:GetPropertyChangedSignal("Text"):Connect(refreshUnwantedList)
+
+
+
+
+-- ==================================================================
+-- TAB EKSTRA
+-- ==================================================================
 local extraTab = tabFrames["Ekstra"]
 
 local extraScroll = Instance.new("ScrollingFrame")
