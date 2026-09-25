@@ -2163,10 +2163,10 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             task.wait(config.delayBeforeSell)
             updatesStatus("💰 Sell all...")
             sellAll()
-            task.wait(3)
+            task.wait(2)
             STATS.eggAfterSell = countEggsInBackpack()
             updatesStatus("✅ Sell selesai")
-            task.wait(2)
+            task.wait(1)
             scanNewPetsAfterSell()
             refreshMonitor()
         end
@@ -2199,7 +2199,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                         task.spawn(function() sendDiscordWebhook(embed) end)
                     end
                     updatesStatus("🔄 Cycle baru...")
-                    task.wait(5)
+                    task.wait(1)
                 end
                 if not isGuiDestroyed then updatesStatus("Status: Stopped") end
                 isRunning = false
