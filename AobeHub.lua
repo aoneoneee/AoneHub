@@ -238,7 +238,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         local function getUnwantedMutations()
             return config.unwantedMutations or {}
         end
-
+        
         function splitPetName(petName)
             if not petName then
                 return petName, nil
@@ -2176,7 +2176,6 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         -- ==================================================================
         function startAutoHatch()
             if isRunning then return end
-            refreshUnwantedMutationsCache()
             resetStats()
             STATS.knownUUIDs = getInventoryUUIDs()
             STATS.eggBeforePlace = countEggsInBackpack()
