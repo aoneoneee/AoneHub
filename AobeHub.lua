@@ -2640,13 +2640,13 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
 end -- BLOCK 6
 
 -- shared: diisi di BLOCK 7 (UI HELPERS, DYNAMIC DROPDOWN SYSTEM)
-local createSection, createDynamicDropdown, sectionMeta
+local createSection, createDynamicDropdown,
 
 do -- BLOCK 7: UI HELPERS, DYNAMIC DROPDOWN SYSTEM
     -- ==================================================================
     -- UI HELPERS
     -- ==================================================================
-    sectionMeta = {}
+    local sectionMeta = {}
 
     function createSection(parent, title, sectionKey)
         local SectionFrame = Instance.new("Frame")
@@ -2735,31 +2735,33 @@ do -- BLOCK 7: UI HELPERS, DYNAMIC DROPDOWN SYSTEM
             local meta = sectionMeta[SectionFrame]
             if not meta then return end
 
-            meta.expanded = not meta.expanded
+            -- ✅ Guard: kalau ukuran sekarang adalah collapsedHeight, berarti sedang collapsed
+            -- maka jangan simpan sebagai expandedHeight
+            local currentHeight = SectionFrame.Size.Y.Offset
+    
+            if meta.expanded then
+                -- SEDANG EXPANDED → mau collapse
+                -- Simpan tinggi saat ini (hanya kalau > collapsedHeight, untuk hindari overwrite dengan nilai collapse)
+                if currentHeight > meta.collapsedHeight then
+                    meta.expandedHeight = currentHeight
+                end
+                meta.expanded = false
+                SectionTitle.Text = "▶  " .. meta.title
+                SectionFrame.Size = UDim2.new(1, -10, 0, meta.collapsedHeight)
+            else
+                -- SEDANG COLLAPSED → mau expand
+                meta.expanded = true
+                SectionTitle.Text = "▼  " .. meta.title
+                local targetHeight = meta.expandedHeight
+                -- ✅ Guard: pastikan targetHeight minimal lebih besar dari collapsedHeight
+                if not targetHeight or targetHeight <= meta.collapsedHeight then
+                    targetHeight = meta.collapsedHeight + 100  -- fallback aman
+                end
+                SectionFrame.Size = UDim2.new(1, -10, 0, targetHeight)
+            end
 
-            -- Simpan status langsung ke config.
             config.sectionStates[meta.key] = meta.expanded
             saveConfig()
-
-            if meta.expanded then
-                -- Ambil tinggi terakhir saat section terbuka.
-                local targetHeight = meta.expandedHeight
-
-                SectionTitle.Text = "▼  " .. meta.title
-
-                SectionFrame.Size = UDim2.new(
-                    1, -10, 0, targetHeight
-                )
-            else
-                -- Simpan tinggi sebelum ditutup agar dropdown dinamis tidak kehilangan ukurannya.
-                meta.expandedHeight = SectionFrame.Size.Y.Offset
-
-                SectionTitle.Text = "▶  " .. meta.title
-
-                SectionFrame.Size = UDim2.new(
-                    1, -10, 0, meta.collapsedHeight
-                )
-            end
         end)
 
         return SectionFrame, SectionTitle
@@ -5202,19 +5204,41 @@ do -- BLOCK 11: TAB HATCH
 
     -- Sinkronkan tinggi MonitorSection (lewat sectionMeta) tiap kali isi MonitorContent berubah.
     local function syncMonitorSectionHeight()
-        local meta = sectionMeta[MonitorSection]
-        local totalHeight = 28 + 8 + MonitorContent.AbsoluteSize.Y + 8
+        -- ✅ Validasi ketat
+        if not MonitorSection or typeof(MonitorSection) ~= "Instance" then
+            return
+        end
+        if not MonitorSection.Parent then
+            return  -- section sudah dihancurkan
+        end
+        if not MonitorContent or not MonitorContent.Parent then
+            return
+        end
+
+        local meta = sectionMeta and sectionMeta[MonitorSection]
+    
+        local contentHeight = MonitorContent.AbsoluteSize.Y
+        local totalHeight = 28 + 8 + contentHeight + 8
+
         if meta then
             meta.expandedHeight = totalHeight
+            -- Hanya ubah size kalau section sedang expanded
             if meta.expanded then
                 MonitorSection.Size = UDim2.new(1, -10, 0, totalHeight)
             end
+            -- Kalau collapsed, JANGAN sentuh size (biarkan 28px)
         else
+            -- Fallback: kalau meta tidak ditemukan, jangan crash
             MonitorSection.Size = UDim2.new(1, -10, 0, totalHeight)
         end
     end
+
     MonitorContent:GetPropertyChangedSignal("AbsoluteSize"):Connect(syncMonitorSectionHeight)
-    task.defer(syncMonitorSectionHeight)
+    task.defer(function()
+        -- Delay sedikit supaya MonitorSection sudah ter-assign penuh
+        task.wait(0.1)
+        syncMonitorSectionHeight()
+    end)
 
     monitorLabels.profileLabel = Instance.new("TextLabel")
     monitorLabels.profileLabel.Size = UDim2.new(1, 0, 0, 0)
