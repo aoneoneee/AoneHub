@@ -1513,9 +1513,9 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             table.insert(desc, string.format("> 🐾 Pet on backpack: ``%d/%d``", petCurrent, petMax))
             table.insert(desc, "")
             table.insert(desc, "**Teams :**")
-            table.insert(desc, "> Core: " .. formatPreset(CONFIG.speedPreset))
-            table.insert(desc, "> Hatch: " .. formatPreset(CONFIG.hatchPreset))
-            table.insert(desc, "> Sell: " .. formatPreset(CONFIG.sellPreset))
+            table.insert(desc, "> Core: " .. formatPreset(config.speedPreset))
+            table.insert(desc, "> Hatch: " .. formatPreset(config.hatchPreset))
+            table.insert(desc, "> Sell: " .. formatPreset(config.sellPreset))
             table.insert(desc, "")
             table.insert(desc, "**Hunt Statistics :**")
             table.insert(desc, string.format("> ⭐ Special: %d", specialCount))
@@ -2023,7 +2023,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             -- ⭐ FASE TUNGGU TIMER dengan Auto Gift & Auto Accept
             if not allReady then
                 updatesStatus(string.format("[%d/%d] ⚡ Tim Speed...", cycleNum, totalCycles))
-                equipTeamByPreset(config.speedPreset, CONFIG.speedLoadout)
+                equipTeamByPreset(config.speedPreset, config.speedLoadout)
                 task.wait(config.delayAfterSpeed)
 
                 updatesStatus(string.format("[%d/%d] ⏳ Menunggu ready...", cycleNum, totalCycles))
@@ -5817,7 +5817,7 @@ do -- BLOCK 12: TAB INVENTORY
             if search == "" or petType:lower():find(search) then
                 table.insert(items, {
                     name = petType,
-                    isSelected = CONFIG.giftPetSelectedTypes[petType] == true,
+                    isSelected = config.giftPetSelectedTypes[petType] == true,
                 })
             end
         end
