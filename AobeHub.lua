@@ -141,7 +141,6 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             unwantedPetTypes = {},
 
             -- Webhook
-            webhookEnabled = false,
             webhookUrl = "",
             webhookUsername = "Auto Hatch Report",
 
@@ -2197,7 +2196,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                     if not isRunning or isGuiDestroyed then break end
                     runFilterAndSell()
                     if not isRunning or isGuiDestroyed then break end
-                    if config.webhookEnabled then
+                    if config.discordWebhookEnabled then
                         local embed = buildWebhookEmbed()
                         task.spawn(function() sendDiscordWebhook(embed) end)
                     end
