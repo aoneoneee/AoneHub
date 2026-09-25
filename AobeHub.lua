@@ -1839,7 +1839,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             local petCurrent, petMax = getPetCountFromData()
 
             monitorLabels.profileLabel.Text = string.format(
-                "**Profile :**\n" ..
+                "Profile :\n" ..
                 "👤 Username: %s\n" ..
                 "🥚 Egg Name: %s\n" ..
                 "🐾 Pet on backpack: %d/%d",
@@ -1872,7 +1872,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             end
 
             monitorLabels.teamsLabel.Text = string.format(
-                "**Teams :**\n" ..
+                "Teams :\n" ..
                 "> Core: %s\n" ..
                 "> Hatch: %s\n" ..
                 "> Sell: %s",
@@ -1916,7 +1916,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             local netStr = netResult >= 0 and ("+" .. netResult) or tostring(netResult)
 
             monitorLabels.eggLabel.Text = string.format(
-                "**Egg Statistics :**\n" ..
+                "Egg Statistics :\n" ..
                 "> 📦 Egg Before: %d\n" ..
                 "> 📊 Current Amount: %d\n" ..
                 "> 📈 Net Result: %s",
@@ -1931,7 +1931,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             local durationStr = string.format("%dh %dm %ds", hours, minutes, seconds)
 
             monitorLabels.hatchLabel.Text = string.format(
-                "**Hatch Statistics :**\n" ..
+                "Hatch Statistics :\n" ..
                 "> 🔄 Hatch Cycles: %d\n" ..
                 "> 🐣 Total Hatched: %d\n" ..
                 "> ⏱️ Cycle Duration: %ds\n" ..
@@ -5186,39 +5186,53 @@ do -- BLOCK 11: TAB HATCH
 
     local MonitorSection = createSection(hatchScroll, "📊 Hatch Monitoring", "monitorPreset")
     MonitorSection.LayoutOrder = 1
-    MonitorSection.Size = UDim2.new(1, -10, 0, 0)
-    MonitorSection.AutomaticSize = Enum.AutomaticSize.Y
 
-    local UICornerNew = Instance.new("UICorner")
-    UICornerNew.CornerRadius = UDim.new(0, 6)
-    UICornerNew.Parent = MonitorSection
+    -- Wadah isi (AutomaticSize) supaya tinggi section ikut isi, bukan angka tetap.
+    local MonitorContent = Instance.new("Frame")
+    MonitorContent.Size = UDim2.new(1, -20, 0, 0)
+    MonitorContent.Position = UDim2.new(0, 10, 0, 28)
+    MonitorContent.BackgroundTransparency = 1
+    MonitorContent.AutomaticSize = Enum.AutomaticSize.Y
+    MonitorContent.Parent = MonitorSection
 
-    local MonitorPadding = Instance.new("UIPadding")
-    MonitorPadding.PaddingTop = UDim.new(0, 8)
-    MonitorPadding.PaddingBottom = UDim.new(0, 8)
-    MonitorPadding.PaddingLeft = UDim.new(0, 10)
-    MonitorPadding.PaddingRight = UDim.new(0, 10)
-    MonitorPadding.Parent = MonitorSection
+    local MonitorContentLayout = Instance.new("UIListLayout")
+    MonitorContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    MonitorContentLayout.Padding = UDim.new(0, 4)
+    MonitorContentLayout.Parent = MonitorContent
 
-    local MonitorLayout = Instance.new("UIListLayout")
-    MonitorLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    MonitorLayout.Padding = UDim.new(0, 6)
-    MonitorLayout.Parent = MonitorSection
-    
+    -- Sinkronkan tinggi MonitorSection (lewat sectionMeta) tiap kali isi MonitorContent berubah.
+    local function syncMonitorSectionHeight()
+        local meta = sectionMeta[MonitorSection]
+        local totalHeight = 28 + 8 + MonitorContent.AbsoluteSize.Y + 8
+        if meta then
+            meta.expandedHeight = totalHeight
+            if meta.expanded then
+                MonitorSection.Size = UDim2.new(1, -10, 0, totalHeight)
+            end
+        else
+            MonitorSection.Size = UDim2.new(1, -10, 0, totalHeight)
+        end
+    end
+    MonitorContent:GetPropertyChangedSignal("AbsoluteSize"):Connect(syncMonitorSectionHeight)
+    task.defer(syncMonitorSectionHeight)
+
     monitorLabels.profileLabel = Instance.new("TextLabel")
-    monitorLabels.profileLabel.Size = UDim2.new(1, -20, 1, -32)
+    monitorLabels.profileLabel.Size = UDim2.new(1, 0, 0, 0)
+    monitorLabels.profileLabel.AutomaticSize = Enum.AutomaticSize.Y
     monitorLabels.profileLabel.BackgroundTransparency = 1
     monitorLabels.profileLabel.Font = Enum.Font.Code
     monitorLabels.profileLabel.TextSize = 9
     monitorLabels.profileLabel.TextColor3 = C.text
     monitorLabels.profileLabel.TextXAlignment = Enum.TextXAlignment.Left
     monitorLabels.profileLabel.TextYAlignment = Enum.TextYAlignment.Top
-    monitorLabels.profileLabel.Text = "Loading..."
+    monitorLabels.profileLabel.TextWrapped = true
     monitorLabels.profileLabel.LayoutOrder = 1
-    monitorLabels.profileLabel.Parent = MonitorSection
+    monitorLabels.profileLabel.Text = "Loading..."
+    monitorLabels.profileLabel.Parent = MonitorContent
 
     monitorLabels.teamsLabel = Instance.new("TextLabel")
-    monitorLabels.teamsLabel.Size = UDim2.new(1, -20, 1, -32)
+    monitorLabels.teamsLabel.Size = UDim2.new(1, 0, 0, 0)
+    monitorLabels.teamsLabel.AutomaticSize = Enum.AutomaticSize.Y
     monitorLabels.teamsLabel.BackgroundTransparency = 1
     monitorLabels.teamsLabel.Font = Enum.Font.Code
     monitorLabels.teamsLabel.TextSize = 9
@@ -5226,12 +5240,13 @@ do -- BLOCK 11: TAB HATCH
     monitorLabels.teamsLabel.TextXAlignment = Enum.TextXAlignment.Left
     monitorLabels.teamsLabel.TextYAlignment = Enum.TextYAlignment.Top
     monitorLabels.teamsLabel.TextWrapped = true
-    monitorLabels.teamsLabel.Text = "Loading..."
     monitorLabels.teamsLabel.LayoutOrder = 2
-    monitorLabels.teamsLabel.Parent = MonitorSection
+    monitorLabels.teamsLabel.Text = "Loading..."
+    monitorLabels.teamsLabel.Parent = MonitorContent
 
     monitorLabels.huntLabel = Instance.new("TextLabel")
-    monitorLabels.huntLabel.Size = UDim2.new(1, -20, 1, -32)
+    monitorLabels.huntLabel.Size = UDim2.new(1, 0, 0, 0)
+    monitorLabels.huntLabel.AutomaticSize = Enum.AutomaticSize.Y
     monitorLabels.huntLabel.BackgroundTransparency = 1
     monitorLabels.huntLabel.Font = Enum.Font.Code
     monitorLabels.huntLabel.TextSize = 9
@@ -5239,12 +5254,13 @@ do -- BLOCK 11: TAB HATCH
     monitorLabels.huntLabel.TextXAlignment = Enum.TextXAlignment.Left
     monitorLabels.huntLabel.TextYAlignment = Enum.TextYAlignment.Top
     monitorLabels.huntLabel.TextWrapped = true
-    monitorLabels.huntLabel.Text = "Loading..."
     monitorLabels.huntLabel.LayoutOrder = 3
-    monitorLabels.huntLabel.Parent = MonitorSection
+    monitorLabels.huntLabel.Text = "Loading..."
+    monitorLabels.huntLabel.Parent = MonitorContent
 
     monitorLabels.eggLabel = Instance.new("TextLabel")
-    monitorLabels.eggLabel.Size = UDim2.new(1, -20, 1, -32)
+    monitorLabels.eggLabel.Size = UDim2.new(1, 0, 0, 0)
+    monitorLabels.eggLabel.AutomaticSize = Enum.AutomaticSize.Y
     monitorLabels.eggLabel.BackgroundTransparency = 1
     monitorLabels.eggLabel.Font = Enum.Font.Code
     monitorLabels.eggLabel.TextSize = 9
@@ -5252,12 +5268,13 @@ do -- BLOCK 11: TAB HATCH
     monitorLabels.eggLabel.TextXAlignment = Enum.TextXAlignment.Left
     monitorLabels.eggLabel.TextYAlignment = Enum.TextYAlignment.Top
     monitorLabels.eggLabel.TextWrapped = true
-    monitorLabels.eggLabel.Text = "Loading..."
     monitorLabels.eggLabel.LayoutOrder = 4
-    monitorLabels.eggLabel.Parent = MonitorSection
+    monitorLabels.eggLabel.Text = "Loading..."
+    monitorLabels.eggLabel.Parent = MonitorContent
 
     monitorLabels.hatchLabel = Instance.new("TextLabel")
-    monitorLabels.hatchLabel.Size = UDim2.new(1, -20, 1, -32)
+    monitorLabels.hatchLabel.Size = UDim2.new(1, 0, 0, 0)
+    monitorLabels.hatchLabel.AutomaticSize = Enum.AutomaticSize.Y
     monitorLabels.hatchLabel.BackgroundTransparency = 1
     monitorLabels.hatchLabel.Font = Enum.Font.Code
     monitorLabels.hatchLabel.TextSize = 9
@@ -5265,23 +5282,23 @@ do -- BLOCK 11: TAB HATCH
     monitorLabels.hatchLabel.TextXAlignment = Enum.TextXAlignment.Left
     monitorLabels.hatchLabel.TextYAlignment = Enum.TextYAlignment.Top
     monitorLabels.hatchLabel.TextWrapped = true
-    monitorLabels.hatchLabel.Text = "Loading..."
     monitorLabels.hatchLabel.LayoutOrder = 5
-    monitorLabels.hatchLabel.Parent = MonitorSection
+    monitorLabels.hatchLabel.Text = "Loading..."
+    monitorLabels.hatchLabel.Parent = MonitorContent
 
     monitorLabels.timestamp = Instance.new("TextLabel")
-    monitorLabels.timestamp.Size = UDim2.new(1, -20, 0, 14)
+    monitorLabels.timestamp.Size = UDim2.new(1, 0, 0, 14)
     monitorLabels.timestamp.BackgroundTransparency = 1
     monitorLabels.timestamp.Font = Enum.Font.Gotham
     monitorLabels.timestamp.TextSize = 7
     monitorLabels.timestamp.TextColor3 = C.textDim
     monitorLabels.timestamp.TextXAlignment = Enum.TextXAlignment.Left
-    monitorLabels.timestamp.Text = "🕐 Belum ada data"
     monitorLabels.timestamp.LayoutOrder = 6
-    monitorLabels.timestamp.Parent = MonitorSection
+    monitorLabels.timestamp.Text = "🕐 Belum ada data"
+    monitorLabels.timestamp.Parent = MonitorContent
 
     local refreshMonitorBtn = Instance.new("TextButton")
-    refreshMonitorBtn.Size = UDim2.new(1, -20, 0, 22)
+    refreshMonitorBtn.Size = UDim2.new(1, 0, 0, 22)
     refreshMonitorBtn.BackgroundColor3 = C.accent
     refreshMonitorBtn.BorderSizePixel = 0
     refreshMonitorBtn.Font = Enum.Font.GothamBold
@@ -5289,7 +5306,7 @@ do -- BLOCK 11: TAB HATCH
     refreshMonitorBtn.TextColor3 = C.text
     refreshMonitorBtn.TextSize = 9
     refreshMonitorBtn.LayoutOrder = 7
-    refreshMonitorBtn.Parent = MonitorSection
+    refreshMonitorBtn.Parent = MonitorContent
     Instance.new("UICorner", refreshMonitorBtn).CornerRadius = UDim.new(0, 4)
     refreshMonitorBtn.MouseButton1Click:Connect(function()
         refreshMonitor()
