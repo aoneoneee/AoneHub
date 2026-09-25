@@ -2011,6 +2011,18 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             if cycleNum == 1 then STATS.cycleStartTime = os.time() end
             updatesStatus(string.format("[%d/%d] 📦 Place egg...", cycleNum, totalCycles))
             local placed = placeEggsFromBackpack()
+            
+            STATS.eggAfterSell = countEggsInBackpack()
+            
+            if config.discordWebhookEnabled then
+                local embed = buildWebhookEmbed()
+                task.spawn(function()
+                    sendDiscordWebhook({
+                        username = "AoneHub",
+                        embeds = { embed }
+                    })
+                end)
+            end
             local existingEggs = getMyGardenEggs()
             local allReady = false
             if placed == 0 then
@@ -2166,7 +2178,6 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             updatesStatus("💰 Sell all...")
             sellAll()
             task.wait(2)
-            STATS.eggAfterSell = countEggsInBackpack()
             updatesStatus("✅ Sell selesai")
             task.wait(1)
             scanNewPetsAfterSell()
@@ -2195,11 +2206,6 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                     end
                     if not isRunning or isGuiDestroyed then break end
                     runFilterAndSell()
-                    if not isRunning or isGuiDestroyed then break end
-                    if config.discordWebhookEnabled then
-                        local embed = buildWebhookEmbed()
-                        task.spawn(function() sendDiscordWebhook(embed) end)
-                    end
                     updatesStatus("🔄 Cycle baru...")
                     task.wait(1)
                 end
