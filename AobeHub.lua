@@ -1837,7 +1837,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             local petCurrent, petMax = getPetCountFromData()
 
             monitorLabels.profileLabel.Text = string.format(
-                "**Profile :**\n" ..
+                "Profile :\n" ..
                 "👤 Username: %s\n" ..
                 "🥚 Egg Name: %s\n" ..
                 "🐾 Pet on backpack: %d/%d",
@@ -1870,7 +1870,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             end
 
             monitorLabels.teamsLabel.Text = string.format(
-                "**Teams :**\n" ..
+                "Teams :\n" ..
                 "> Core: %s\n" ..
                 "> Hatch: %s\n" ..
                 "> Sell: %s",
@@ -1914,7 +1914,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             local netStr = netResult >= 0 and ("+" .. netResult) or tostring(netResult)
 
             monitorLabels.eggLabel.Text = string.format(
-                "**Egg Statistics :**\n" ..
+                "Egg Statistics :\n" ..
                 "> 📦 Egg Before: %d\n" ..
                 "> 📊 Current Amount: %d\n" ..
                 "> 📈 Net Result: %s",
@@ -1929,7 +1929,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             local durationStr = string.format("%dh %dm %ds", hours, minutes, seconds)
 
             monitorLabels.hatchLabel.Text = string.format(
-                "**Hatch Statistics :**\n" ..
+                "Hatch Statistics :\n" ..
                 "> 🔄 Hatch Cycles: %d\n" ..
                 "> 🐣 Total Hatched: %d\n" ..
                 "> ⏱️ Cycle Duration: %ds\n" ..
@@ -5239,7 +5239,7 @@ do -- BLOCK 11: TAB HATCH
 
     local MonitorSection = createSection(hatchScroll, "📊 Hatch Monitoring", "monitorPreset")
     MonitorSection.LayoutOrder = 1
-    MonitorSection.Size = UDim2.new(1, -10, 0, 531)
+    MonitorSection.Size = UDim2.new(1, -10, 0, 346)
 
     monitorLabels.profileLabel = Instance.new("TextLabel")
     monitorLabels.profileLabel.Size = UDim2.new(1, -20, 1, -32)
@@ -5255,7 +5255,7 @@ do -- BLOCK 11: TAB HATCH
 
     monitorLabels.teamsLabel = Instance.new("TextLabel")
     monitorLabels.teamsLabel.Size = UDim2.new(1, -20, 1, -32)
-    monitorLabels.teamsLabel.Position = UDim2.new(0, 10, 0, 100)
+    monitorLabels.teamsLabel.Position = UDim2.new(0, 10, 0, 65)
     monitorLabels.teamsLabel.BackgroundTransparency = 1
     monitorLabels.teamsLabel.Font = Enum.Font.Code
     monitorLabels.teamsLabel.TextSize = 9
@@ -5268,7 +5268,7 @@ do -- BLOCK 11: TAB HATCH
 
     monitorLabels.huntLabel = Instance.new("TextLabel")
     monitorLabels.huntLabel.Size = UDim2.new(1, -20, 1, -32)
-    monitorLabels.huntLabel.Position = UDim2.new(0, 10, 0, 164)
+    monitorLabels.huntLabel.Position = UDim2.new(0, 10, 0, 107)
     monitorLabels.huntLabel.BackgroundTransparency = 1
     monitorLabels.huntLabel.Font = Enum.Font.Code
     monitorLabels.huntLabel.TextSize = 9
@@ -5281,7 +5281,7 @@ do -- BLOCK 11: TAB HATCH
 
     monitorLabels.eggLabel = Instance.new("TextLabel")
     monitorLabels.eggLabel.Size = UDim2.new(1, -20, 1, -32)
-    monitorLabels.eggLabel.Position = UDim2.new(0, 10, 0, 358)
+    monitorLabels.eggLabel.Position = UDim2.new(0, 10, 0, 208)
     monitorLabels.eggLabel.BackgroundTransparency = 1
     monitorLabels.eggLabel.Font = Enum.Font.Code
     monitorLabels.eggLabel.TextSize = 9
@@ -5294,7 +5294,7 @@ do -- BLOCK 11: TAB HATCH
 
     monitorLabels.hatchLabel = Instance.new("TextLabel")
     monitorLabels.hatchLabel.Size = UDim2.new(1, -20, 1, -32)
-    monitorLabels.hatchLabel.Position = UDim2.new(0, 10, 0, 402)
+    monitorLabels.hatchLabel.Position = UDim2.new(0, 10, 0, 245)
     monitorLabels.hatchLabel.BackgroundTransparency = 1
     monitorLabels.hatchLabel.Font = Enum.Font.Code
     monitorLabels.hatchLabel.TextSize = 9
@@ -5307,7 +5307,7 @@ do -- BLOCK 11: TAB HATCH
 
     monitorLabels.timestamp = Instance.new("TextLabel")
     monitorLabels.timestamp.Size = UDim2.new(1, -20, 0, 14)
-    monitorLabels.timestamp.Position = UDim2.new(0, 10, 0, 476)
+    monitorLabels.timestamp.Position = UDim2.new(0, 10, 0, 295)
     monitorLabels.timestamp.BackgroundTransparency = 1
     monitorLabels.timestamp.Font = Enum.Font.Gotham
     monitorLabels.timestamp.TextSize = 7
@@ -5318,7 +5318,7 @@ do -- BLOCK 11: TAB HATCH
 
     local refreshMonitorBtn = Instance.new("TextButton")
     refreshMonitorBtn.Size = UDim2.new(1, -20, 0, 22)
-    refreshMonitorBtn.Position = UDim2.new(0, 10, 0, 499)
+    refreshMonitorBtn.Position = UDim2.new(0, 10, 0, 314)
     refreshMonitorBtn.BackgroundColor3 = C.accent
     refreshMonitorBtn.BorderSizePixel = 0
     refreshMonitorBtn.Font = Enum.Font.GothamBold
