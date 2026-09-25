@@ -1847,7 +1847,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             -- Teams
             local function formatPreset(presetName)
                 if not presetName then return "-" end
-                local preset = getPresetFromFile(presetName)
+                local preset = getPreset(presetName)
                 if not preset or not preset.pets then return "-" end
                 local groups = {}
                 for _, petInfo in ipairs(preset.pets) do
