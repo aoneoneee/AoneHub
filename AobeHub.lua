@@ -56,7 +56,7 @@ local C = {
 -- shared: diisi di BLOCK 1 (CONFIG, MUTATION HELPERS, DISCORD WEBHOOK)
 local SAVE_FILE, config, saveConfig, safeRequire
 -- shared: diisi di BLOCK 2 (AUTO LEVELING STATE, STATISTICS TRACKING)
-local selectedTeamPreset, selectedWeightPreset, selectedAdvancedPreset, selectedMutationPreset,
+local speedPreset, hatchPreset, sellPreset, selectedTeamPreset, selectedWeightPreset, selectedAdvancedPreset, selectedMutationPreset,
     selectedPetTypes, allSelectedPets, targetLevel, advancedTargetLevel, isLeveling,
     isAutoWeight, isAdvancedLeveling, isAutoMutation, rainbowMode, targetSearchText,
     petSearchText, mutationSearchText, tempPresetPets, unwantedMutations, availableMutations,
@@ -339,6 +339,9 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         -- ==================================================================
         -- AUTO LEVELING STATE
         -- ==================================================================
+        speedPreset = config.speedPreset
+        hatchPreset = config.hatchPreset
+        sellPreset = config.sellPreset
         selectedTeamPreset = config.selectedTeamPreset
         selectedWeightPreset = config.selectedWeightPreset
         selectedAdvancedPreset = config.selectedAdvancedPreset
@@ -2163,10 +2166,10 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             task.wait(config.delayBeforeSell)
             updatesStatus("💰 Sell all...")
             sellAll()
-            task.wait(3)
+            task.wait(2)
             STATS.eggAfterSell = countEggsInBackpack()
             updatesStatus("✅ Sell selesai")
-            task.wait(2)
+            task.wait(1)
             scanNewPetsAfterSell()
             refreshMonitor()
         end
@@ -2199,7 +2202,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                         task.spawn(function() sendDiscordWebhook(embed) end)
                     end
                     updatesStatus("🔄 Cycle baru...")
-                    task.wait(5)
+                    task.wait(1)
                 end
                 if not isGuiDestroyed then updatesStatus("Status: Stopped") end
                 isRunning = false
@@ -5177,79 +5180,9 @@ do -- BLOCK 11: TAB HATCH
     hatchLayout.SortOrder = Enum.SortOrder.LayoutOrder
     hatchLayout.Parent = hatchScroll
 
-    local ConfigSection = createSection(hatchScroll, "⚙️ Configuration", "configPreset")
-    ConfigSection.LayoutOrder = 2
-    ConfigSection.Size = UDim2.new(1, -10, 0, 219)
-
-    makeInputRow(ConfigSection, 28, "Loadout Swap:", "delayAfterLoadout", true, 0, 30)
-    makeInputRow(ConfigSection, 49, "Setelah Hatch All:", "delayAfterHatchAll", true, 0, 30)
-    makeInputRow(ConfigSection, 70, "Antar Hatch:", "hatchDelay", true, 0, 30)
-    makeInputRow(ConfigSection, 91, "Place Egg:", "placeDelay", true, 0, 30)
-    makeInputRow(ConfigSection, 112, "Jumlah cycle:", "cycleCount", true, 1, 10)
-    makeToggle(ConfigSection, 133, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
-
-    local startBtn = Instance.new("TextButton")
-    startBtn.Size = UDim2.new(1, -20, 0, 30)
-    startBtn.Position = UDim2.new(0, 10, 0, 160)
-    startBtn.BackgroundColor3 = C.success
-    startBtn.BorderSizePixel = 0
-    startBtn.Font = Enum.Font.GothamBold
-    startBtn.Text = "▶️ MULAI"
-    startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    startBtn.TextSize = 10
-    startBtn.Parent = ConfigSection
-    Instance.new("UICorner", startBtn).CornerRadius = UDim.new(0, 5)
-
-    statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(1, -20, 0, 14)
-    statusLabel.Position = UDim2.new(0, 10, 0, 195)
-    statusLabel.BackgroundTransparency = 1
-    statusLabel.Font = Enum.Font.GothamBold
-    statusLabel.Text = "Status: Idle"
-    statusLabel.TextColor3 = C.textDim
-    statusLabel.TextSize = 10
-    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-    statusLabel.Parent = ConfigSection
-
-    statusCallback = function(text) statusLabel.Text = text end
-
-    startBtn.MouseButton1Click:Connect(function()
-        if isRunning then
-            stopAutoHatch()
-            startBtn.Text = "▶️ MULAI"
-            startBtn.BackgroundColor3 = C.success
-        else
-            if isLeveling then
-                statusLabel.Text = "⚠️ Stop Auto Leveling dulu sebelum mulai Auto Hatch!"
-                return
-            end
-
-            if next(config.selectedEggs) == nil then
-                statusLabel.Text = "⚠️ Pilih egg dulu!"
-                return
-            end
-            if not config.speedPreset then
-                statusLabel.Text = "⚠️ Pilih preset Speed!"
-                return
-            end
-            if not config.hatchPreset then
-                statusLabel.Text = "⚠️ Pilih preset Hatch!"
-                return
-            end
-            if config.autoSell and not config.sellPreset then
-                statusLabel.Text = "⚠️ Pilih preset Sell!"
-                return
-            end
-            lastLoadoutSlot = nil
-            startAutoHatch()
-            startBtn.Text = "⏹️ STOP"
-            startBtn.BackgroundColor3 = C.danger
-        end
-    end)
-
     local MonitorSection = createSection(hatchScroll, "📊 Hatch Monitoring", "monitorPreset")
     MonitorSection.LayoutOrder = 1
-    MonitorSection.Size = UDim2.new(1, -10, 0, 531)
+    MonitorSection.Size = UDim2.new(1, -10, 0, 346)
 
     monitorLabels.profileLabel = Instance.new("TextLabel")
     monitorLabels.profileLabel.Size = UDim2.new(1, -20, 1, -32)
@@ -5265,7 +5198,7 @@ do -- BLOCK 11: TAB HATCH
 
     monitorLabels.teamsLabel = Instance.new("TextLabel")
     monitorLabels.teamsLabel.Size = UDim2.new(1, -20, 1, -32)
-    monitorLabels.teamsLabel.Position = UDim2.new(0, 10, 0, 100)
+    monitorLabels.teamsLabel.Position = UDim2.new(0, 10, 0, 65)
     monitorLabels.teamsLabel.BackgroundTransparency = 1
     monitorLabels.teamsLabel.Font = Enum.Font.Code
     monitorLabels.teamsLabel.TextSize = 9
@@ -5278,7 +5211,7 @@ do -- BLOCK 11: TAB HATCH
 
     monitorLabels.huntLabel = Instance.new("TextLabel")
     monitorLabels.huntLabel.Size = UDim2.new(1, -20, 1, -32)
-    monitorLabels.huntLabel.Position = UDim2.new(0, 10, 0, 164)
+    monitorLabels.huntLabel.Position = UDim2.new(0, 10, 0, 107)
     monitorLabels.huntLabel.BackgroundTransparency = 1
     monitorLabels.huntLabel.Font = Enum.Font.Code
     monitorLabels.huntLabel.TextSize = 9
@@ -5291,7 +5224,7 @@ do -- BLOCK 11: TAB HATCH
 
     monitorLabels.eggLabel = Instance.new("TextLabel")
     monitorLabels.eggLabel.Size = UDim2.new(1, -20, 1, -32)
-    monitorLabels.eggLabel.Position = UDim2.new(0, 10, 0, 358)
+    monitorLabels.eggLabel.Position = UDim2.new(0, 10, 0, 208)
     monitorLabels.eggLabel.BackgroundTransparency = 1
     monitorLabels.eggLabel.Font = Enum.Font.Code
     monitorLabels.eggLabel.TextSize = 9
@@ -5304,7 +5237,7 @@ do -- BLOCK 11: TAB HATCH
 
     monitorLabels.hatchLabel = Instance.new("TextLabel")
     monitorLabels.hatchLabel.Size = UDim2.new(1, -20, 1, -32)
-    monitorLabels.hatchLabel.Position = UDim2.new(0, 10, 0, 402)
+    monitorLabels.hatchLabel.Position = UDim2.new(0, 10, 0, 245)
     monitorLabels.hatchLabel.BackgroundTransparency = 1
     monitorLabels.hatchLabel.Font = Enum.Font.Code
     monitorLabels.hatchLabel.TextSize = 9
@@ -5317,7 +5250,7 @@ do -- BLOCK 11: TAB HATCH
 
     monitorLabels.timestamp = Instance.new("TextLabel")
     monitorLabels.timestamp.Size = UDim2.new(1, -20, 0, 14)
-    monitorLabels.timestamp.Position = UDim2.new(0, 10, 0, 476)
+    monitorLabels.timestamp.Position = UDim2.new(0, 10, 0, 295)
     monitorLabels.timestamp.BackgroundTransparency = 1
     monitorLabels.timestamp.Font = Enum.Font.Gotham
     monitorLabels.timestamp.TextSize = 7
@@ -5328,7 +5261,7 @@ do -- BLOCK 11: TAB HATCH
 
     local refreshMonitorBtn = Instance.new("TextButton")
     refreshMonitorBtn.Size = UDim2.new(1, -20, 0, 22)
-    refreshMonitorBtn.Position = UDim2.new(0, 10, 0, 499)
+    refreshMonitorBtn.Position = UDim2.new(0, 10, 0, 314)
     refreshMonitorBtn.BackgroundColor3 = C.accent
     refreshMonitorBtn.BorderSizePixel = 0
     refreshMonitorBtn.Font = Enum.Font.GothamBold
@@ -5341,42 +5274,59 @@ do -- BLOCK 11: TAB HATCH
         refreshMonitor()
     end)
 
-    local PresetSection = createSection(hatchScroll, "🐣 Tim Preset", "teamPreset")
-    PresetSection.LayoutOrder = 3
-    PresetSection.Size = UDim2.new(1, -10, 0, 132)
+    local ConfigSection = createSection(hatchScroll, "⚙️ Configuration", "configPreset")
+    ConfigSection.LayoutOrder = 2
+    ConfigSection.Size = UDim2.new(1, -10, 0, 270)
+
+    MutLabel = Instance.new("TextLabel")
+    MutLabel.Size = UDim2.new(1, -20, 0, 22)
+    MutLabel.Position = UDim2.new(0, 10, 0, 28)
+    MutLabel.BackgroundTransparency = 1
+    MutLabel.Font = Enum.Font.GothamBold
+    MutLabel.Text = "🐣 Tim Preset"
+    MutLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MutLabel.TextSize = 11
+    MutLabel.TextXAlignment = Enum.TextXAlignment.Left
+    MutLabel.Parent = ConfigSection
 
     -- Dropdown Tim Leveling
     local TeamSpeedDropdown = createDynamicDropdown(
-        PresetSection,
-        UDim2.new(0, 10, 0, 28),
+        ConfigSection,
+        UDim2.new(0, 10, 0, 55),
         speedPreset and string.format("📂 %s", speedPreset) or "📂 Pilih Preset Tim Utama",
-        PresetSection,
-        132,
+        ConfigSection,
+        270,
         hatchScroll
     )
 
     -- Dropdown Tim Leveling
     local TeamHatchDropdown = createDynamicDropdown(
-        PresetSection,
-        UDim2.new(0, 10, 0, 61),
+        ConfigSection,
+        UDim2.new(0, 10, 0, 88),
         hatchPreset and string.format("📂 %s", hatchPreset) or "📂 Pilih Preset Tim Hatch",
-        PresetSection,
-        132,
+        ConfigSection,
+        270,
         hatchScroll
     )
 
     -- Dropdown Tim Leveling
     local TeamSellDropdown = createDynamicDropdown(
-        PresetSection,
-        UDim2.new(0, 10, 0, 94),
+        ConfigSection,
+        UDim2.new(0, 10, 0, 121),
         sellPreset and string.format("📂 %s", sellPreset) or "📂 Pilih Preset Tim Sell",
-        PresetSection,
-        132,
+        ConfigSection,
+        270,
         hatchScroll
     )
-
+    
+    makeInputRow(ConfigSection, 154, "Loadout Swap:", "delayAfterLoadout", true, 0, 30)
+    makeInputRow(ConfigSection, 175, "Antar Hatch:", "hatchDelay", true, 0, 30)
+    makeInputRow(ConfigSection, 196, "Place Egg:", "placeDelay", true, 0, 30)
+    makeInputRow(ConfigSection, 217, "Jumlah cycle:", "cycleCount", true, 1, 10)
+    makeToggle(ConfigSection, 238, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
+    
     local EggSection = createSection(hatchScroll, "🥚 Pilih Egg", "selectEgg")
-    EggSection.LayoutOrder = 4
+    EggSection.LayoutOrder = 3
     EggSection.Size = UDim2.new(1, -10, 0, 243)
 
     local eggRefreshBtn = Instance.new("TextButton")
@@ -5467,7 +5417,7 @@ do -- BLOCK 11: TAB HATCH
     eggRefreshBtn.MouseButton1Click:Connect(refreshEggList)
 
     local FilterSection = createSection(hatchScroll, "😺 Filter Pet", "petFilter")
-    FilterSection.LayoutOrder = 5
+    FilterSection.LayoutOrder = 4
     FilterSection.Size = UDim2.new(1, -10, 0, 368)
 
     makeInputRow(FilterSection, 28, "Max Weight (KG):", "maxWeight", true, 0, 1000)
@@ -5564,6 +5514,69 @@ do -- BLOCK 11: TAB HATCH
     end
     searchBox:GetPropertyChangedSignal("Text"):Connect(refreshUnwantedList)
 
+    local StartHatchSection = createSection(hatchScroll)
+    StartHatchSection.LayoutOrder = 5
+    StartHatchSection.Size = UDim2.new(1, -10, 0, 69)
+    
+    local startBtn = Instance.new("TextButton")
+    startBtn.Size = UDim2.new(1, -20, 0, 30)
+    startBtn.Position = UDim2.new(0, 10, 0, 10)
+    startBtn.BackgroundColor3 = C.success
+    startBtn.BorderSizePixel = 0
+    startBtn.Font = Enum.Font.GothamBold
+    startBtn.Text = "▶️ MULAI"
+    startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    startBtn.TextSize = 10
+    startBtn.Parent = StartHatchSection
+    Instance.new("UICorner", startBtn).CornerRadius = UDim.new(0, 5)
+
+    statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(1, -20, 0, 14)
+    statusLabel.Position = UDim2.new(0, 10, 0, 45)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Font = Enum.Font.GothamBold
+    statusLabel.Text = "Status: Idle"
+    statusLabel.TextColor3 = C.textDim
+    statusLabel.TextSize = 10
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statusLabel.Parent = StartHatchSection
+
+    statusCallback = function(text) statusLabel.Text = text end
+
+    startBtn.MouseButton1Click:Connect(function()
+        if isRunning then
+            stopAutoHatch()
+            startBtn.Text = "▶️ MULAI"
+            startBtn.BackgroundColor3 = C.success
+        else
+            if isLeveling then
+                statusLabel.Text = "⚠️ Stop Auto Leveling dulu sebelum mulai Auto Hatch!"
+                return
+            end
+
+            if next(config.selectedEggs) == nil then
+                statusLabel.Text = "⚠️ Pilih egg dulu!"
+                return
+            end
+            if not speedPreset then
+                statusLabel.Text = "⚠️ Pilih preset Speed!"
+                return
+            end
+            if not hatchPreset then
+                statusLabel.Text = "⚠️ Pilih preset Hatch!"
+                return
+            end
+            if config.autoSell and not sellPreset then
+                statusLabel.Text = "⚠️ Pilih preset Sell!"
+                return
+            end
+            lastLoadoutSlot = nil
+            startAutoHatch()
+            startBtn.Text = "⏹️ STOP"
+            startBtn.BackgroundColor3 = C.danger
+        end
+    end)
+    
     -- Populate team speed dropdown
     local function populateTeamSpeedDropdown()
         populateDynamicDropdown(TeamSpeedDropdown, speedPreset, function(name)
