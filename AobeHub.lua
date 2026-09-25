@@ -2640,13 +2640,13 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
 end -- BLOCK 6
 
 -- shared: diisi di BLOCK 7 (UI HELPERS, DYNAMIC DROPDOWN SYSTEM)
-local createSection, createDynamicDropdown
+local createSection, createDynamicDropdown, sectionMeta
 
 do -- BLOCK 7: UI HELPERS, DYNAMIC DROPDOWN SYSTEM
     -- ==================================================================
     -- UI HELPERS
     -- ==================================================================
-    local sectionMeta = {}
+    sectionMeta = {}
 
     function createSection(parent, title, sectionKey)
         local SectionFrame = Instance.new("Frame")
