@@ -211,6 +211,8 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                     if config.discordWebhook == nil then config.discordWebhook = "" end
                     if config.sectionStates == nil then config.sectionStates = {} end
                     if config.unwantedMutationsHatch == nil then config.unwantedMutationsHatch = {} end
+                    if config.unwantedPetTypes == nil then config.unwantedPetTypes = {} end
+                    if config.giftPetSelectedTypes == nil then config.giftPetSelectedTypes = {} end
 
                     return true
                 end
@@ -448,7 +450,9 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                 if baseWeight >= 7 and baseWeight <= 9 then return "Titan" end
                 if baseWeight >= 4 and baseWeight <= 6 then return "Huge" end
             end
-            if petName and not config.unwantedPetTypes[petName] then return "Special" end
+            if petName and not (config.unwantedPetTypes and config.unwantedPetTypes[petName]) then
+                return "Special"
+            end            
             return nil
         end
 
@@ -1117,20 +1121,6 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             return config.teamPresets or {}
         end
 
-        function getPresetUUIDs(presetName)
-            local preset = config.teamPresets[presetName]
-            if preset then
-                local uuids = {}
-                for _, petInfo in ipairs(preset.pets) do
-                    if isPetValid(petInfo.UUID) then
-                        table.insert(uuids, petInfo.UUID)
-                    end
-                end
-                return uuids
-            end
-            return {}
-        end
-
         function deletePreset(presetName)
             if not presetName then return false end
 
@@ -1681,9 +1671,6 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
 
             isProcessingGiftQueue = true
             isAutoAcceptActive = true
-
-            -- ⭐ SAVE previous state
-            local wasWaitingEggTimer = isWaitingEggTimer
 
             task.spawn(function()
                 while #giftQueue > 0 do
