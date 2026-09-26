@@ -5162,7 +5162,7 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
 end -- BLOCK 10
 
 -- shared: diisi di BLOCK 11 (TAB HATCH)
-local statusLabel, refreshEggList, refreshUnwantedList
+local statusLabel, refreshEggList, refreshUnwantedList, populateMutationhaList
 
 do -- BLOCK 11: TAB HATCH
     -- ==================================================================
@@ -5393,14 +5393,14 @@ do -- BLOCK 11: TAB HATCH
     UICornerMutationhaSearch.Parent = MutationhaSearchBox
 
     local MutationhaListFrame = Instance.new("ScrollingFrame")
-    MutationListhaFrame.Size = UDim2.new(1, -20, 0, 120)
-    MutationListhaFrame.Position = UDim2.new(0, 10, 0, 319)
-    MutationListhaFrame.BackgroundTransparency = 1
-    MutationListhaFrame.BorderSizePixel = 0
-    MutationListhaFrame.ScrollBarThickness = 3
-    MutationListhaFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-    MutationListhaFrame.CanvasSize = UDim2.new(0, 0, 0, 120)
-    MutationListhaFrame.Parent = ConfigSection
+    MutationhaListFrame.Size = UDim2.new(1, -20, 0, 120)
+    MutationhaListFrame.Position = UDim2.new(0, 10, 0, 319)
+    MutationhaListFrame.BackgroundTransparency = 1
+    MutationhaListFrame.BorderSizePixel = 0
+    MutationhaListFrame.ScrollBarThickness = 3
+    MutationhaListFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+    MutationhaListFrame.CanvasSize = UDim2.new(0, 0, 0, 120)
+    MutationhaListFrame.Parent = ConfigSection
 
     local MutationhaListLayout = Instance.new("UIListLayout")
     MutationhaListLayout.Padding = UDim.new(0, 2)
@@ -5769,6 +5769,11 @@ do -- BLOCK 11: TAB HATCH
         local count = #allMutations
         MutationhaListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22, 50))
     end
+
+    MutationhaSearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        mutationSearchText = MutationhaSearchBox.Text
+        populateMutationhaList()
+    end)
     
     TeamSpeedDropdown.HeaderButton.MouseButton1Click:Connect(function()
         if not TeamSpeedDropdown.IsOpen() then
@@ -6298,6 +6303,7 @@ do -- BLOCK 13: TAB EKSTRA, WEBHOOK SETTINGS, INIT, ANTI-AFK
     refreshGiftPetList()
     refreshMonitor()
     switchTab("Hatch")
+    populateMutationhaList()
 
     -- ==================================================================
     -- ANTI-AFK SYSTEM
