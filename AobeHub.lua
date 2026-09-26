@@ -59,7 +59,7 @@ local SAVE_FILE, config, saveConfig, safeRequire
 local speedPreset, hatchPreset, sellPreset, selectedTeamPreset, selectedWeightPreset, selectedAdvancedPreset, selectedMutationPreset,
     selectedPetTypes, allSelectedPets, targetLevel, advancedTargetLevel, isLeveling,
     isAutoWeight, isAdvancedLeveling, isAutoMutation, rainbowMode, targetSearchText,
-    petSearchText, mutationSearchText, tempPresetPets, unwantedMutations, availableMutations,
+    petSearchText, mutationSearchText, tempPresetPets, unwantedMutations, unwantedMutationsHatch, availableMutations,
     editingPresetName, isGuiDestroyed, isRunning, isGiftPetRunning, giftPetUserStarted,
     statusCallback, StatusLabel, updateStatus, rainbowTask, isAlive, A, rainbowColors,
     colorIndex
@@ -170,7 +170,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             advancedTargetLevel = 500,
             rainbowMode = false,
             unwantedMutations = {},
-            unwantedMutationsHatch = {"Oxpecker", "Peppermint"},
+            unwantedMutationsHatch = {},
             selectedTeamPreset = nil,
             selectedWeightPreset = nil,
             selectedMutationPreset = nil,
@@ -362,6 +362,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         mutationSearchText = ""
         tempPresetPets = {}
         unwantedMutations = config.unwantedMutations or {}
+        unwantedMutationsHatch = config.unwantedMutationsHatch or {}
         availableMutations = {}
         editingPresetName = nil
         isGuiDestroyed = false  -- ⭐ TAMBAHKAN INI
@@ -5315,7 +5316,7 @@ do -- BLOCK 11: TAB HATCH
 
     local ConfigSection = createSection(hatchScroll, "⚙️ Configuration", "configPreset")
     ConfigSection.LayoutOrder = 2
-    ConfigSection.Size = UDim2.new(1, -10, 0, 270)
+    ConfigSection.Size = UDim2.new(1, -10, 0, 449)
 
     PresLabel = Instance.new("TextLabel")
     PresLabel.Size = UDim2.new(1, -20, 0, 22)
@@ -5334,7 +5335,7 @@ do -- BLOCK 11: TAB HATCH
         UDim2.new(0, 10, 0, 55),
         speedPreset and string.format("📂 %s", speedPreset) or "📂 Pilih Preset Tim Utama",
         ConfigSection,
-        270,
+        449,
         hatchScroll
     )
 
@@ -5344,7 +5345,7 @@ do -- BLOCK 11: TAB HATCH
         UDim2.new(0, 10, 0, 88),
         hatchPreset and string.format("📂 %s", hatchPreset) or "📂 Pilih Preset Tim Hatch",
         ConfigSection,
-        270,
+        449,
         hatchScroll
     )
 
@@ -5354,7 +5355,7 @@ do -- BLOCK 11: TAB HATCH
         UDim2.new(0, 10, 0, 121),
         sellPreset and string.format("📂 %s", sellPreset) or "📂 Pilih Preset Tim Sell",
         ConfigSection,
-        270,
+        449,
         hatchScroll
     )
     
@@ -5363,7 +5364,48 @@ do -- BLOCK 11: TAB HATCH
     makeInputRow(ConfigSection, 196, "Place Egg:", "placeDelay", true, 0, 30)
     makeInputRow(ConfigSection, 217, "Jumlah cycle:", "cycleCount", true, 1, 10)
     makeToggle(ConfigSection, 238, "💰 Auto Sell: ON", "💰 Auto Sell: OFF", "autoSell")
-    
+
+    MuthaLabel = Instance.new("TextLabel")
+    MuthaLabel.Size = UDim2.new(1, -20, 0, 22)
+    MuthaLabel.Position = UDim2.new(0, 10, 0, 265)
+    MuthaLabel.BackgroundTransparency = 1
+    MuthaLabel.Font = Enum.Font.GothamBold
+    MuthaLabel.Text = "❌ Mutasi yg tidak diinginkan:"
+    MuthaLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MuthaLabel.TextSize = 11
+    MuthaLabel.TextXAlignment = Enum.TextXAlignment.Left
+    MuthaLabel.Parent = ConfigSection
+
+    local MutationhaSearchBox = Instance.new("TextBox")
+    MutationhaSearchBox.Size = UDim2.new(1, -20, 0, 22)
+    MutationhaSearchBox.Position = UDim2.new(0, 10, 0, 292)
+    MutationhaSearchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    MutationhaSearchBox.BorderSizePixel = 0
+    MutationhaSearchBox.Font = Enum.Font.Gotham
+    MutationhaSearchBox.PlaceholderText = "🔍 Cari mutasi..."
+    MutationhaSearchBox.Text = ""
+    MutationhaSearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MutationhaSearchBox.TextSize = 9
+    MutationhaSearchBox.Parent = ConfigSection
+
+    local UICornerMutationhaSearch = Instance.new("UICorner")
+    UICornerMutationhaSearch.CornerRadius = UDim.new(0, 4)
+    UICornerMutationhaSearch.Parent = MutationhaSearchBox
+
+    local MutationhaListFrame = Instance.new("ScrollingFrame")
+    MutationListhaFrame.Size = UDim2.new(1, -20, 0, 120)
+    MutationListhaFrame.Position = UDim2.new(0, 10, 0, 319)
+    MutationListhaFrame.BackgroundTransparency = 1
+    MutationListhaFrame.BorderSizePixel = 0
+    MutationListhaFrame.ScrollBarThickness = 3
+    MutationListhaFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+    MutationListhaFrame.CanvasSize = UDim2.new(0, 0, 0, 120)
+    MutationListhaFrame.Parent = ConfigSection
+
+    local MutationhaListLayout = Instance.new("UIListLayout")
+    MutationhaListLayout.Padding = UDim.new(0, 2)
+    MutationhaListLayout.Parent = MutationhaListFrame
+
     local EggSection = createSection(hatchScroll, "🥚 Pilih Egg", "selectEgg")
     EggSection.LayoutOrder = 3
     EggSection.Size = UDim2.new(1, -10, 0, 243)
@@ -5646,6 +5688,88 @@ do -- BLOCK 11: TAB HATCH
         end)
     end
 
+    function populateMutationhaList()
+        for _, child in pairs(MutationhaListFrame:GetChildren()) do
+            if child:IsA("TextButton") then
+                child:Destroy()
+            end
+        end
+
+        -- ⭐ Kumpulkan mutations dalam 2 kategori
+        local selectedMutationsha = {}
+        local unselectedMutationsha = {}
+
+        for _, mutationName in ipairs(availableMutations) do
+            -- Filter berdasarkan search text
+            if mutationSearchText == "" or mutationName:lower():find(mutationSearchText:lower()) then
+                local isSelected = table.find(unwantedMutationsHatch, mutationName) ~= nil
+
+                if isSelected then
+                    table.insert(selectedMutationsha, mutationName)
+                else
+                    table.insert(unselectedMutationsha, mutationName)
+                end
+            end
+        end
+
+        -- ⭐ Sort masing-masing kategori alphabetically
+        table.sort(selectedMutationsha)
+        table.sort(unselectedMutationsha)
+
+        -- ⭐ Gabungkan: selected dulu, lalu unselected
+        local allMutations = {}
+        for _, name in ipairs(selectedMutationsha) do
+            table.insert(allMutations, {Name = name, IsSelected = true})
+        end
+        for _, name in ipairs(unselectedMutationsha) do
+            table.insert(allMutations, {Name = name, IsSelected = false})
+        end
+
+        -- Buat button untuk setiap mutation
+        for i, mutationInfo in ipairs(allMutations) do
+            local mutationName = mutationInfo.Name
+            local isSelected = mutationInfo.IsSelected
+
+            local MutationhaButton = Instance.new("TextButton")
+            MutationhaButton.Size = UDim2.new(1, 0, 0, 20)
+            MutationhaButton.BackgroundColor3 = isSelected and C.danger or Color3.fromRGB(65, 65, 80)
+            MutationhaButton.BorderSizePixel = 0
+            MutationhaButton.Font = Enum.Font.Gotham
+            MutationhaButton.Text = mutationName
+            MutationhaButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            MutationhaButton.TextSize = 8
+            MutationhaButton.TextXAlignment = Enum.TextXAlignment.Center
+            MutationhaButton.LayoutOrder = i
+            MutationhaButton.Parent = MutationhaListFrame
+
+            local UICorner = Instance.new("UICorner")
+            UICorner.CornerRadius = UDim.new(0, 3)
+            UICorner.Parent = MutationhaButton
+
+            MutationhaButton.MouseButton1Click:Connect(function()
+                local idx = table.find(unwantedMutationsHatch, mutationName)
+                if idx then
+                    table.remove(unwantedMutationsHatch, idx)
+                else
+                    table.insert(unwantedMutationsHatch, mutationName)
+                end
+                config.unwantedMutationsHatch = unwantedMutationsHatch
+                saveConfig()
+
+                -- ⭐ AUTO CLEAR SEARCH BAR
+                mutationSearchText = ""
+                MutationhaSearchBox.Text = ""
+
+                -- ⭐ Refresh list (selected akan naik ke atas)
+                populateMutationhaList()
+            end)
+        end
+
+        -- Update canvas
+        local count = #allMutations
+        MutationhaListFrame.CanvasSize = UDim2.new(0, 0, 0, math.max(count * 22, 50))
+    end
+    
     TeamSpeedDropdown.HeaderButton.MouseButton1Click:Connect(function()
         if not TeamSpeedDropdown.IsOpen() then
             populateTeamSpeedDropdown()
