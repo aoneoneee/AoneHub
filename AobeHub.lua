@@ -210,6 +210,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                     if config.discordWebhookEnabled == nil then config.discordWebhookEnabled = false end
                     if config.discordWebhook == nil then config.discordWebhook = "" end
                     if config.sectionStates == nil then config.sectionStates = {} end
+                    if config.unwantedMutationsHatch == nil then config.unwantedMutationsHatch = {} end
 
                     return true
                 end
@@ -2189,7 +2190,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         -- MAIN LOOP
         -- ==================================================================
         local function refreshUnwantedMutationsCache()
-            unwantedMutations = config.unwantedMutations or {}
+            unwantedMutationsHatch = config.unwantedMutationsHatch or {}
         end
 
         function startAutoHatch()
