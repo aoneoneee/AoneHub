@@ -170,6 +170,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             advancedTargetLevel = 500,
             rainbowMode = false,
             unwantedMutations = {},
+            unwantedMutationsHatch = ["Oxpecker"]
             selectedTeamPreset = nil,
             selectedWeightPreset = nil,
             selectedMutationPreset = nil,
@@ -235,7 +236,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         -- MUTATION HELPERS
         -- ==================================================================
         local function getUnwantedMutations()
-            return config.unwantedMutations or {}
+            return config.unwantedMutationsHatch or {}
         end
 
         function splitPetName(petName)
@@ -5316,16 +5317,16 @@ do -- BLOCK 11: TAB HATCH
     ConfigSection.LayoutOrder = 2
     ConfigSection.Size = UDim2.new(1, -10, 0, 270)
 
-    MutLabel = Instance.new("TextLabel")
-    MutLabel.Size = UDim2.new(1, -20, 0, 22)
-    MutLabel.Position = UDim2.new(0, 10, 0, 28)
-    MutLabel.BackgroundTransparency = 1
-    MutLabel.Font = Enum.Font.GothamBold
-    MutLabel.Text = "🐣 Tim Preset"
-    MutLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    MutLabel.TextSize = 11
-    MutLabel.TextXAlignment = Enum.TextXAlignment.Left
-    MutLabel.Parent = ConfigSection
+    PresLabel = Instance.new("TextLabel")
+    PresLabel.Size = UDim2.new(1, -20, 0, 22)
+    PresLabel.Position = UDim2.new(0, 10, 0, 28)
+    PresLabel.BackgroundTransparency = 1
+    PresLabel.Font = Enum.Font.GothamBold
+    PresLabel.Text = "🐣 Tim Preset"
+    PresLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    PresLabel.TextSize = 11
+    PresLabel.TextXAlignment = Enum.TextXAlignment.Left
+    PresLabel.Parent = ConfigSection
 
     -- Dropdown Tim Leveling
     local TeamSpeedDropdown = createDynamicDropdown(
