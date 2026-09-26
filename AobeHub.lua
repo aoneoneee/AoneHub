@@ -170,7 +170,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             advancedTargetLevel = 500,
             rainbowMode = false,
             unwantedMutations = {},
-            unwantedMutationsHatch = ["Oxpecker"]
+            unwantedMutationsHatch = {"Oxpecker", "Peppermint"},
             selectedTeamPreset = nil,
             selectedWeightPreset = nil,
             selectedMutationPreset = nil,
@@ -1904,7 +1904,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                 return result
             end
 
-            monitorLabels.huntLabel.Text = "**Hunt Statistics :**\n" ..
+            monitorLabels.huntLabel.Text = "Hunt Statistics :\n" ..
                 formatHuntBucket(STATS.huntStats.Special, "⭐", "Special") .. "\n" ..
                 formatHuntBucket(STATS.huntStats.Huge, "🥉", "Huge") .. "\n" ..
                 formatHuntBucket(STATS.huntStats.Titan, "🥈", "Titan") .. "\n" ..
