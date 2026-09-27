@@ -66,7 +66,7 @@ local speedPreset, hatchPreset, sellPreset, selectedTeamPreset, selectedWeightPr
 -- shared: diisi di BLOCK 3 (HELPER: PET COUNT, EGG, FARM, BACKPACK)
 local getBackpackEggs, getAllPetTypesFromRegistry, getPlayerNames
 -- shared: diisi di BLOCK 4 (PET DATA & PRESET FUNCTIONS)
-local getPreset, getPlayerPetData, getPetType, getPetLevel, getPetDisplayName, getPetWeight,
+local getPreset, getPlayerPetData, getPetType, getPetLevel, getPetDisplayName, getPetWeight, getPetMutationName, 
     getEquippedPets, isPetValid, cleanupInvalidPets, equipPet, unequipPet, getMutationStatus,
     useCleansingShard, saveTeamPreset, loadTeamPresets, getPresetUUIDs, deletePreset,
     getWeightTarget, getLevelTargetForWeight, getPetsForWeight, getPetsForMutation,
@@ -785,7 +785,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
     end -- BLOCK 3
 
     -- shared: diisi di BLOCK 4 (PET DATA & PRESET FUNCTIONS)
-    local getPetMutationName, isPetUUIDValid, isPetInPreset, buildWebhookEmbed
+    local isPetUUIDValid, isPetInPreset, buildWebhookEmbed
 
     do -- BLOCK 4: PET DATA & PRESET FUNCTIONS
         -- ==================================================================
