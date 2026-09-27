@@ -3860,7 +3860,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     -- ==================================================================
     local PetSharingSection = createSection(weightScroll, "🎁 Pet Sharing", "petSharing")
     PetSharingSection.LayoutOrder = 6  -- Ganti LayoutOrder ButtonSection jadi 7
-    PetSharingSection.Size = UDim2.new(1, -10, 0, 500)
+    PetSharingSection.Size = UDim2.new(1, -10, 0, 498)
 
     -- Toggle Pet Sharing Mutation
     local mutationSharingBtn = Instance.new("TextButton")
@@ -4055,18 +4055,6 @@ end)
 
     specialSearch:GetPropertyChangedSignal("Text"):Connect(populateSpecialPetList)
 
-    -- Pet Sharing Label
-    local petSharingLabel = Instance.new("TextLabel")
-    petSharingLabel.Size = UDim2.new(1, -20, 0, 14)
-    petSharingLabel.Position = UDim2.new(0, 10, 0, 334)
-    petSharingLabel.Text = "🐾 Pet Sharing:"
-    petSharingLabel.TextColor3 = C.textDim
-    petSharingLabel.Font = Enum.Font.Gotham
-    petSharingLabel.TextSize = 8
-    petSharingLabel.TextXAlignment = Enum.TextXAlignment.Left
-    petSharingLabel.BackgroundTransparency = 1
-    petSharingLabel.Parent = PetSharingSection
-
     -- ====== DROPDOWN WEIGHT SHARING ======
 local weightSharingLabel = Instance.new("TextLabel")
 weightSharingLabel.Size = UDim2.new(1, -20, 0, 14)
@@ -4162,7 +4150,7 @@ end)
     -- Target Username Button
     local targetSharingBtn = Instance.new("TextButton")
     targetSharingBtn.Size = UDim2.new(1, -20, 0, 22)
-    targetSharingBtn.Position = UDim2.new(0, 10, 0, 394)
+    targetSharingBtn.Position = UDim2.new(0, 10, 0, 441)
     targetSharingBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
     targetSharingBtn.BorderSizePixel = 0
     targetSharingBtn.Font = Enum.Font.Gotham
@@ -4199,7 +4187,7 @@ end)
     -- Refresh Button
     local refreshPetSharingBtn = Instance.new("TextButton")
     refreshPetSharingBtn.Size = UDim2.new(1, -20, 0, 20)
-    refreshPetSharingBtn.Position = UDim2.new(0, 10, 0, 420)
+    refreshPetSharingBtn.Position = UDim2.new(0, 10, 0, 468)
     refreshPetSharingBtn.BackgroundColor3 = C.accent
     refreshPetSharingBtn.BorderSizePixel = 0
     refreshPetSharingBtn.Font = Enum.Font.Gotham
