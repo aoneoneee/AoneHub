@@ -785,7 +785,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
     end -- BLOCK 3
 
     -- shared: diisi di BLOCK 4 (PET DATA & PRESET FUNCTIONS)
-    local isPetUUIDValid, isPetInPreset, buildWebhookEmbed
+    local getPetMutationName, isPetUUIDValid, isPetInPreset, buildWebhookEmbed
 
     do -- BLOCK 4: PET DATA & PRESET FUNCTIONS
         -- ==================================================================
@@ -837,7 +837,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             return 0
         end
 
-        local function getPetMutationName(petUUID)
+        function getPetMutationName(petUUID)
             local petsData = getPlayerPetData()
             if not petsData then return nil end
 
