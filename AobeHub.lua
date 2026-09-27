@@ -3690,7 +3690,7 @@ do -- BLOCK 8: UI SECTION: PRESET, PET TARGET, PILIH TIM
 end -- BLOCK 8
 
 -- shared: diisi di BLOCK 9 (UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS)
-local WeightToggleButton, MutationToggleButton, ToggleButton, populateDynamicDropdown,
+local populateSpecialPetList, WeightToggleButton, MutationToggleButton, ToggleButton, populateDynamicDropdown,
     populatePetList, populateMutationList, populateTargetDropdown
 
 do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
@@ -3930,7 +3930,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     specialListLayout.Parent = specialListFrame
 
     -- Fungsi populate list
-    local function populateSpecialPetList()
+    function populateSpecialPetList()
         for _, c in ipairs(specialListFrame:GetChildren()) do
             if c:IsA("TextButton") then c:Destroy() end
         end
