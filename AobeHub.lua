@@ -5663,8 +5663,6 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
         end
     end
 
-    -- Switch ke Weight tab default
-    switchTab("Weight")
 
     print("✅ AoneHub Auto Leveling loaded! Config:", SAVE_FILE)
 end -- BLOCK 10
@@ -6810,7 +6808,6 @@ do -- BLOCK 13: TAB EKSTRA, WEBHOOK SETTINGS, INIT, ANTI-AFK
     refreshUnwantedList()
     refreshGiftPetList()
     refreshMonitor()
-    switchTab("contentArea")
     populateMutationhaList()
 
     -- ==================================================================
