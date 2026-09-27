@@ -162,12 +162,16 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             giftPetSelectedTypes = {},
             delayAfterGiftSync = 10,
 
-            -- Pet Sharing
             petSharingMutationEnabled = false,
             petSharingWeightEnabled = false,
-            petSharingSelectedPet = nil,
+            petSharingSelectedPet = nil,           -- fallback lama (boleh dipertahankan)
             petSharingTargetUsername = nil,
-            petSharingSavedPetInfo = nil,
+            petSharingSavedPetInfo = nil,           -- fallback lama
+            -- BARU:
+            petSharingWeightPet = nil,
+            petSharingWeightSavedInfo = nil,
+            petSharingMutationPet = nil,
+            petSharingMutationSavedInfo = nil,
 
             teamPresets = {},
             weightPresets = {},
@@ -225,6 +229,10 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                     if config.petSharingSelectedPet == nil then config.petSharingSelectedPet = nil end
                     if config.petSharingTargetUsername == nil then config.petSharingTargetUsername = nil end
                     if config.petSharingSavedPetInfo == nil then config.petSharingSavedPetInfo = nil end
+                    if config.petSharingWeightPet == nil then config.petSharingWeightPet = nil end
+                    if config.petSharingWeightSavedInfo == nil then config.petSharingWeightSavedInfo = nil end
+                    if config.petSharingMutationPet == nil then config.petSharingMutationPet = nil end
+                    if config.petSharingMutationSavedInfo == nil then config.petSharingMutationSavedInfo = nil end
 
                     return true
                 end
@@ -1717,35 +1725,48 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                 isAutoAcceptActive = false
 
                 -- ⭐ SETELAH SEMUA GIFT ACCEPTED: Cek pet sharing 3x @ 10s
-                if isLeveling and config.petSharingSelectedPet and not isCheckingPetSharing then
-                    isCheckingPetSharing = true
-            
-                    task.spawn(function()
-                        print("[Pet Sharing] Semua gift di-accept, mulai cek 3x @ 10s...")
-                
-                        for i = 1, 3 do
-                            task.wait(10)
-                    
-                            if not isLeveling or isGuiDestroyed then
-                                print("[Pet Sharing] Sesi berakhir, stop cek")
-                                isCheckingPetSharing = false
-                                return
-                            end
-                    
-                            print(string.format("[Pet Sharing] Cek #%d...", i))
-                            local received = checkPetSharingReceived()
-                    
-                            if received then
-                                print("[Pet Sharing] ✅ Pet diterima")
-                                isCheckingPetSharing = false
-                                return
-                            end
-                        end
-                
-                        print("[Pet Sharing] 3x cek selesai")
-                        isCheckingPetSharing = false
-                    end)
+                -- ⭐ SETELAH SEMUA GIFT ACCEPTED: Cek pet sharing 3x @ 10s
+if isLeveling and not isCheckingPetSharing then
+    local anySharing = config.petSharingWeightPet or config.petSharingMutationPet
+    if anySharing then
+        isCheckingPetSharing = true
+
+        task.spawn(function()
+            print("[Pet Sharing] Semua gift di-accept, mulai cek 3x @ 10s...")
+
+            for i = 1, 3 do
+                task.wait(10)
+
+                if not isLeveling or isGuiDestroyed then
+                    print("[Pet Sharing] Sesi berakhir, stop cek")
+                    isCheckingPetSharing = false
+                    return
                 end
+
+                print(string.format("[Pet Sharing] Cek #%d...", i))
+
+                -- Cek weight sharing
+                if config.petSharingWeightEnabled and config.petSharingWeightPet then
+                    local received = checkPetSharingReceived("weight")
+                    if received then
+                        print("[Pet Sharing] ✅ Pet weight diterima")
+                    end
+                end
+
+                -- Cek mutation sharing
+                if config.petSharingMutationEnabled and config.petSharingMutationPet then
+                    local received = checkPetSharingReceived("mutation")
+                    if received then
+                        print("[Pet Sharing] ✅ Pet mutation diterima")
+                    end
+                end
+            end
+
+            print("[Pet Sharing] 3x cek selesai")
+            isCheckingPetSharing = false
+        end)
+    end
+                    end
             end)
         end
 
@@ -1863,151 +1884,166 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         -- PET SHARING: GIFT PET
         -- ==================================================================
         local function giftSharingPet(sharingType)
-            -- sharingType = "mutation" | "weight"
-            local enabled = false
-            if sharingType == "mutation" then
-                enabled = config.petSharingMutationEnabled
-            elseif sharingType == "weight" then
-                enabled = config.petSharingWeightEnabled
-            end
-    
-            if not enabled then return false end
-            if not config.petSharingSelectedPet then
-                warn("[Pet Sharing] Tidak ada pet yang dipilih")
-                return false
-            end
-            if not config.petSharingTargetUsername then
-                warn("[Pet Sharing] Tidak ada target username")
-                return false
-            end
-    
-            local target = findPlayerByName(config.petSharingTargetUsername)
-            if not target then
-                warn("[Pet Sharing] Target tidak ditemukan:", config.petSharingTargetUsername)
-                return false
-            end
-    
-            local petName = config.petSharingSelectedPet
-            local petTool = findPetToolByName(petName)
-            if not petTool then
-                warn("[Pet Sharing] Pet tidak ada di backpack:", petName)
-                return false
-            end
-    
-            local character = player.Character
-            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-            if not humanoid then return false end
-    
-            print(string.format("[Pet Sharing] Proses gift %s → %s", petName, config.petSharingTargetUsername))
-    
-            -- STEP 1: Unequip pet sharing kalau masih equipped
-            local petUUID = config.petSharingSavedPetInfo and config.petSharingSavedPetInfo.UUID
-            if petUUID then
-                local equippedUUIDs = getEquippedPets()
-                for _, uuid in ipairs(equippedUUIDs) do
-                    if uuid == petUUID then
-                        print(string.format("[Pet Sharing] Unequip %s", petName))
-                        pcall(function() PetsService:UnequipPet(petUUID) end)
-                        task.wait(0.5)
-                        break
-                    end
-                end
-            end
-    
-            -- STEP 2: Unfavorit kalau favorit
-            if petTool:GetAttribute("d") == true then
-                print(string.format("[Pet Sharing] Unfavorit %s", petName))
-                pcall(function() FavoriteItemRE:FireServer(petTool) end)
+    -- sharingType = "mutation" | "weight"
+    local enabled, selectedPet, savedInfo
+
+    if sharingType == "mutation" then
+        enabled = config.petSharingMutationEnabled
+        selectedPet = config.petSharingMutationPet
+        savedInfo = config.petSharingMutationSavedInfo
+    elseif sharingType == "weight" then
+        enabled = config.petSharingWeightEnabled
+        selectedPet = config.petSharingWeightPet
+        savedInfo = config.petSharingWeightSavedInfo
+    else
+        enabled = false
+    end
+
+    if not enabled then return false end
+    if not selectedPet then
+        warn("[Pet Sharing] Tidak ada pet yang dipilih untuk", sharingType)
+        return false
+    end
+    if not config.petSharingTargetUsername then
+        warn("[Pet Sharing] Tidak ada target username")
+        return false
+    end
+
+    local target = findPlayerByName(config.petSharingTargetUsername)
+    if not target then
+        warn("[Pet Sharing] Target tidak ditemukan:", config.petSharingTargetUsername)
+        return false
+    end
+
+    local petName = selectedPet
+    local petTool = findPetToolByName(petName)
+    if not petTool then
+        warn("[Pet Sharing] Pet tidak ada di backpack:", petName)
+        return false
+    end
+
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+
+    print(string.format("[Pet Sharing:%s] Proses gift %s → %s", sharingType, petName, config.petSharingTargetUsername))
+
+    -- STEP 1: Unequip kalau masih equipped
+    local petUUID = savedInfo and savedInfo.UUID
+    if petUUID then
+        local equippedUUIDs = getEquippedPets()
+        for _, uuid in ipairs(equippedUUIDs) do
+            if uuid == petUUID then
+                print(string.format("[Pet Sharing:%s] Unequip %s", sharingType, petName))
+                pcall(function() PetsService:UnequipPet(petUUID) end)
                 task.wait(0.5)
+                break
             end
-    
-            -- STEP 3: Equip pet ke tangan
-            print(string.format("[Pet Sharing] Equip %s", petName))
-            pcall(function() humanoid:EquipTool(petTool) end)
-            task.wait(0.5)
-    
-            -- STEP 4: Fire gift
-            print(string.format("[Pet Sharing] Kirim %s → %s", petName, config.petSharingTargetUsername))
-            local ok = pcall(function()
-                PetGiftingService:FireServer("GivePet", target)
-            end)
-    
-            task.wait(2)
-    
-            if ok then
-                print("[Pet Sharing] ✅ Gift berhasil")
-            else
-                warn("[Pet Sharing] ❌ Gift gagal")
-            end
-    
-            return ok
         end
+    end
+
+    -- STEP 2: Unfavorit kalau favorit
+    if petTool:GetAttribute("d") == true then
+        print(string.format("[Pet Sharing:%s] Unfavorit %s", sharingType, petName))
+        pcall(function() FavoriteItemRE:FireServer(petTool) end)
+        task.wait(0.5)
+    end
+
+    -- STEP 3: Equip
+    print(string.format("[Pet Sharing:%s] Equip %s", sharingType, petName))
+    pcall(function() humanoid:EquipTool(petTool) end)
+    task.wait(0.5)
+
+    -- STEP 4: Fire gift
+    print(string.format("[Pet Sharing:%s] Kirim %s → %s", sharingType, petName, config.petSharingTargetUsername))
+    local ok = pcall(function()
+        PetGiftingService:FireServer("GivePet", target)
+    end)
+
+    task.wait(2)
+
+    if ok then
+        print("[Pet Sharing:" .. sharingType .. "] ✅ Gift berhasil")
+    else
+        warn("[Pet Sharing:" .. sharingType .. "] ❌ Gift gagal")
+    end
+
+    return ok
+end
 
         -- ==================================================================
         -- PET SHARING: CEK GIFT MASUK
         -- ==================================================================
-        local function checkPetSharingReceived()
-            if not config.petSharingSelectedPet then return false end
-    
-            local petsData = getPlayerPetData()
-            if not petsData then return false end
-    
-            local inventory = petsData.PetInventory.Data or {}
-            local targetPetName = config.petSharingSelectedPet
-    
-            -- Cari pet di inventory
-            local foundUUID = nil
-            for uuid, _ in pairs(inventory) do
-                if getPetType(uuid) == targetPetName then
-                    foundUUID = uuid
+        local function checkPetSharingReceived(sharingType)
+    local selectedPet, savedInfo
+    if sharingType == "mutation" then
+        selectedPet = config.petSharingMutationPet
+        savedInfo = config.petSharingMutationSavedInfo
+    elseif sharingType == "weight" then
+        selectedPet = config.petSharingWeightPet
+        savedInfo = config.petSharingWeightSavedInfo
+    else
+        selectedPet = config.petSharingSelectedPet
+        savedInfo = config.petSharingSavedPetInfo
+    end
+
+    if not selectedPet then return false end
+
+    local petsData = getPlayerPetData()
+    if not petsData then return false end
+
+    local inventory = petsData.PetInventory.Data or {}
+    local targetPetName = selectedPet
+
+    local foundUUID = nil
+    for uuid, _ in pairs(inventory) do
+        if getPetType(uuid) == targetPetName then
+            foundUUID = uuid
+            break
+        end
+    end
+
+    if not foundUUID then return false end
+
+    print(string.format("[Pet Sharing:%s] 🎁 Terima %s (UUID: %s)", sharingType, targetPetName, foundUUID:sub(1, 8)))
+
+    local petTool = findPetToolByName(targetPetName)
+    if not petTool then return false end
+
+    if petTool:GetAttribute("d") ~= true then
+        print(string.format("[Pet Sharing:%s] Favorit %s", sharingType, targetPetName))
+        pcall(function() FavoriteItemRE:FireServer(petTool) end)
+        task.wait(0.5)
+    end
+
+    local currentPreset = nil
+    if isAutoWeight and selectedWeightPreset then
+        currentPreset = selectedWeightPreset
+    elseif isAutoMutation and selectedMutationPreset then
+        currentPreset = selectedMutationPreset
+    elseif isAdvancedLeveling and selectedAdvancedPreset then
+        currentPreset = selectedAdvancedPreset
+    elseif isLeveling and selectedTeamPreset then
+        currentPreset = selectedTeamPreset
+    end
+
+    if currentPreset then
+        local preset = getPreset(currentPreset)
+        if preset and preset.pets then
+            for _, petInfo in ipairs(preset.pets) do
+                if petInfo.UUID == foundUUID then
+                    print(string.format("[Pet Sharing:%s] Equip %s (bagian tim %s)", sharingType, targetPetName, currentPreset))
+                    pcall(function()
+                        PetsService:EquipPet(foundUUID, CFrame.new(0, 10, 0))
+                    end)
+                    task.wait(0.5)
                     break
                 end
             end
-    
-            if not foundUUID then return false end
-    
-            print(string.format("[Pet Sharing] 🎁 Terima %s (UUID: %s)", targetPetName, foundUUID:sub(1, 8)))
-    
-            -- Cari tool di backpack
-            local petTool = findPetToolByName(targetPetName)
-            if not petTool then return false end
-    
-            -- STEP 1: Auto favorit
-            if petTool:GetAttribute("d") ~= true then
-                print(string.format("[Pet Sharing] Favorit %s", targetPetName))
-                pcall(function() FavoriteItemRE:FireServer(petTool) end)
-                task.wait(0.5)
-            end
-    
-            -- STEP 2: Cek apakah termasuk tim preset
-            local currentPreset = nil
-            if isAutoWeight and selectedWeightPreset then
-                currentPreset = selectedWeightPreset
-            elseif isAutoMutation and selectedMutationPreset then
-                currentPreset = selectedMutationPreset
-            elseif isAdvancedLeveling and selectedAdvancedPreset then
-                currentPreset = selectedAdvancedPreset
-            elseif isLeveling and selectedTeamPreset then
-                currentPreset = selectedTeamPreset
-            end
-    
-            if currentPreset then
-                local preset = getPreset(currentPreset)
-                if preset and preset.pets then
-                    for _, petInfo in ipairs(preset.pets) do
-                        if petInfo.UUID == foundUUID then
-                            print(string.format("[Pet Sharing] Equip %s (bagian tim %s)", targetPetName, currentPreset))
-                            pcall(function()
-                                PetsService:EquipPet(foundUUID, CFrame.new(0, 10, 0))
-                            end)
-                            task.wait(0.5)
-                            break
-                        end
-                    end
-                end
-            end
-    
-            return true
+        end
+    end
+
+    return true
         end
         
         -- ==================================================================
@@ -3996,16 +4032,24 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
             pad.Parent = btn
 
             btn.MouseButton1Click:Connect(function()
-                config.petSharingSavedPetInfo = {
-                    UUID = item.uuid,
-                    PetType = item.petType,
-                    Mutation = item.mutation,
-                    Level = item.level,
-                }
-                saveConfig()
-                selectedSpecialLabel.Text = string.format("Saved: %s", item.displayName)
-                populateSpecialPetList()
-            end)
+    local savedData = {
+        UUID = item.uuid,
+        PetType = item.petType,
+        Mutation = item.mutation,
+        Level = item.level,
+    }
+
+    -- Simpan ke yang sedang "aktif" diedit.
+    -- Cara sederhana: simpan ke dua-duanya sekaligus,
+    -- lalu user pilih tombol mana yang mau dipakai.
+    config.petSharingWeightSavedInfo = savedData
+    config.petSharingMutationSavedInfo = savedData
+    config.petSharingSavedPetInfo = savedData  -- fallback
+
+    saveConfig()
+    selectedSpecialLabel.Text = string.format("Saved: %s", item.displayName)
+    populateSpecialPetList()
+end)
         end
     end
 
@@ -4023,39 +4067,90 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     petSharingLabel.BackgroundTransparency = 1
     petSharingLabel.Parent = PetSharingSection
 
-    -- Pet Sharing Button (dropdown sederhana)
-    local petSharingBtn = Instance.new("TextButton")
-    petSharingBtn.Size = UDim2.new(1, -20, 0, 22)
-    petSharingBtn.Position = UDim2.new(0, 10, 0, 350)
-    petSharingBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-    petSharingBtn.BorderSizePixel = 0
-    petSharingBtn.Font = Enum.Font.Gotham
-    petSharingBtn.Text = config.petSharingSelectedPet and ("⭐ " .. config.petSharingSelectedPet) or "⭐ Pilih Pet Sharing..."
-    petSharingBtn.TextColor3 = C.text
-    petSharingBtn.TextSize = 8
-    petSharingBtn.TextXAlignment = Enum.TextXAlignment.Left
-    petSharingBtn.Parent = PetSharingSection
-    Instance.new("UICorner", petSharingBtn).CornerRadius = UDim.new(0, 4)
-    local psPad = Instance.new("UIPadding")
-    psPad.PaddingLeft = UDim.new(0, 8)
-    psPad.Parent = petSharingBtn
+    -- ====== DROPDOWN WEIGHT SHARING ======
+local weightSharingLabel = Instance.new("TextLabel")
+weightSharingLabel.Size = UDim2.new(1, -20, 0, 14)
+weightSharingLabel.Position = UDim2.new(0, 10, 0, 334)
+weightSharingLabel.Text = "🐘 Pet Sharing Weight:"
+weightSharingLabel.TextColor3 = C.textDim
+weightSharingLabel.Font = Enum.Font.Gotham
+weightSharingLabel.TextSize = 8
+weightSharingLabel.TextXAlignment = Enum.TextXAlignment.Left
+weightSharingLabel.BackgroundTransparency = 1
+weightSharingLabel.Parent = PetSharingSection
 
-    petSharingBtn.MouseButton1Click:Connect(function()
-        if not config.petSharingSavedPetInfo then
-            petSharingBtn.Text = "⚠️ Pilih Special Pet dulu!"
-            task.wait(1)
-            petSharingBtn.Text = "⭐ Pilih Pet Sharing..."
-            return
-        end
-        config.petSharingSelectedPet = config.petSharingSavedPetInfo.PetType
-        petSharingBtn.Text = "⭐ " .. config.petSharingSelectedPet
-        saveConfig()
-    end)
+local weightSharingBtn = Instance.new("TextButton")
+weightSharingBtn.Size = UDim2.new(1, -20, 0, 22)
+weightSharingBtn.Position = UDim2.new(0, 10, 0, 350)
+weightSharingBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+weightSharingBtn.BorderSizePixel = 0
+weightSharingBtn.Font = Enum.Font.Gotham
+weightSharingBtn.Text = config.petSharingWeightPet and ("🐘 " .. config.petSharingWeightPet) or "🐘 Pilih Pet Weight..."
+weightSharingBtn.TextColor3 = C.text
+weightSharingBtn.TextSize = 8
+weightSharingBtn.TextXAlignment = Enum.TextXAlignment.Left
+weightSharingBtn.Parent = PetSharingSection
+Instance.new("UICorner", weightSharingBtn).CornerRadius = UDim.new(0, 4)
+local wsPad = Instance.new("UIPadding")
+wsPad.PaddingLeft = UDim.new(0, 8)
+wsPad.Parent = weightSharingBtn
+
+weightSharingBtn.MouseButton1Click:Connect(function()
+    if not config.petSharingWeightSavedInfo then
+        weightSharingBtn.Text = "⚠️ Pilih Special Pet dulu!"
+        task.wait(1)
+        weightSharingBtn.Text = config.petSharingWeightPet and ("🐘 " .. config.petSharingWeightPet) or "🐘 Pilih Pet Weight..."
+        return
+    end
+    config.petSharingWeightPet = config.petSharingWeightSavedInfo.PetType
+    weightSharingBtn.Text = "🐘 " .. config.petSharingWeightPet
+    saveConfig()
+end)
+
+-- ====== DROPDOWN MUTATION SHARING ======
+local mutationSharingPetLabel = Instance.new("TextLabel")
+mutationSharingPetLabel.Size = UDim2.new(1, -20, 0, 14)
+mutationSharingPetLabel.Position = UDim2.new(0, 10, 0, 378)
+mutationSharingPetLabel.Text = "🧬 Pet Sharing Mutation:"
+mutationSharingPetLabel.TextColor3 = C.textDim
+mutationSharingPetLabel.Font = Enum.Font.Gotham
+mutationSharingPetLabel.TextSize = 8
+mutationSharingPetLabel.TextXAlignment = Enum.TextXAlignment.Left
+mutationSharingPetLabel.BackgroundTransparency = 1
+mutationSharingPetLabel.Parent = PetSharingSection
+
+local mutationSharingBtnPet = Instance.new("TextButton")
+mutationSharingBtnPet.Size = UDim2.new(1, -20, 0, 22)
+mutationSharingBtnPet.Position = UDim2.new(0, 10, 0, 394)
+mutationSharingBtnPet.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+mutationSharingBtnPet.BorderSizePixel = 0
+mutationSharingBtnPet.Font = Enum.Font.Gotham
+mutationSharingBtnPet.Text = config.petSharingMutationPet and ("🧬 " .. config.petSharingMutationPet) or "🧬 Pilih Pet Mutation..."
+mutationSharingBtnPet.TextColor3 = C.text
+mutationSharingBtnPet.TextSize = 8
+mutationSharingBtnPet.TextXAlignment = Enum.TextXAlignment.Left
+mutationSharingBtnPet.Parent = PetSharingSection
+Instance.new("UICorner", mutationSharingBtnPet).CornerRadius = UDim.new(0, 4)
+local msPad = Instance.new("UIPadding")
+msPad.PaddingLeft = UDim.new(0, 8)
+msPad.Parent = mutationSharingBtnPet
+
+mutationSharingBtnPet.MouseButton1Click:Connect(function()
+    if not config.petSharingMutationSavedInfo then
+        mutationSharingBtnPet.Text = "⚠️ Pilih Special Pet dulu!"
+        task.wait(1)
+        mutationSharingBtnPet.Text = config.petSharingMutationPet and ("🧬 " .. config.petSharingMutationPet) or "🧬 Pilih Pet Mutation..."
+        return
+    end
+    config.petSharingMutationPet = config.petSharingMutationSavedInfo.PetType
+    mutationSharingBtnPet.Text = "🧬 " .. config.petSharingMutationPet
+    saveConfig()
+end)
 
     -- Target Username Label
     local targetSharingLabel = Instance.new("TextLabel")
     targetSharingLabel.Size = UDim2.new(1, -20, 0, 14)
-    targetSharingLabel.Position = UDim2.new(0, 10, 0, 378)
+    targetSharingLabel.Position = UDim2.new(0, 10, 0, 422)
     targetSharingLabel.Text = "👤 Target Username:"
     targetSharingLabel.TextColor3 = C.textDim
     targetSharingLabel.Font = Enum.Font.Gotham
@@ -5233,11 +5328,11 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                     wait(3)
                 end
                 -- ⭐ SETELAH AUTO WEIGHT SELESAI: Gift Pet Sharing
-                if isAlive() and config.petSharingWeightEnabled then
-                    StatusLabel.Text = "🎁 Gift pet sharing (weight)..."
-                    giftSharingPet("weight")
-                    task.wait(3)
-                end
+if isAlive() and config.petSharingWeightEnabled then
+    StatusLabel.Text = "🎁 Gift pet sharing (weight)..."
+    giftSharingPet("weight")
+    task.wait(3)
+                        end
             end
 
             -- ⭐ Cek sebelum lanjut ke PRIORITAS 2
@@ -5370,11 +5465,11 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                     wait(3)
                 end
                 -- ⭐ SETELAH AUTO MUTATION SELESAI: Gift Pet Sharing
-                if isAlive() and config.petSharingMutationEnabled then
-                    StatusLabel.Text = "🎁 Gift pet sharing (mutation)..."
-                    giftSharingPet("mutation")
-                    task.wait(3)
-                end
+if isAlive() and config.petSharingMutationEnabled then
+    StatusLabel.Text = "🎁 Gift pet sharing (mutation)..."
+    giftSharingPet("mutation")
+    task.wait(3)
+                        end
             end
 
             -- ⭐ Cek sebelum lanjut ke PRIORITAS 3
