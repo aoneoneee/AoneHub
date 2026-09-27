@@ -3820,304 +3820,304 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     MutationListLayout.Parent = MutationListFrame
 
     -- ==================================================================
--- SECTION: PET SHARING
--- ==================================================================
-local PetSharingSection = createSection(weightScroll, "🎁 Pet Sharing", "petSharing")
-PetSharingSection.LayoutOrder = 6  -- Ganti LayoutOrder ButtonSection jadi 7
-PetSharingSection.Size = UDim2.new(1, -10, 0, 500)
+    -- SECTION: PET SHARING
+    -- ==================================================================
+    local PetSharingSection = createSection(weightScroll, "🎁 Pet Sharing", "petSharing")
+    PetSharingSection.LayoutOrder = 6  -- Ganti LayoutOrder ButtonSection jadi 7
+    PetSharingSection.Size = UDim2.new(1, -10, 0, 500)
 
--- Toggle Pet Sharing Mutation
-local mutationSharingBtn = Instance.new("TextButton")
-mutationSharingBtn.Size = UDim2.new(1, -20, 0, 25)
-mutationSharingBtn.Position = UDim2.new(0, 10, 0, 28)
-mutationSharingBtn.BackgroundColor3 = config.petSharingMutationEnabled and C.success or Color3.fromRGB(70, 70, 85)
-mutationSharingBtn.BorderSizePixel = 0
-mutationSharingBtn.Font = Enum.Font.GothamBold
-mutationSharingBtn.Text = config.petSharingMutationEnabled and "🧬 Pet Sharing Mutation: ON" or "🧬 Pet Sharing Mutation: OFF"
-mutationSharingBtn.TextColor3 = C.text
-mutationSharingBtn.TextSize = 9
-mutationSharingBtn.Parent = PetSharingSection
-Instance.new("UICorner", mutationSharingBtn).CornerRadius = UDim.new(0, 4)
-
-mutationSharingBtn.MouseButton1Click:Connect(function()
-    if not isAutoMutation then
-        StatusLabel.Text = "⚠️ Aktifkan Auto Mutation dulu!"
-        return
-    end
-    config.petSharingMutationEnabled = not config.petSharingMutationEnabled
-    mutationSharingBtn.Text = config.petSharingMutationEnabled and "🧬 Pet Sharing Mutation: ON" or "🧬 Pet Sharing Mutation: OFF"
+    -- Toggle Pet Sharing Mutation
+    local mutationSharingBtn = Instance.new("TextButton")
+    mutationSharingBtn.Size = UDim2.new(1, -20, 0, 25)
+    mutationSharingBtn.Position = UDim2.new(0, 10, 0, 28)
     mutationSharingBtn.BackgroundColor3 = config.petSharingMutationEnabled and C.success or Color3.fromRGB(70, 70, 85)
-    saveConfig()
-end)
+    mutationSharingBtn.BorderSizePixel = 0
+    mutationSharingBtn.Font = Enum.Font.GothamBold
+    mutationSharingBtn.Text = config.petSharingMutationEnabled and "🧬 Pet Sharing Mutation: ON" or "🧬 Pet Sharing Mutation: OFF"
+    mutationSharingBtn.TextColor3 = C.text
+    mutationSharingBtn.TextSize = 9
+    mutationSharingBtn.Parent = PetSharingSection
+    Instance.new("UICorner", mutationSharingBtn).CornerRadius = UDim.new(0, 4)
 
--- Toggle Pet Sharing Weight
-local weightSharingBtn = Instance.new("TextButton")
-weightSharingBtn.Size = UDim2.new(1, -20, 0, 25)
-weightSharingBtn.Position = UDim2.new(0, 10, 0, 58)
-weightSharingBtn.BackgroundColor3 = config.petSharingWeightEnabled and C.success or Color3.fromRGB(70, 70, 85)
-weightSharingBtn.BorderSizePixel = 0
-weightSharingBtn.Font = Enum.Font.GothamBold
-weightSharingBtn.Text = config.petSharingWeightEnabled and "🐘 Pet Sharing Weight: ON" or "🐘 Pet Sharing Weight: OFF"
-weightSharingBtn.TextColor3 = C.text
-weightSharingBtn.TextSize = 9
-weightSharingBtn.Parent = PetSharingSection
-Instance.new("UICorner", weightSharingBtn).CornerRadius = UDim.new(0, 4)
-
-weightSharingBtn.MouseButton1Click:Connect(function()
-    if not isAutoWeight then
-        StatusLabel.Text = "⚠️ Aktifkan Auto Weight dulu!"
-        return
-    end
-    config.petSharingWeightEnabled = not config.petSharingWeightEnabled
-    weightSharingBtn.Text = config.petSharingWeightEnabled and "🐘 Pet Sharing Weight: ON" or "🐘 Pet Sharing Weight: OFF"
-    weightSharingBtn.BackgroundColor3 = config.petSharingWeightEnabled and C.success or Color3.fromRGB(70, 70, 85)
-    saveConfig()
-end)
-
--- Special Pet Label
-local specialLabel = Instance.new("TextLabel")
-specialLabel.Size = UDim2.new(1, -20, 0, 16)
-specialLabel.Position = UDim2.new(0, 10, 0, 88)
-specialLabel.Text = "⭐ Special Pet (pilih 1):"
-specialLabel.TextColor3 = C.text
-specialLabel.Font = Enum.Font.GothamBold
-specialLabel.TextSize = 9
-specialLabel.TextXAlignment = Enum.TextXAlignment.Left
-specialLabel.BackgroundTransparency = 1
-specialLabel.Parent = PetSharingSection
-
--- Saved Pet Info
-local selectedSpecialLabel = Instance.new("TextLabel")
-selectedSpecialLabel.Size = UDim2.new(1, -20, 0, 14)
-selectedSpecialLabel.Position = UDim2.new(0, 10, 0, 106)
-selectedSpecialLabel.Text = config.petSharingSavedPetInfo and 
-    string.format("Saved: %s", config.petSharingSavedPetInfo.PetType) or 
-    "Belum ada pet dipilih"
-selectedSpecialLabel.TextColor3 = C.textDim
-selectedSpecialLabel.Font = Enum.Font.Gotham
-selectedSpecialLabel.TextSize = 7
-selectedSpecialLabel.TextXAlignment = Enum.TextXAlignment.Left
-selectedSpecialLabel.BackgroundTransparency = 1
-selectedSpecialLabel.Parent = PetSharingSection
-
--- Search
-local specialSearch = Instance.new("TextBox")
-specialSearch.Size = UDim2.new(1, -20, 0, 22)
-specialSearch.Position = UDim2.new(0, 10, 0, 122)
-specialSearch.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-specialSearch.BorderSizePixel = 0
-specialSearch.Font = Enum.Font.Gotham
-specialSearch.PlaceholderText = "🔍 Cari pet..."
-specialSearch.Text = ""
-specialSearch.TextColor3 = C.text
-specialSearch.TextSize = 9
-specialSearch.Parent = PetSharingSection
-Instance.new("UICorner", specialSearch).CornerRadius = UDim.new(0, 4)
-
--- List frame
-local specialListFrame = Instance.new("ScrollingFrame")
-specialListFrame.Size = UDim2.new(1, -20, 0, 180)
-specialListFrame.Position = UDim2.new(0, 10, 0, 148)
-specialListFrame.BackgroundTransparency = 1
-specialListFrame.BorderSizePixel = 0
-specialListFrame.ScrollBarThickness = 3
-specialListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-specialListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-specialListFrame.Parent = PetSharingSection
-
-local specialListLayout = Instance.new("UIListLayout")
-specialListLayout.Padding = UDim.new(0, 2)
-specialListLayout.Parent = specialListFrame
-
--- Fungsi populate list
-local function populateSpecialPetList()
-    for _, c in ipairs(specialListFrame:GetChildren()) do
-        if c:IsA("TextButton") then c:Destroy() end
-    end
-
-    local search = specialSearch.Text:lower()
-    local petsData = getPlayerPetData()
-    if not petsData then return end
-
-    local inventory = petsData.PetInventory.Data or {}
-    local equippedUUIDs = getEquippedPets()
-    local equippedSet = {}
-    for _, uuid in ipairs(equippedUUIDs) do equippedSet[uuid] = true end
-
-    local items = {}
-    for uuid, _ in pairs(inventory) do
-        local displayName = getPetDisplayName(uuid)
-        local level = getPetLevel(uuid)
-        local weight = getPetWeight(uuid)
-        local isEquipped = equippedSet[uuid]
-
-        if search == "" or displayName:lower():find(search) then
-            table.insert(items, {
-                uuid = uuid,
-                displayName = displayName,
-                petType = getPetType(uuid),
-                mutation = getPetMutationName(uuid),
-                level = level,
-                weight = weight,
-                isEquipped = isEquipped,
-                isSelected = config.petSharingSavedPetInfo 
-                    and config.petSharingSavedPetInfo.UUID == uuid,
-            })
+    mutationSharingBtn.MouseButton1Click:Connect(function()
+        if not isAutoMutation then
+            StatusLabel.Text = "⚠️ Aktifkan Auto Mutation dulu!"
+            return
         end
-    end
-
-    table.sort(items, function(a, b)
-        if a.isSelected ~= b.isSelected then return a.isSelected end
-        if a.isEquipped ~= b.isEquipped then return a.isEquipped end
-        return a.displayName < b.displayName
+        config.petSharingMutationEnabled = not config.petSharingMutationEnabled
+        mutationSharingBtn.Text = config.petSharingMutationEnabled and "🧬 Pet Sharing Mutation: ON" or "🧬 Pet Sharing Mutation: OFF"
+        mutationSharingBtn.BackgroundColor3 = config.petSharingMutationEnabled and C.success or Color3.fromRGB(70, 70, 85)
+        saveConfig()
     end)
 
-    local i = 0
-    for _, item in ipairs(items) do
-        i = i + 1
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, -4, 0, 22)
-        btn.BackgroundColor3 = item.isSelected and C.warning or (item.isEquipped and C.accent or Color3.fromRGB(65, 65, 80))
-        btn.BorderSizePixel = 0
-        btn.Font = Enum.Font.Gotham
-        btn.Text = string.format("%s %s | %.2f kg | Lv.%d%s", 
-            item.isSelected and "⭐" or (item.isEquipped and "🎯" or "○"),
-            item.displayName, item.weight, item.level,
-            item.isEquipped and " (Eq)" or ""
-        )
-        btn.TextColor3 = C.text
-        btn.TextSize = 8
-        btn.TextXAlignment = Enum.TextXAlignment.Left
-        btn.LayoutOrder = i
-        btn.Parent = specialListFrame
-        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
-        local pad = Instance.new("UIPadding")
-        pad.PaddingLeft = UDim.new(0, 6)
-        pad.Parent = btn
+    -- Toggle Pet Sharing Weight
+    local weightSharingBtn = Instance.new("TextButton")
+    weightSharingBtn.Size = UDim2.new(1, -20, 0, 25)
+    weightSharingBtn.Position = UDim2.new(0, 10, 0, 58)
+    weightSharingBtn.BackgroundColor3 = config.petSharingWeightEnabled and C.success or Color3.fromRGB(70, 70, 85)
+    weightSharingBtn.BorderSizePixel = 0
+    weightSharingBtn.Font = Enum.Font.GothamBold
+    weightSharingBtn.Text = config.petSharingWeightEnabled and "🐘 Pet Sharing Weight: ON" or "🐘 Pet Sharing Weight: OFF"
+    weightSharingBtn.TextColor3 = C.text
+    weightSharingBtn.TextSize = 9
+    weightSharingBtn.Parent = PetSharingSection
+    Instance.new("UICorner", weightSharingBtn).CornerRadius = UDim.new(0, 4)
 
-        btn.MouseButton1Click:Connect(function()
-            config.petSharingSavedPetInfo = {
-                UUID = item.uuid,
-                PetType = item.petType,
-                Mutation = item.mutation,
-                Level = item.level,
-            }
-            saveConfig()
-            selectedSpecialLabel.Text = string.format("Saved: %s", item.displayName)
-            populateSpecialPetList()
+    weightSharingBtn.MouseButton1Click:Connect(function()
+        if not isAutoWeight then
+            StatusLabel.Text = "⚠️ Aktifkan Auto Weight dulu!"
+            return
+        end
+        config.petSharingWeightEnabled = not config.petSharingWeightEnabled
+        weightSharingBtn.Text = config.petSharingWeightEnabled and "🐘 Pet Sharing Weight: ON" or "🐘 Pet Sharing Weight: OFF"
+        weightSharingBtn.BackgroundColor3 = config.petSharingWeightEnabled and C.success or Color3.fromRGB(70, 70, 85)
+        saveConfig()
+    end)
+
+    -- Special Pet Label
+    local specialLabel = Instance.new("TextLabel")
+    specialLabel.Size = UDim2.new(1, -20, 0, 16)
+    specialLabel.Position = UDim2.new(0, 10, 0, 88)
+    specialLabel.Text = "⭐ Special Pet (pilih 1):"
+    specialLabel.TextColor3 = C.text
+    specialLabel.Font = Enum.Font.GothamBold
+    specialLabel.TextSize = 9
+    specialLabel.TextXAlignment = Enum.TextXAlignment.Left
+    specialLabel.BackgroundTransparency = 1
+    specialLabel.Parent = PetSharingSection
+
+    -- Saved Pet Info
+    local selectedSpecialLabel = Instance.new("TextLabel")
+    selectedSpecialLabel.Size = UDim2.new(1, -20, 0, 14)
+    selectedSpecialLabel.Position = UDim2.new(0, 10, 0, 106)
+    selectedSpecialLabel.Text = config.petSharingSavedPetInfo and 
+        string.format("Saved: %s", config.petSharingSavedPetInfo.PetType) or 
+        "Belum ada pet dipilih"
+    selectedSpecialLabel.TextColor3 = C.textDim
+    selectedSpecialLabel.Font = Enum.Font.Gotham
+    selectedSpecialLabel.TextSize = 7
+    selectedSpecialLabel.TextXAlignment = Enum.TextXAlignment.Left
+    selectedSpecialLabel.BackgroundTransparency = 1
+    selectedSpecialLabel.Parent = PetSharingSection
+
+    -- Search
+    local specialSearch = Instance.new("TextBox")
+    specialSearch.Size = UDim2.new(1, -20, 0, 22)
+    specialSearch.Position = UDim2.new(0, 10, 0, 122)
+    specialSearch.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    specialSearch.BorderSizePixel = 0
+    specialSearch.Font = Enum.Font.Gotham
+    specialSearch.PlaceholderText = "🔍 Cari pet..."
+    specialSearch.Text = ""
+    specialSearch.TextColor3 = C.text
+    specialSearch.TextSize = 9
+    specialSearch.Parent = PetSharingSection
+    Instance.new("UICorner", specialSearch).CornerRadius = UDim.new(0, 4)
+
+    -- List frame
+    local specialListFrame = Instance.new("ScrollingFrame")
+    specialListFrame.Size = UDim2.new(1, -20, 0, 180)
+    specialListFrame.Position = UDim2.new(0, 10, 0, 148)
+    specialListFrame.BackgroundTransparency = 1
+    specialListFrame.BorderSizePixel = 0
+    specialListFrame.ScrollBarThickness = 3
+    specialListFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    specialListFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    specialListFrame.Parent = PetSharingSection
+
+    local specialListLayout = Instance.new("UIListLayout")
+    specialListLayout.Padding = UDim.new(0, 2)
+    specialListLayout.Parent = specialListFrame
+
+    -- Fungsi populate list
+    local function populateSpecialPetList()
+        for _, c in ipairs(specialListFrame:GetChildren()) do
+            if c:IsA("TextButton") then c:Destroy() end
+        end
+
+        local search = specialSearch.Text:lower()
+        local petsData = getPlayerPetData()
+        if not petsData then return end
+
+        local inventory = petsData.PetInventory.Data or {}
+        local equippedUUIDs = getEquippedPets()
+        local equippedSet = {}
+        for _, uuid in ipairs(equippedUUIDs) do equippedSet[uuid] = true end
+
+        local items = {}
+        for uuid, _ in pairs(inventory) do
+            local displayName = getPetDisplayName(uuid)
+            local level = getPetLevel(uuid)
+            local weight = getPetWeight(uuid)
+            local isEquipped = equippedSet[uuid]
+
+            if search == "" or displayName:lower():find(search) then
+                table.insert(items, {
+                    uuid = uuid,
+                    displayName = displayName,
+                    petType = getPetType(uuid),
+                    mutation = getPetMutationName(uuid),
+                    level = level,
+                    weight = weight,
+                    isEquipped = isEquipped,
+                    isSelected = config.petSharingSavedPetInfo 
+                        and config.petSharingSavedPetInfo.UUID == uuid,
+                })
+            end
+        end
+
+        table.sort(items, function(a, b)
+            if a.isSelected ~= b.isSelected then return a.isSelected end
+            if a.isEquipped ~= b.isEquipped then return a.isEquipped end
+            return a.displayName < b.displayName
         end)
-    end
-end
 
-specialSearch:GetPropertyChangedSignal("Text"):Connect(populateSpecialPetList)
+        local i = 0
+        for _, item in ipairs(items) do
+            i = i + 1
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -4, 0, 22)
+            btn.BackgroundColor3 = item.isSelected and C.warning or (item.isEquipped and C.accent or Color3.fromRGB(65, 65, 80))
+            btn.BorderSizePixel = 0
+            btn.Font = Enum.Font.Gotham
+            btn.Text = string.format("%s %s | %.2f kg | Lv.%d%s", 
+                item.isSelected and "⭐" or (item.isEquipped and "🎯" or "○"),
+                item.displayName, item.weight, item.level,
+                item.isEquipped and " (Eq)" or ""
+            )
+            btn.TextColor3 = C.text
+            btn.TextSize = 8
+            btn.TextXAlignment = Enum.TextXAlignment.Left
+            btn.LayoutOrder = i
+            btn.Parent = specialListFrame
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+            local pad = Instance.new("UIPadding")
+            pad.PaddingLeft = UDim.new(0, 6)
+            pad.Parent = btn
 
--- Pet Sharing Label
-local petSharingLabel = Instance.new("TextLabel")
-petSharingLabel.Size = UDim2.new(1, -20, 0, 14)
-petSharingLabel.Position = UDim2.new(0, 10, 0, 334)
-petSharingLabel.Text = "🐾 Pet Sharing:"
-petSharingLabel.TextColor3 = C.textDim
-petSharingLabel.Font = Enum.Font.Gotham
-petSharingLabel.TextSize = 8
-petSharingLabel.TextXAlignment = Enum.TextXAlignment.Left
-petSharingLabel.BackgroundTransparency = 1
-petSharingLabel.Parent = PetSharingSection
-
--- Pet Sharing Button (dropdown sederhana)
-local petSharingBtn = Instance.new("TextButton")
-petSharingBtn.Size = UDim2.new(1, -20, 0, 22)
-petSharingBtn.Position = UDim2.new(0, 10, 0, 350)
-petSharingBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-petSharingBtn.BorderSizePixel = 0
-petSharingBtn.Font = Enum.Font.Gotham
-petSharingBtn.Text = config.petSharingSelectedPet and ("⭐ " .. config.petSharingSelectedPet) or "⭐ Pilih Pet Sharing..."
-petSharingBtn.TextColor3 = C.text
-petSharingBtn.TextSize = 8
-petSharingBtn.TextXAlignment = Enum.TextXAlignment.Left
-petSharingBtn.Parent = PetSharingSection
-Instance.new("UICorner", petSharingBtn).CornerRadius = UDim.new(0, 4)
-local psPad = Instance.new("UIPadding")
-psPad.PaddingLeft = UDim.new(0, 8)
-psPad.Parent = petSharingBtn
-
-petSharingBtn.MouseButton1Click:Connect(function()
-    if not config.petSharingSavedPetInfo then
-        petSharingBtn.Text = "⚠️ Pilih Special Pet dulu!"
-        task.wait(1)
-        petSharingBtn.Text = "⭐ Pilih Pet Sharing..."
-        return
-    end
-    config.petSharingSelectedPet = config.petSharingSavedPetInfo.PetType
-    petSharingBtn.Text = "⭐ " .. config.petSharingSelectedPet
-    saveConfig()
-end)
-
--- Target Username Label
-local targetSharingLabel = Instance.new("TextLabel")
-targetSharingLabel.Size = UDim2.new(1, -20, 0, 14)
-targetSharingLabel.Position = UDim2.new(0, 10, 0, 378)
-targetSharingLabel.Text = "👤 Target Username:"
-targetSharingLabel.TextColor3 = C.textDim
-targetSharingLabel.Font = Enum.Font.Gotham
-targetSharingLabel.TextSize = 8
-targetSharingLabel.TextXAlignment = Enum.TextXAlignment.Left
-targetSharingLabel.BackgroundTransparency = 1
-targetSharingLabel.Parent = PetSharingSection
-
--- Target Username Button
-local targetSharingBtn = Instance.new("TextButton")
-targetSharingBtn.Size = UDim2.new(1, -20, 0, 22)
-targetSharingBtn.Position = UDim2.new(0, 10, 0, 394)
-targetSharingBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-targetSharingBtn.BorderSizePixel = 0
-targetSharingBtn.Font = Enum.Font.Gotham
-targetSharingBtn.Text = config.petSharingTargetUsername and ("👤 " .. config.petSharingTargetUsername) or "👤 Pilih target..."
-targetSharingBtn.TextColor3 = C.text
-targetSharingBtn.TextSize = 8
-targetSharingBtn.TextXAlignment = Enum.TextXAlignment.Left
-targetSharingBtn.Parent = PetSharingSection
-Instance.new("UICorner", targetSharingBtn).CornerRadius = UDim.new(0, 4)
-local tsPad = Instance.new("UIPadding")
-tsPad.PaddingLeft = UDim.new(0, 8)
-tsPad.Parent = targetSharingBtn
-
-targetSharingBtn.MouseButton1Click:Connect(function()
-    local names = getPlayerNames()
-    if #names == 0 then
-        targetSharingBtn.Text = "❌ Tidak ada player lain"
-        task.wait(1)
-        targetSharingBtn.Text = config.petSharingTargetUsername and ("👤 " .. config.petSharingTargetUsername) or "👤 Pilih target..."
-        return
-    end
-    local currentIdx = 1
-    if config.petSharingTargetUsername then
-        for i, n in ipairs(names) do
-            if n == config.petSharingTargetUsername then currentIdx = i + 1 break end
+            btn.MouseButton1Click:Connect(function()
+                config.petSharingSavedPetInfo = {
+                    UUID = item.uuid,
+                    PetType = item.petType,
+                    Mutation = item.mutation,
+                    Level = item.level,
+                }
+                saveConfig()
+                selectedSpecialLabel.Text = string.format("Saved: %s", item.displayName)
+                populateSpecialPetList()
+            end)
         end
     end
-    if currentIdx > #names then currentIdx = 1 end
-    config.petSharingTargetUsername = names[currentIdx]
-    targetSharingBtn.Text = "👤 " .. names[currentIdx]
-    saveConfig()
-end)
 
--- Refresh Button
-local refreshPetSharingBtn = Instance.new("TextButton")
-refreshPetSharingBtn.Size = UDim2.new(1, -20, 0, 20)
-refreshPetSharingBtn.Position = UDim2.new(0, 10, 0, 420)
-refreshPetSharingBtn.BackgroundColor3 = C.accent
-refreshPetSharingBtn.BorderSizePixel = 0
-refreshPetSharingBtn.Font = Enum.Font.Gotham
-refreshPetSharingBtn.Text = "🔄 Refresh Pet List"
-refreshPetSharingBtn.TextColor3 = C.text
-refreshPetSharingBtn.TextSize = 7
-refreshPetSharingBtn.Parent = PetSharingSection
-Instance.new("UICorner", refreshPetSharingBtn).CornerRadius = UDim.new(0, 3)
+    specialSearch:GetPropertyChangedSignal("Text"):Connect(populateSpecialPetList)
 
-refreshPetSharingBtn.MouseButton1Click:Connect(populateSpecialPetList)
+    -- Pet Sharing Label
+    local petSharingLabel = Instance.new("TextLabel")
+    petSharingLabel.Size = UDim2.new(1, -20, 0, 14)
+    petSharingLabel.Position = UDim2.new(0, 10, 0, 334)
+    petSharingLabel.Text = "🐾 Pet Sharing:"
+    petSharingLabel.TextColor3 = C.textDim
+    petSharingLabel.Font = Enum.Font.Gotham
+    petSharingLabel.TextSize = 8
+    petSharingLabel.TextXAlignment = Enum.TextXAlignment.Left
+    petSharingLabel.BackgroundTransparency = 1
+    petSharingLabel.Parent = PetSharingSection
 
--- Init list
-populateSpecialPetList()
+    -- Pet Sharing Button (dropdown sederhana)
+    local petSharingBtn = Instance.new("TextButton")
+    petSharingBtn.Size = UDim2.new(1, -20, 0, 22)
+    petSharingBtn.Position = UDim2.new(0, 10, 0, 350)
+    petSharingBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    petSharingBtn.BorderSizePixel = 0
+    petSharingBtn.Font = Enum.Font.Gotham
+    petSharingBtn.Text = config.petSharingSelectedPet and ("⭐ " .. config.petSharingSelectedPet) or "⭐ Pilih Pet Sharing..."
+    petSharingBtn.TextColor3 = C.text
+    petSharingBtn.TextSize = 8
+    petSharingBtn.TextXAlignment = Enum.TextXAlignment.Left
+    petSharingBtn.Parent = PetSharingSection
+    Instance.new("UICorner", petSharingBtn).CornerRadius = UDim.new(0, 4)
+    local psPad = Instance.new("UIPadding")
+    psPad.PaddingLeft = UDim.new(0, 8)
+    psPad.Parent = petSharingBtn
+
+    petSharingBtn.MouseButton1Click:Connect(function()
+        if not config.petSharingSavedPetInfo then
+            petSharingBtn.Text = "⚠️ Pilih Special Pet dulu!"
+            task.wait(1)
+            petSharingBtn.Text = "⭐ Pilih Pet Sharing..."
+            return
+        end
+        config.petSharingSelectedPet = config.petSharingSavedPetInfo.PetType
+        petSharingBtn.Text = "⭐ " .. config.petSharingSelectedPet
+        saveConfig()
+    end)
+
+    -- Target Username Label
+    local targetSharingLabel = Instance.new("TextLabel")
+    targetSharingLabel.Size = UDim2.new(1, -20, 0, 14)
+    targetSharingLabel.Position = UDim2.new(0, 10, 0, 378)
+    targetSharingLabel.Text = "👤 Target Username:"
+    targetSharingLabel.TextColor3 = C.textDim
+    targetSharingLabel.Font = Enum.Font.Gotham
+    targetSharingLabel.TextSize = 8
+    targetSharingLabel.TextXAlignment = Enum.TextXAlignment.Left
+    targetSharingLabel.BackgroundTransparency = 1
+    targetSharingLabel.Parent = PetSharingSection
+
+    -- Target Username Button
+    local targetSharingBtn = Instance.new("TextButton")
+    targetSharingBtn.Size = UDim2.new(1, -20, 0, 22)
+    targetSharingBtn.Position = UDim2.new(0, 10, 0, 394)
+    targetSharingBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    targetSharingBtn.BorderSizePixel = 0
+    targetSharingBtn.Font = Enum.Font.Gotham
+    targetSharingBtn.Text = config.petSharingTargetUsername and ("👤 " .. config.petSharingTargetUsername) or "👤 Pilih target..."
+    targetSharingBtn.TextColor3 = C.text
+    targetSharingBtn.TextSize = 8
+    targetSharingBtn.TextXAlignment = Enum.TextXAlignment.Left
+    targetSharingBtn.Parent = PetSharingSection
+    Instance.new("UICorner", targetSharingBtn).CornerRadius = UDim.new(0, 4)
+    local tsPad = Instance.new("UIPadding")
+    tsPad.PaddingLeft = UDim.new(0, 8)
+    tsPad.Parent = targetSharingBtn
+
+    targetSharingBtn.MouseButton1Click:Connect(function()
+        local names = getPlayerNames()
+        if #names == 0 then
+            targetSharingBtn.Text = "❌ Tidak ada player lain"
+            task.wait(1)
+            targetSharingBtn.Text = config.petSharingTargetUsername and ("👤 " .. config.petSharingTargetUsername) or "👤 Pilih target..."
+            return
+        end
+        local currentIdx = 1
+        if config.petSharingTargetUsername then
+            for i, n in ipairs(names) do
+                if n == config.petSharingTargetUsername then currentIdx = i + 1 break end
+            end
+        end
+        if currentIdx > #names then currentIdx = 1 end
+        config.petSharingTargetUsername = names[currentIdx]
+        targetSharingBtn.Text = "👤 " .. names[currentIdx]
+        saveConfig()
+    end)
+
+    -- Refresh Button
+    local refreshPetSharingBtn = Instance.new("TextButton")
+    refreshPetSharingBtn.Size = UDim2.new(1, -20, 0, 20)
+    refreshPetSharingBtn.Position = UDim2.new(0, 10, 0, 420)
+    refreshPetSharingBtn.BackgroundColor3 = C.accent
+    refreshPetSharingBtn.BorderSizePixel = 0
+    refreshPetSharingBtn.Font = Enum.Font.Gotham
+    refreshPetSharingBtn.Text = "🔄 Refresh Pet List"
+    refreshPetSharingBtn.TextColor3 = C.text
+    refreshPetSharingBtn.TextSize = 7
+    refreshPetSharingBtn.Parent = PetSharingSection
+    Instance.new("UICorner", refreshPetSharingBtn).CornerRadius = UDim.new(0, 3)
+
+    refreshPetSharingBtn.MouseButton1Click:Connect(populateSpecialPetList)
+
+    -- Init list
+    populateSpecialPetList()
     
     -- ==================================================================
     -- SECTION: KONTROL
