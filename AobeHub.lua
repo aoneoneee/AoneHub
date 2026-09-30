@@ -181,6 +181,10 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             advancedPresets = {},
             targetLevel = 50,
             advancedTargetLevel = 500,
+            maxWeightPetsPerSession = 1,      -- ⭐ BARU
+            maxMutationPetsPerSession = 1,    -- ⭐ BARU
+            maxAdvancedPetsPerSession = 1,    -- ⭐ BARU
+            maxNormalPetsPerSession = 1,      -- ⭐ BARU
             rainbowMode = false,
             unwantedMutations = {},
             unwantedMutationsHatch = {},
@@ -213,6 +217,10 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                     if config.advancedPresets == nil then config.advancedPresets = {} end
                     if config.targetLevel == nil then config.targetLevel = 50 end
                     if config.advancedTargetLevel == nil then config.advancedTargetLevel = 500 end
+                    if config.maxWeightPetsPerSession == nil then config.maxWeightPetsPerSession = 1 end
+                    if config.maxMutationPetsPerSession == nil then config.maxMutationPetsPerSession = 1 end
+                    if config.maxAdvancedPetsPerSession == nil then config.maxAdvancedPetsPerSession = 1 end
+                    if config.maxNormalPetsPerSession == nil then config.maxNormalPetsPerSession = 1 end
                     if config.rainbowMode == nil then config.rainbowMode = false end
                     if config.unwantedMutations == nil then config.unwantedMutations = {} end
                     if config.isAutoWeight == nil then config.isAutoWeight = false end
@@ -2062,35 +2070,68 @@ if not isInPreset then
 end
 
 -- ============================================================
--- STEP 3: CEK SLOT SEBELUM EQUIP
+-- STEP 3: CEK SLOT SEBELUM EQUIP (DENGAN PRIORITAS)
 -- ============================================================
 local equippedPets = getEquippedPets()
 
 if #equippedPets >= MAX_PET_SLOTS then
-    print(string.format("[Pet Sharing:%s] ⚠️ Slot penuh (%d/%d), cari pet target untuk di-unequip...",
+    print(string.format("[Pet Sharing:%s] ⚠️ Slot penuh (%d/%d), cari pet untuk di-unequip...",
         sharingType, #equippedPets, MAX_PET_SLOTS))
 
-    local unequipTarget = nil
+    -- ⭐ Ambil UUID tim preset
+    local currentPreset = nil
+    if isAutoWeight and selectedWeightPreset then
+        currentPreset = selectedWeightPreset
+    elseif isAutoMutation and selectedMutationPreset then
+        currentPreset = selectedMutationPreset
+    elseif isAdvancedLeveling and selectedAdvancedPreset then
+        currentPreset = selectedAdvancedPreset
+    elseif isLeveling and selectedTeamPreset then
+        currentPreset = selectedTeamPreset
+    end
+
+    local presetUUIDs = currentPreset and getPresetUUIDs(currentPreset) or {}
+    local presetSet = {}
+    for _, uuid in ipairs(presetUUIDs) do presetSet[uuid] = true end
+
+    local targetSet = {}
+    for _, uuid in ipairs(allSelectedPets) do targetSet[uuid] = true end
+
+    -- ⭐ PRIORITAS 1: Pet yang BUKAN preset DAN BUKAN target
+    -- ⭐ PRIORITAS 2: Pet yang BUKAN preset (tapi target)
+    local priority1, priority2 = nil, nil
+
     for _, uuid in ipairs(equippedPets) do
-        if table.find(allSelectedPets, uuid) then
-            unequipTarget = uuid
-            break
+        local isInPreset = presetSet[uuid] == true
+        local isInTarget = targetSet[uuid] == true
+
+        if not isInPreset and not isInTarget then
+            priority1 = priority1 or uuid
+        elseif not isInPreset and isInTarget then
+            priority2 = priority2 or uuid
         end
     end
 
+    local unequipTarget = priority1 or priority2
+
     if unequipTarget then
-        print(string.format("[Pet Sharing:%s] 🔄 Unequip pet target: %s",
-            sharingType, getPetType(unequipTarget)))
+        local reason = ""
+        if unequipTarget == priority1 then reason = "bukan preset & bukan target"
+        else reason = "bukan preset (tapi target)" end
+
+        print(string.format("[Pet Sharing:%s] 🔄 Unequip %s [%s] — alasan: %s",
+            sharingType, getPetType(unequipTarget), unequipTarget:sub(1, 8), reason))
+
         pcall(function()
             PetsService:UnequipPet(unequipTarget)
         end)
-        task.wait(0.5)
+        task.wait(1)  -- ⭐ tunggu slot benar-benar kosong
     else
-        print(string.format("[Pet Sharing:%s] ❌ Tidak ada pet target di-equipped untuk di-unequip",
+        print(string.format("[Pet Sharing:%s] ❌ Semua slot terisi tim preset, skip gift",
             sharingType))
         return false
     end
-end
+            end
 
 -- ============================================================
 -- STEP 4: EQUIP PET BARU
@@ -3805,7 +3846,7 @@ do -- BLOCK 8: UI SECTION: PRESET, PET TARGET, PILIH TIM
     -- ==================================================================
     local TeamSelectSection = createSection(weightScroll, "📈 Auto Leveling", "autoLeveling")
     TeamSelectSection.LayoutOrder = 3
-    TeamSelectSection.Size = UDim2.new(1, -10, 0, 210)
+    TeamSelectSection.Size = UDim2.new(1, -10, 0, 252)
 
     local LevelInput = Instance.new("TextBox")
     LevelInput.Size = UDim2.new(1, -20, 0, 22)
@@ -3840,7 +3881,7 @@ do -- BLOCK 8: UI SECTION: PRESET, PET TARGET, PILIH TIM
         UDim2.new(0, 10, 0, 55),
         selectedTeamPreset and string.format("📂 %s", selectedTeamPreset) or "📂 Pilih Preset Tim Leveling",
         TeamSelectSection,
-        210,
+        252,
         weightScroll
     )
 
@@ -3903,9 +3944,13 @@ do -- BLOCK 8: UI SECTION: PRESET, PET TARGET, PILIH TIM
         UDim2.new(0, 10, 0, 172),
         selectedAdvancedPreset and string.format("📂 %s", selectedAdvancedPreset) or "📂 Pilih Preset Advanced",
         TeamSelectSection,
-        210,
+        252,
         weightScroll
     )
+
+    -- ⭐ BARU: Input max pet/sesi
+    makeInputRow(TeamSelectSection, 205, "Max pet Normal/sesi:", "maxNormalPetsPerSession", true, 1, 8)
+    makeInputRow(TeamSelectSection, 226, "Max pet Advanced/sesi:", "maxAdvancedPetsPerSession", true, 1, 8)
 end -- BLOCK 8
 
 -- shared: diisi di BLOCK 9 (UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS)
@@ -3918,7 +3963,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     -- ==================================================================
     local WeightSection = createSection(weightScroll, "🐘 Auto Weight", "autoWeight")
     WeightSection.LayoutOrder = 4
-    WeightSection.Size = UDim2.new(1, -10, 0, 129)
+    WeightSection.Size = UDim2.new(1, -10, 0, 150)
 
     WeightToggleButton = Instance.new("TextButton")
     WeightToggleButton.Size = UDim2.new(1, -20, 0, 28)
@@ -3956,9 +4001,12 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
         UDim2.new(0, 10, 0, 91),
         selectedWeightPreset and string.format("📂 %s", selectedWeightPreset) or "📂 Pilih Preset Auto Weight",
         WeightSection,
-        129,
+        150,
         weightScroll
     )
+
+    -- ⭐ BARU: Input max pet per sesi
+    makeInputRow(WeightSection, 124, "Jumlah Target Pet:", "maxWeightPetsPerSession", true, 1, 8)
 
     -- Semua GUI yang ingin mengikuti warna rainbow
     local rainbowTargets = {
@@ -3970,7 +4018,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     -- ==================================================================
     local MutationSection = createSection(weightScroll, "🧬 Auto Mutation", "autoMutation")
     MutationSection.LayoutOrder = 5
-    MutationSection.Size = UDim2.new(1, -10, 0, 278)
+    MutationSection.Size = UDim2.new(1, -10, 0, 299)
 
     MutationToggleButton = Instance.new("TextButton")
     MutationToggleButton.Size = UDim2.new(1, -20, 0, 28)
@@ -3993,9 +4041,12 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
         UDim2.new(0, 10, 0, 61),
         selectedMutationPreset and string.format("📂 %s", selectedMutationPreset) or "📂 Pilih Preset Tim Mutation",
         MutationSection,
-        278,
+        299,
         weightScroll
     )
+
+    -- ⭐ BARU: Input max pet per sesi
+    makeInputRow(MutationSection, 273, "Max pet/sesi:", "maxMutationPetsPerSession", true, 1, 8)
 
     MutLabel = Instance.new("TextLabel")
     MutLabel.Size = UDim2.new(1, -20, 0, 22)
@@ -5326,8 +5377,9 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                         wait(2)
 
                         local availableSlots = MAX_PET_SLOTS - #teamUUIDs
-                        local toEquip = math.min(availableSlots, #levelTargets)
-
+                        local userLimit = config.maxWeightPetsPerSession or 1
+                        local toEquip = math.min(availableSlots, #levelTargets, userLimit)  -- ⭐ tambah userLimit
+                                
                         local levelingEquippedPets = {}
                         local pendingLevelTargets = {}
 
@@ -5411,7 +5463,8 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
 
                     if #readyForWeight > 0 then
                         local availableSlots = MAX_PET_SLOTS - #weightUUIDs
-                        local toEquip = math.min(availableSlots, #readyForWeight)
+                        local userLimit = config.maxWeightPetsPerSession or 1
+                        local toEquip = math.min(availableSlots, #readyForWeight, userLimit)
 
                         local weightEquippedPets = {}
                         local pendingWeightPets = {}
@@ -5551,7 +5604,8 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                     wait(3)
 
                     local availableSlots = MAX_PET_SLOTS - #mutationTeamUUIDs
-                    local toEquip = math.min(availableSlots, #mutationPets)
+                    local userLimit = config.maxMutationPetsPerSession or 1
+                    local toEquip = math.min(availableSlots, #mutationPets, userLimit)
 
                     local equippedForMutation = {}
                     local pendingMutationList = {}
@@ -5667,7 +5721,8 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                     wait(2)
 
                     local availableSlots = MAX_PET_SLOTS - #teamUUIDs
-                    local toEquip = math.min(availableSlots, #normalPets)
+                    local userLimit = config.maxNormalPetsPerSession or 1
+                    local toEquip = math.min(availableSlots, #normalPets, userLimit)
 
                     local normalEquippedPets = {}
                     local pendingNormalList = {}
@@ -5753,7 +5808,8 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                     wait(3)
 
                     local availableSlots = MAX_PET_SLOTS - #advancedUUIDs
-                    local toEquip = math.min(availableSlots, #advancedPets)
+                    local userLimit = config.maxAdvancedPetsPerSession or 1
+                    local toEquip = math.min(availableSlots, #advancedPets, userLimit)
 
                     local advancedEquippedPets = {}
                     local pendingAdvancedList = {}
