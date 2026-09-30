@@ -3861,7 +3861,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     -- ==================================================================
     local PetSharingSection = createSection(weightScroll, "🎁 Pet Sharing", "petSharing")
     PetSharingSection.LayoutOrder = 6  -- Ganti LayoutOrder ButtonSection jadi 7
-    PetSharingSection.Size = UDim2.new(1, -10, 0, 385)
+    PetSharingSection.Size = UDim2.new(1, -10, 0, 418)
 
     -- Toggle Pet Sharing Mutation
     local mutationSharingBtn = Instance.new("TextButton")
@@ -4188,7 +4188,7 @@ end)
     -- Refresh Button
     local refreshPetSharingBtn = Instance.new("TextButton")
     refreshPetSharingBtn.Size = UDim2.new(1, -20, 0, 20)
-    refreshPetSharingBtn.Position = UDim2.new(0, 10, 0, 355)
+    refreshPetSharingBtn.Position = UDim2.new(0, 10, 0, 388)
     refreshPetSharingBtn.BackgroundColor3 = C.accent
     refreshPetSharingBtn.BorderSizePixel = 0
     refreshPetSharingBtn.Font = Enum.Font.Gotham
