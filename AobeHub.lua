@@ -1567,8 +1567,6 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         end
     end -- BLOCK 4
     
-    local findPetToolByUUID
-    
     do -- BLOCK 5: LOADOUT, FAVORIT, GIFT, MONITOR, AUTO HATCH LOOP
         -- ==================================================================
         -- HELPER: LOADOUT SWAP
@@ -1889,7 +1887,7 @@ if isLeveling and not isCheckingPetSharing then
         -- ==================================================================
         -- PET SHARING: GIFT PET
         -- ==================================================================
-        function findPetToolByUUID(petUUID)
+        local function findPetToolByUUID(petUUID)
     -- Cari pet data di inventory untuk dapat PetType & mutation
     local petType = getPetType(petUUID)
     if not petType or petType == "Unknown" then return nil end
