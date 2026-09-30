@@ -73,7 +73,7 @@ local getPreset, getPlayerPetData, getPetType, getPetLevel, getPetDisplayName, g
     getPetsForAdvanced, getPetsForNormalLeveling, sessionStats, startDiscordSession,
     finishDiscordSession
 -- shared: diisi di BLOCK 5 (LOADOUT, FAVORIT, GIFT, MONITOR, AUTO HATCH LOOP)
-local lastLoadoutSlot, GIFT_STATS, giftQueue, autoGiftAllFiltered, monitorLabels,
+local lastLoadoutSlot, GIFT_STATS, giftQueue, autoGiftAllFiltered, giftSharingPet, monitorLabels,
     refreshMonitor, startAutoHatch, stopAutoHatch
 
 do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
@@ -1883,7 +1883,7 @@ if isLeveling and not isCheckingPetSharing then
         -- ==================================================================
         -- PET SHARING: GIFT PET
         -- ==================================================================
-        local function giftSharingPet(sharingType)
+        function giftSharingPet(sharingType)
     -- sharingType = "mutation" | "weight"
     local enabled, selectedPet, savedInfo
 
