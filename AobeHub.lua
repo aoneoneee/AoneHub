@@ -2573,7 +2573,7 @@ return true
             updatesStatus("⏹️ Stopping...")
         end
     end -- BLOCK 5
--- GROUP: BACKEND (logic, state, helper, data)
+end -- GROUP: BACKEND (logic, state, helper, data)
 
 -- shared: diisi di BLOCK 6 (GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB)
 local tabs, tabBtns, activeTab, defaultView, tabFrames, makeInputRow, makeToggle, weightScroll
