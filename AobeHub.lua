@@ -64,7 +64,7 @@ local speedPreset, hatchPreset, sellPreset, selectedTeamPreset, selectedWeightPr
     statusCallback, StatusLabel, updateStatus, rainbowTask, isAlive, A, rainbowColors,
     colorIndex
 -- shared: diisi di BLOCK 3 (HELPER: PET COUNT, EGG, FARM, BACKPACK)
-local getBackpackEggs, getAllPetTypesFromRegistry, getPlayerNames
+local getBackpackEggs, parsePetName, getAllPetTypesFromRegistry, getPlayerNames
 -- shared: diisi di BLOCK 4 (PET DATA & PRESET FUNCTIONS)
 local getPreset, getPlayerPetData, getPetType, getPetLevel, getPetDisplayName, getPetWeight, getPetMutationName, 
     getEquippedPets, isPetValid, cleanupInvalidPets, equipPet, unequipPet, getMutationStatus,
@@ -711,7 +711,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             return eggs
         end
 
-        local function parsePetName(toolName)
+        function parsePetName(toolName)
             local name, weight, level = toolName:match("^(.+) %[([%d%.]+) KG%] %[Age (%d+)%]$")
             if not name then
                 name, weight, level = toolName:match("^(.+)%s+%[([%d%.]+) KG%]%s+%[Age (%d+)%]")
