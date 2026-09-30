@@ -1774,44 +1774,71 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         -- ==================================================================
         local function findPetToolByUUID(petUUID)
     local petType = getPetType(petUUID)
-    if not petType or petType == "Unknown" then return nil end
+    if not petType or petType == "Unknown" then 
+        warn("[findPetToolByUUID] petType Unknown untuk UUID:", petUUID)
+        return nil 
+    end
 
     local mutation = getPetMutationName(petUUID)
     local expectedFull = mutation and (mutation .. " " .. petType) or petType
 
-    -- ⭐ Retry sampai 6x @ 0.5s = 3 detik
-    for attempt = 1, 6 do
-        local locations = {}
-        local backpack = player:FindFirstChild("Backpack")
-        if backpack then table.insert(locations, backpack) end
-        if player.Character then table.insert(locations, player.Character) end
+    print(string.format("[findPetToolByUUID] Cari: UUID=%s | PetType=%s | Expected=%s",
+        petUUID:sub(1, 8), petType, expectedFull))
 
-        -- Match nama lengkap dulu
-        for _, container in ipairs(locations) do
-            for _, tool in ipairs(container:GetChildren()) do
-                if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
-                    local name = parsePetName(tool.Name)
-                    if name == expectedFull then return tool end
+    -- ⭐ DEBUG 1: Cek workspace (pet yang ter-equip)
+    local petsPhysical = workspace:FindFirstChild("PetsPhysical")
+    if petsPhysical then
+        print("[findPetToolByUUID] === Isi workspace.PetsPhysical ===")
+        for _, child in ipairs(petsPhysical:GetChildren()) do
+            if child.Name == "PetMover" then
+                for _, petModel in ipairs(child:GetChildren()) do
+                    if petModel.Name == petUUID then
+                        print(string.format("  ✅ DITEMUKAN di workspace: %s", petModel.Name))
+                    end
                 end
             end
-        end
-
-        -- Fallback: base name
-        for _, container in ipairs(locations) do
-            for _, tool in ipairs(container:GetChildren()) do
-                if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
-                    local name = parsePetName(tool.Name)
-                    if name == petType then return tool end
-                end
-            end
-        end
-
-        -- ⭐ Belum ketemu, tunggu dan coba lagi
-        if attempt < 6 then
-            task.wait(1)
         end
     end
 
+    -- ⭐ DEBUG 2: Cek Backpack
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        print("[findPetToolByUUID] === Isi Backpack (pet tools) ===")
+        local found = false
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                local name = parsePetName(tool.Name)
+                print(string.format("  - Tool: %s | Parsed: %s", tool.Name, tostring(name)))
+                if name == expectedFull or name == petType then
+                    print("  ✅ MATCH!")
+                    found = true
+                    return tool
+                end
+            end
+        end
+        if not found then
+            print("  ❌ Tidak ada match di Backpack")
+        end
+    else
+        print("[findPetToolByUUID] ❌ Backpack tidak ada")
+    end
+
+    -- ⭐ DEBUG 3: Cek Character
+    if player.Character then
+        print("[findPetToolByUUID] === Isi Character (pet tools) ===")
+        for _, tool in ipairs(player.Character:GetChildren()) do
+            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                local name = parsePetName(tool.Name)
+                print(string.format("  - Tool: %s | Parsed: %s", tool.Name, tostring(name)))
+                if name == expectedFull or name == petType then
+                    print("  ✅ MATCH di Character!")
+                    return tool
+                end
+            end
+        end
+    end
+
+    print("[findPetToolByUUID] ❌ TIDAK DITEMUKAN di semua lokasi")
     return nil
         end
         
@@ -1849,6 +1876,24 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         return false
     end
 
+    print(string.format("[Pet Sharing:%s] === START GIFT ===", sharingType))
+print(string.format("[Pet Sharing:%s] selectedPet=%s | selectedUUID=%s",
+    sharingType, tostring(selectedPet), tostring(selectedUUID)))
+
+-- ⭐ Cek equipped pets
+local equippedUUIDs = getEquippedPets()
+print(string.format("[Pet Sharing:%s] Equipped UUIDs: %d pet", sharingType, #equippedUUIDs))
+for i, uuid in ipairs(equippedUUIDs) do
+    print(string.format("  [%d] %s | Type: %s", i, uuid:sub(1,8), getPetType(uuid)))
+end
+
+-- ⭐ Kalau selectedUUID ada, cek apakah ter-equip
+if selectedUUID then
+    local isEquipped = table.find(equippedUUIDs, selectedUUID) ~= nil
+    print(string.format("[Pet Sharing:%s] selectedUUID ter-equip? %s",
+        sharingType, tostring(isEquipped)))
+end
+            
     -- ⭐ Cari tool pakai UUID (fallback ke nama)
     local petTool = nil
     if selectedUUID then
