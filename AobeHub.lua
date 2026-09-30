@@ -2851,7 +2851,8 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
     weightScroll.BorderSizePixel = 0
     weightScroll.ScrollBarThickness = 4
     weightScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-    weightScroll.CanvasSize = UDim2.new(0, 0, 0, 2000)
+    weightScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    weightScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     weightScroll.Parent = weightTab
 
     local weightLayout = Instance.new("UIListLayout")
@@ -3860,7 +3861,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     -- ==================================================================
     local PetSharingSection = createSection(weightScroll, "🎁 Pet Sharing", "petSharing")
     PetSharingSection.LayoutOrder = 6  -- Ganti LayoutOrder ButtonSection jadi 7
-    PetSharingSection.Size = UDim2.new(1, -10, 0, 498)
+    PetSharingSection.Size = UDim2.new(1, -10, 0, 385)
 
     -- Toggle Pet Sharing Mutation
     local mutationSharingBtn = Instance.new("TextButton")
@@ -3925,7 +3926,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     -- Saved Pet Info
     local selectedSpecialLabel = Instance.new("TextLabel")
     selectedSpecialLabel.Size = UDim2.new(1, -20, 0, 14)
-    selectedSpecialLabel.Position = UDim2.new(0, 10, 0, 106)
+    selectedSpecialLabel.Position = UDim2.new(0, 10, 0, 109)
     selectedSpecialLabel.Text = config.petSharingSavedPetInfo and 
         string.format("Saved: %s", config.petSharingSavedPetInfo.PetType) or 
         "Belum ada pet dipilih"
@@ -3939,7 +3940,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     -- Search
     local specialSearch = Instance.new("TextBox")
     specialSearch.Size = UDim2.new(1, -20, 0, 22)
-    specialSearch.Position = UDim2.new(0, 10, 0, 122)
+    specialSearch.Position = UDim2.new(0, 10, 0, 128)
     specialSearch.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
     specialSearch.BorderSizePixel = 0
     specialSearch.Font = Enum.Font.Gotham
@@ -3952,8 +3953,8 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
 
     -- List frame
     local specialListFrame = Instance.new("ScrollingFrame")
-    specialListFrame.Size = UDim2.new(1, -20, 0, 180)
-    specialListFrame.Position = UDim2.new(0, 10, 0, 148)
+    specialListFrame.Size = UDim2.new(1, -20, 0, 90)
+    specialListFrame.Position = UDim2.new(0, 10, 0, 155)
     specialListFrame.BackgroundTransparency = 1
     specialListFrame.BorderSizePixel = 0
     specialListFrame.ScrollBarThickness = 3
@@ -4058,7 +4059,7 @@ end)
     -- ====== DROPDOWN WEIGHT SHARING ======
 local weightSharingLabel = Instance.new("TextLabel")
 weightSharingLabel.Size = UDim2.new(1, -20, 0, 14)
-weightSharingLabel.Position = UDim2.new(0, 10, 0, 334)
+weightSharingLabel.Position = UDim2.new(0, 10, 0, 250)
 weightSharingLabel.Text = "🐘 Pet Sharing Weight:"
 weightSharingLabel.TextColor3 = C.textDim
 weightSharingLabel.Font = Enum.Font.Gotham
@@ -4069,7 +4070,7 @@ weightSharingLabel.Parent = PetSharingSection
 
 local weightSharingBtn = Instance.new("TextButton")
 weightSharingBtn.Size = UDim2.new(1, -20, 0, 22)
-weightSharingBtn.Position = UDim2.new(0, 10, 0, 350)
+weightSharingBtn.Position = UDim2.new(0, 10, 0, 269)
 weightSharingBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 weightSharingBtn.BorderSizePixel = 0
 weightSharingBtn.Font = Enum.Font.Gotham
@@ -4098,7 +4099,7 @@ end)
 -- ====== DROPDOWN MUTATION SHARING ======
 local mutationSharingPetLabel = Instance.new("TextLabel")
 mutationSharingPetLabel.Size = UDim2.new(1, -20, 0, 14)
-mutationSharingPetLabel.Position = UDim2.new(0, 10, 0, 378)
+mutationSharingPetLabel.Position = UDim2.new(0, 10, 0, 296)
 mutationSharingPetLabel.Text = "🧬 Pet Sharing Mutation:"
 mutationSharingPetLabel.TextColor3 = C.textDim
 mutationSharingPetLabel.Font = Enum.Font.Gotham
@@ -4109,7 +4110,7 @@ mutationSharingPetLabel.Parent = PetSharingSection
 
 local mutationSharingBtnPet = Instance.new("TextButton")
 mutationSharingBtnPet.Size = UDim2.new(1, -20, 0, 22)
-mutationSharingBtnPet.Position = UDim2.new(0, 10, 0, 394)
+mutationSharingBtnPet.Position = UDim2.new(0, 10, 0, 315)
 mutationSharingBtnPet.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
 mutationSharingBtnPet.BorderSizePixel = 0
 mutationSharingBtnPet.Font = Enum.Font.Gotham
@@ -4138,7 +4139,7 @@ end)
     -- Target Username Label
     local targetSharingLabel = Instance.new("TextLabel")
     targetSharingLabel.Size = UDim2.new(1, -20, 0, 14)
-    targetSharingLabel.Position = UDim2.new(0, 10, 0, 422)
+    targetSharingLabel.Position = UDim2.new(0, 10, 0, 342)
     targetSharingLabel.Text = "👤 Target Username:"
     targetSharingLabel.TextColor3 = C.textDim
     targetSharingLabel.Font = Enum.Font.Gotham
@@ -4150,7 +4151,7 @@ end)
     -- Target Username Button
     local targetSharingBtn = Instance.new("TextButton")
     targetSharingBtn.Size = UDim2.new(1, -20, 0, 22)
-    targetSharingBtn.Position = UDim2.new(0, 10, 0, 441)
+    targetSharingBtn.Position = UDim2.new(0, 10, 0, 361)
     targetSharingBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
     targetSharingBtn.BorderSizePixel = 0
     targetSharingBtn.Font = Enum.Font.Gotham
@@ -4187,7 +4188,7 @@ end)
     -- Refresh Button
     local refreshPetSharingBtn = Instance.new("TextButton")
     refreshPetSharingBtn.Size = UDim2.new(1, -20, 0, 20)
-    refreshPetSharingBtn.Position = UDim2.new(0, 10, 0, 468)
+    refreshPetSharingBtn.Position = UDim2.new(0, 10, 0, 355)
     refreshPetSharingBtn.BackgroundColor3 = C.accent
     refreshPetSharingBtn.BorderSizePixel = 0
     refreshPetSharingBtn.Font = Enum.Font.Gotham
