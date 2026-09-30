@@ -1923,7 +1923,7 @@ if isLeveling and not isCheckingPetSharing then
     return nil
 end
         
-        local function giftSharingPet(sharingType)
+        function giftSharingPet(sharingType)
     -- sharingType = "mutation" | "weight"
     local enabled, selectedPet, selectedUUID, savedInfo
 
