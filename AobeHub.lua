@@ -1690,121 +1690,6 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             end
         end
 
-        local function processGiftQueue()
-            if isProcessingGiftQueue then return end
-            if #giftQueue == 0 then return end  -- ⭐ skip kalau kosong
-
-            isProcessingGiftQueue = true
-            isAutoAcceptActive = true
-
-            task.spawn(function()
-                while #giftQueue > 0 do
-                    local gift = table.remove(giftQueue, 1)
-                    print(string.format("[Gift] Process: %s | %s", gift.id, gift.pet))
-
-                    task.wait(config.giftDelayAfter)
-
-                    local ok = pcall(function()
-                        AcceptPetGift:FireServer(true, gift.id)
-                    end)
-
-                    if ok then
-                        GIFT_STATS.totalAccepted = GIFT_STATS.totalAccepted + 1
-                    else
-                        GIFT_STATS.totalFailed = GIFT_STATS.totalFailed + 1
-                    end
-
-                    task.wait(0.5)
-                    hideGiftUI()
-                    task.wait(0.3)
-                    hideGiftUI()
-
-                    if #giftQueue > 0 then
-                        task.wait(config.giftDelayBetween)
-                    end
-                end
-                task.wait(0.5)
-                hideGiftUI()
-                isProcessingGiftQueue = false
-                isAutoAcceptActive = false
-
-                -- ⭐ SETELAH SEMUA GIFT ACCEPTED: Cek pet sharing 3x @ 10s
-                -- ⭐ SETELAH SEMUA GIFT ACCEPTED: Cek pet sharing 3x @ 10s
-if isLeveling and not isCheckingPetSharing then
-    local anySharing = config.petSharingWeightPet or config.petSharingMutationPet
-    if anySharing then
-        isCheckingPetSharing = true
-
-        task.spawn(function()
-            print("[Pet Sharing] Semua gift di-accept, mulai cek 3x @ 10s...")
-
-            for i = 1, 3 do
-                task.wait(10)
-
-                if not isLeveling or isGuiDestroyed then
-                    print("[Pet Sharing] Sesi berakhir, stop cek")
-                    isCheckingPetSharing = false
-                    return
-                end
-
-                print(string.format("[Pet Sharing] Cek #%d...", i))
-
-                -- Cek weight sharing
-                if config.petSharingWeightEnabled and config.petSharingWeightPet then
-                    local received = checkPetSharingReceived("weight")
-                    if received then
-                        print("[Pet Sharing] ✅ Pet weight diterima")
-                    end
-                end
-
-                -- Cek mutation sharing
-                if config.petSharingMutationEnabled and config.petSharingMutationPet then
-                    local received = checkPetSharingReceived("mutation")
-                    if received then
-                        print("[Pet Sharing] ✅ Pet mutation diterima")
-                    end
-                end
-            end
-
-            print("[Pet Sharing] 3x cek selesai")
-            isCheckingPetSharing = false
-        end)
-    end
-                    end
-            end)
-        end
-
-        GiftPetEvent.OnClientEvent:Connect(function(giftId, petName, weightInfo)
-            if not config.giftEnabled then return end
-            if not giftId or typeof(giftId) ~= "string" then return end
-
-            -- ⭐ SELALU tambahkan ke queue
-            table.insert(giftQueue, { 
-                id = giftId, 
-                pet = petName, 
-                weight = weightInfo, 
-                time = os.time() 
-            })
-            table.insert(GIFT_STATS.history, { 
-                id = giftId, 
-                pet = petName, 
-                weight = weightInfo, 
-                time = os.time() 
-            })
-
-            print(string.format("[Gift] 📥 Queued: %s | %s (queue: %d)", 
-                giftId, tostring(petName), #giftQueue))
-
-            -- ⭐ HANYA process kalau SEDANG TUNGGU EGG TIMER
-            if isRunning and not isWaitingEggTimer then
-                print("[Gift] Skip process — tunggu fase tunggu egg timer")
-                return
-            end
-
-            -- Process queue (hanya kalau tunggu timer atau auto hatch OFF)
-            processGiftQueue()
-        end)
-
         -- ==================================================================
         -- AUTO GIFT PET
         -- ==================================================================
@@ -2178,7 +2063,121 @@ end
 
 return true
     end
-    
+
+        local function processGiftQueue()
+            if isProcessingGiftQueue then return end
+            if #giftQueue == 0 then return end  -- ⭐ skip kalau kosong
+
+            isProcessingGiftQueue = true
+            isAutoAcceptActive = true
+
+            task.spawn(function()
+                while #giftQueue > 0 do
+                    local gift = table.remove(giftQueue, 1)
+                    print(string.format("[Gift] Process: %s | %s", gift.id, gift.pet))
+
+                    task.wait(config.giftDelayAfter)
+
+                    local ok = pcall(function()
+                        AcceptPetGift:FireServer(true, gift.id)
+                    end)
+
+                    if ok then
+                        GIFT_STATS.totalAccepted = GIFT_STATS.totalAccepted + 1
+                    else
+                        GIFT_STATS.totalFailed = GIFT_STATS.totalFailed + 1
+                    end
+
+                    task.wait(0.5)
+                    hideGiftUI()
+                    task.wait(0.3)
+                    hideGiftUI()
+
+                    if #giftQueue > 0 then
+                        task.wait(config.giftDelayBetween)
+                    end
+                end
+                task.wait(0.5)
+                hideGiftUI()
+                isProcessingGiftQueue = false
+                isAutoAcceptActive = false
+
+                -- ⭐ SETELAH SEMUA GIFT ACCEPTED: Cek pet sharing 3x @ 10s
+                -- ⭐ SETELAH SEMUA GIFT ACCEPTED: Cek pet sharing 3x @ 10s
+                if isLeveling and not isCheckingPetSharing then
+                    local anySharing = config.petSharingWeightPet or config.petSharingMutationPet
+                    if anySharing then
+                        isCheckingPetSharing = true
+
+                        task.spawn(function()
+                            print("[Pet Sharing] Semua gift di-accept, mulai cek 3x @ 10s...")
+
+                            for i = 1, 3 do
+                                task.wait(10)
+
+                                if not isLeveling or isGuiDestroyed then
+                                    print("[Pet Sharing] Sesi berakhir, stop cek")
+                                    isCheckingPetSharing = false
+                                    return
+                                end
+
+                                print(string.format("[Pet Sharing] Cek #%d...", i))
+
+                                -- Cek weight sharing
+                                if config.petSharingWeightEnabled and config.petSharingWeightPet then
+                                    local received = checkPetSharingReceived("weight")
+                                    if received then
+                                        print("[Pet Sharing] ✅ Pet weight diterima")
+                                    end
+                                end
+
+                                -- Cek mutation sharing
+                                if config.petSharingMutationEnabled and config.petSharingMutationPet then
+                                    local received = checkPetSharingReceived("mutation")
+                                    if received then
+                                        print("[Pet Sharing] ✅ Pet mutation diterima")
+                                    end
+                                end
+                            end
+
+                            print("[Pet Sharing] 3x cek selesai")
+                            isCheckingPetSharing = false
+                        end)
+                    end
+                end
+            end)
+        end
+
+        GiftPetEvent.OnClientEvent:Connect(function(giftId, petName, weightInfo)
+            if not config.giftEnabled then return end
+            if not giftId or typeof(giftId) ~= "string" then return end
+
+            -- ⭐ SELALU tambahkan ke queue
+            table.insert(giftQueue, { 
+                id = giftId, 
+                pet = petName, 
+                weight = weightInfo, 
+                time = os.time() 
+            })
+            table.insert(GIFT_STATS.history, { 
+                id = giftId, 
+                pet = petName, 
+                weight = weightInfo, 
+                time = os.time() 
+            })
+
+            print(string.format("[Gift] 📥 Queued: %s | %s (queue: %d)", 
+                giftId, tostring(petName), #giftQueue))
+
+            -- ⭐ HANYA process kalau SEDANG TUNGGU EGG TIMER
+            if isRunning and not isWaitingEggTimer then
+                print("[Gift] Skip process — tunggu fase tunggu egg timer")
+                return
+            end
+
+            -- Process queue (hanya kalau tunggu timer atau auto hatch OFF)
+            processGiftQueue()
+        end)
         
         -- ==================================================================
         -- MONITOR TAB
