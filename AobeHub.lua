@@ -1830,7 +1830,6 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         end
         
         function giftSharingPet(sharingType)
-    -- sharingType = "mutation" | "weight"
     local enabled, selectedPet, selectedUUID, savedInfo
 
     if sharingType == "mutation" then
@@ -1864,24 +1863,48 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
     end
 
     print(string.format("[Pet Sharing:%s] === START GIFT ===", sharingType))
-print(string.format("[Pet Sharing:%s] selectedPet=%s | selectedUUID=%s",
-    sharingType, tostring(selectedPet), tostring(selectedUUID)))
+    print(string.format("[Pet Sharing:%s] selectedPet=%s | selectedUUID=%s",
+        sharingType, tostring(selectedPet), tostring(selectedUUID)))
 
--- ⭐ Cek equipped pets
-local equippedUUIDs = getEquippedPets()
-print(string.format("[Pet Sharing:%s] Equipped UUIDs: %d pet", sharingType, #equippedUUIDs))
-for i, uuid in ipairs(equippedUUIDs) do
-    print(string.format("  [%d] %s | Type: %s", i, uuid:sub(1,8), getPetType(uuid)))
-end
+    -- ⭐ STEP 1: UNEQUIP DULU (pindah ke atas!)
+    if selectedUUID then
+        local equippedUUIDs = getEquippedPets()
+        local isEquipped = table.find(equippedUUIDs, selectedUUID) ~= nil
 
--- ⭐ Kalau selectedUUID ada, cek apakah ter-equip
-if selectedUUID then
-    local isEquipped = table.find(equippedUUIDs, selectedUUID) ~= nil
-    print(string.format("[Pet Sharing:%s] selectedUUID ter-equip? %s",
-        sharingType, tostring(isEquipped)))
-end
-            
-    -- ⭐ Cari tool pakai UUID (fallback ke nama)
+        if isEquipped then
+            print(string.format("[Pet Sharing:%s] Unequip %s (masih di-equipped)", sharingType, tostring(selectedPet)))
+            pcall(function() PetsService:UnequipPet(selectedUUID) end)
+
+            -- ⭐ Tunggu sampai tool benar-benar muncul di backpack (max 15s)
+            local timeout = 15
+            local waited = 0
+            local toolFound = false
+
+            while waited < timeout do
+                task.wait(0.5)
+                waited = waited + 0.5
+
+                -- Cek apakah tool sudah ada di backpack/character
+                if findPetToolByUUID(selectedUUID) then
+                    toolFound = true
+                    print(string.format("[Pet Sharing:%s] ✅ Tool muncul di backpack dalam %.1fs", sharingType, waited))
+                    break
+                end
+
+                if waited % 3 == 0 then
+                    print(string.format("[Pet Sharing:%s] ⏳ Menunggu tool di backpack... (%.1fs)", sharingType, waited))
+                end
+            end
+
+            if not toolFound then
+                warn(string.format("[Pet Sharing:%s] ❌ Tool tidak muncul setelah %.1fs", sharingType, timeout))
+            end
+        else
+            print(string.format("[Pet Sharing:%s] %s tidak ter-equip, skip unequip", sharingType, tostring(selectedPet)))
+        end
+    end
+
+    -- ⭐ STEP 2: BARU CARI TOOL
     local petTool = nil
     if selectedUUID then
         petTool = findPetToolByUUID(selectedUUID)
@@ -1912,55 +1935,19 @@ end
     local petName = selectedPet or petTool.Name
     print(string.format("[Pet Sharing:%s] Proses gift %s → %s", sharingType, petName, config.petSharingTargetUsername))
 
-    -- STEP 1: Unequip kalau masih equipped (pakai UUID)
-    -- STEP 1: Unequip kalau masih equipped (pakai UUID)
-if selectedUUID then
-    local equippedUUIDs = getEquippedPets()
-    local isEquipped = table.find(equippedUUIDs, selectedUUID) ~= nil
-
-    if isEquipped then
-        print(string.format("[Pet Sharing:%s] Unequip %s (masih di-equipped)", sharingType, petName))
-        pcall(function() PetsService:UnequipPet(selectedUUID) end)
-
-        -- ⭐ Tunggu sampai benar-benar keluar dari workspace
-        local timeout = 20
-        local waited = 0
-        while waited < timeout do
-            task.wait(0.5)
-            waited = waited + 0.5
-
-            -- Cek apakah sudah keluar dari equipped list
-            local stillEquipped = table.find(getEquippedPets(), selectedUUID) ~= nil
-            -- Cek apakah tool sudah muncul di backpack
-            local toolInBackpack = findPetToolByUUID(selectedUUID) ~= nil
-
-            if not stillEquipped and toolInBackpack then
-                print(string.format("[Pet Sharing:%s] ✅ Unequip selesai dalam %.1fs", sharingType, waited))
-                break
-            end
-
-            if waited % 5 == 0 then
-                print(string.format("[Pet Sharing:%s] ⏳ Menunggu unequip... (%.1fs)", sharingType, waited))
-            end
-        end
-    else
-        print(string.format("[Pet Sharing:%s] %s tidak ter-equip, skip unequip", sharingType, petName))
-    end
-            end
-
-    -- STEP 2: Unfavorit
+    -- STEP 3: Unfavorit (kalau favorit)
     if petTool:GetAttribute("d") == true then
         print(string.format("[Pet Sharing:%s] Unfavorit %s", sharingType, petName))
         pcall(function() FavoriteItemRE:FireServer(petTool) end)
         task.wait(0.5)
     end
 
-    -- STEP 3: Equip
-    print(string.format("[Pet Sharing:%s] Equip %s", sharingType, petName))
+    -- STEP 4: Equip ke tangan
+    print(string.format("[Pet Sharing:%s] Equip %s ke tangan", sharingType, petName))
     pcall(function() humanoid:EquipTool(petTool) end)
-    task.wait(0.5)
+    task.wait(1)
 
-    -- STEP 4: Fire gift
+    -- STEP 5: Fire gift
     print(string.format("[Pet Sharing:%s] Kirim %s → %s", sharingType, petName, config.petSharingTargetUsername))
     local ok = pcall(function()
         PetGiftingService:FireServer("GivePet", target)
@@ -1975,156 +1962,13 @@ if selectedUUID then
     end
 
     return ok
-        end
-
-        -- ==================================================================
-        -- PET SHARING: CEK GIFT MASUK
-        -- ==================================================================
-            local function checkPetSharingReceived(sharingType)
-local selectedPet, selectedUUID, savedInfo
-if sharingType == "mutation" then
-    selectedPet = config.petSharingMutationPet
-    selectedUUID = config.petSharingMutationPetUUID
-    savedInfo = config.petSharingMutationSavedInfo
-elseif sharingType == "weight" then
-    selectedPet = config.petSharingWeightPet
-    selectedUUID = config.petSharingWeightPetUUID
-    savedInfo = config.petSharingWeightSavedInfo
-else
-    selectedPet = config.petSharingSelectedPet
-    savedInfo = config.petSharingSavedPetInfo
 end
-
-if not selectedUUID and not selectedPet then return false end
-
-local petsData = getPlayerPetData()
-if not petsData then return false end
-
-local inventory = petsData.PetInventory.Data or {}
-
--- ⭐ Cari by UUID dulu, fallback ke nama
-local foundUUID = nil
-if selectedUUID and inventory[selectedUUID] then
-    foundUUID = selectedUUID
-elseif selectedPet then
-    for uuid, _ in pairs(inventory) do
-        if getPetType(uuid) == selectedPet then
-            foundUUID = uuid
-            break
-        end
-    end
-end
-
-if not foundUUID then return false end
-
-local targetPetName = getPetType(foundUUID)
-
-print(string.format("[Pet Sharing:%s] 🎁 Terima %s (UUID: %s)",
-    sharingType, targetPetName, foundUUID:sub(1, 8)))
-
--- ⭐ Cari tool by UUID, fallback by nama
-local petTool = findPetToolByUUID(foundUUID)
-if not petTool then
-    petTool = findPetToolByName(targetPetName)
-end
-
-if not petTool then
-    warn(string.format("[Pet Sharing:%s] Tool tidak ditemukan untuk %s", sharingType, targetPetName))
-    return false
-end
-
--- STEP 1: Auto favorit
-if petTool:GetAttribute("d") ~= true then
-    print(string.format("[Pet Sharing:%s] Favorit %s", sharingType, targetPetName))
-    pcall(function() FavoriteItemRE:FireServer(petTool) end)
-    task.wait(0.5)
-end
-
--- STEP 2: Cek apakah termasuk tim preset
-local currentPreset = nil
-if isAutoWeight and selectedWeightPreset then
-    currentPreset = selectedWeightPreset
-elseif isAutoMutation and selectedMutationPreset then
-    currentPreset = selectedMutationPreset
-elseif isAdvancedLeveling and selectedAdvancedPreset then
-    currentPreset = selectedAdvancedPreset
-elseif isLeveling and selectedTeamPreset then
-    currentPreset = selectedTeamPreset
-end
-
-if not currentPreset then
-    return true
-end
-
-local preset = getPreset(currentPreset)
-if not preset or not preset.pets then
-    return true
-end
-
--- Cek apakah pet ini ada di preset
-local isInPreset = false
-for _, petInfo in ipairs(preset.pets) do
-    if petInfo.UUID == foundUUID then
-        isInPreset = true
-        break
-    end
-end
-
-if not isInPreset then
-    return true
-end
+        
 
 -- ============================================================
 -- STEP 3: CEK SLOT SEBELUM EQUIP
 -- ============================================================
-local equippedPets = getEquippedPets()
 
-if #equippedPets >= MAX_PET_SLOTS then
-    print(string.format("[Pet Sharing:%s] ⚠️ Slot penuh (%d/%d), cari pet target untuk di-unequip...",
-        sharingType, #equippedPets, MAX_PET_SLOTS))
-
-    local unequipTarget = nil
-    for _, uuid in ipairs(equippedPets) do
-        if table.find(allSelectedPets, uuid) then
-            unequipTarget = uuid
-            break
-        end
-    end
-
-    if unequipTarget then
-        print(string.format("[Pet Sharing:%s] 🔄 Unequip pet target: %s",
-            sharingType, getPetType(unequipTarget)))
-        pcall(function()
-            PetsService:UnequipPet(unequipTarget)
-        end)
-        task.wait(0.5)
-    else
-        print(string.format("[Pet Sharing:%s] ❌ Tidak ada pet target di-equipped untuk di-unequip",
-            sharingType))
-        return false
-    end
-end
-
--- ============================================================
--- STEP 4: EQUIP PET BARU
--- ============================================================
-print(string.format("[Pet Sharing:%s] Equip %s (bagian tim %s)",
-    sharingType, targetPetName, currentPreset))
-
-pcall(function()
-    PetsService:EquipPet(foundUUID, CFrame.new(0, 10, 0))
-end)
-task.wait(0.5)
-
-local equippedAfter = getEquippedPets()
-if table.find(equippedAfter, foundUUID) then
-    print(string.format("[Pet Sharing:%s] ✅ %s berhasil di-equip", sharingType, targetPetName))
-else
-    print(string.format("[Pet Sharing:%s] ⚠️ %s gagal di-equip", sharingType, targetPetName))
-end
-
-return true
-    end
 
         local function processGiftQueue()
             if isProcessingGiftQueue then return end
