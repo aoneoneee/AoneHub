@@ -1773,40 +1773,47 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         -- PET SHARING: GIFT PET
         -- ==================================================================
         local function findPetToolByUUID(petUUID)
-    -- Cari pet data di inventory untuk dapat PetType & mutation
     local petType = getPetType(petUUID)
     if not petType or petType == "Unknown" then return nil end
 
     local mutation = getPetMutationName(petUUID)
     local expectedFull = mutation and (mutation .. " " .. petType) or petType
 
-    local locations = {}
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then table.insert(locations, backpack) end
-    if player.Character then table.insert(locations, player.Character) end
+    -- ⭐ Retry sampai 6x @ 0.5s = 3 detik
+    for attempt = 1, 6 do
+        local locations = {}
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then table.insert(locations, backpack) end
+        if player.Character then table.insert(locations, player.Character) end
 
-    -- Coba match nama lengkap dulu
-    for _, container in ipairs(locations) do
-        for _, tool in ipairs(container:GetChildren()) do
-            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
-                local name = parsePetName(tool.Name)
-                if name == expectedFull then return tool end
+        -- Match nama lengkap dulu
+        for _, container in ipairs(locations) do
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                    local name = parsePetName(tool.Name)
+                    if name == expectedFull then return tool end
+                end
             end
         end
-    end
 
-    -- Fallback: match base name saja
-    for _, container in ipairs(locations) do
-        for _, tool in ipairs(container:GetChildren()) do
-            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
-                local name = parsePetName(tool.Name)
-                if name == petType then return tool end
+        -- Fallback: base name
+        for _, container in ipairs(locations) do
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                    local name = parsePetName(tool.Name)
+                    if name == petType then return tool end
+                end
             end
+        end
+
+        -- ⭐ Belum ketemu, tunggu dan coba lagi
+        if attempt < 6 then
+            task.wait(1)
         end
     end
 
     return nil
-end
+        end
         
         function giftSharingPet(sharingType)
     -- sharingType = "mutation" | "weight"
@@ -1880,7 +1887,7 @@ end
             if uuid == selectedUUID then
                 print(string.format("[Pet Sharing:%s] Unequip %s", sharingType, petName))
                 pcall(function() PetsService:UnequipPet(selectedUUID) end)
-                task.wait(0.5)
+                task.wait(1.5)
                 break
             end
         end
