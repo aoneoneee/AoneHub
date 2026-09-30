@@ -167,6 +167,8 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             petSharingSelectedPet = nil,           -- fallback lama (boleh dipertahankan)
             petSharingTargetUsername = nil,
             petSharingSavedPetInfo = nil,           -- fallback lama
+            petSharingWeightPetUUID = nil,
+            petSharingMutationPetUUID = nil,
             -- BARU:
             petSharingWeightPet = nil,
             petSharingWeightSavedInfo = nil,
@@ -229,6 +231,8 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                     if config.petSharingSelectedPet == nil then config.petSharingSelectedPet = nil end
                     if config.petSharingTargetUsername == nil then config.petSharingTargetUsername = nil end
                     if config.petSharingSavedPetInfo == nil then config.petSharingSavedPetInfo = nil end
+                    if config.petSharingWeightPetUUID == nil then config.petSharingWeightPetUUID = nil end
+                    if config.petSharingMutationPetUUID == nil then config.petSharingMutationPetUUID = nil end
                     if config.petSharingWeightPet == nil then config.petSharingWeightPet = nil end
                     if config.petSharingWeightSavedInfo == nil then config.petSharingWeightSavedInfo = nil end
                     if config.petSharingMutationPet == nil then config.petSharingMutationPet = nil end
@@ -1562,7 +1566,9 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             }
         end
     end -- BLOCK 4
-
+    
+    local findPetToolByUUID
+    
     do -- BLOCK 5: LOADOUT, FAVORIT, GIFT, MONITOR, AUTO HATCH LOOP
         -- ==================================================================
         -- HELPER: LOADOUT SWAP
@@ -1883,24 +1889,62 @@ if isLeveling and not isCheckingPetSharing then
         -- ==================================================================
         -- PET SHARING: GIFT PET
         -- ==================================================================
-        function giftSharingPet(sharingType)
+        function findPetToolByUUID(petUUID)
+    -- Cari pet data di inventory untuk dapat PetType & mutation
+    local petType = getPetType(petUUID)
+    if not petType or petType == "Unknown" then return nil end
+
+    local mutation = getPetMutationName(petUUID)
+    local expectedFull = mutation and (mutation .. " " .. petType) or petType
+
+    local locations = {}
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then table.insert(locations, backpack) end
+    if player.Character then table.insert(locations, player.Character) end
+
+    -- Coba match nama lengkap dulu
+    for _, container in ipairs(locations) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                local name = parsePetName(tool.Name)
+                if name == expectedFull then return tool end
+            end
+        end
+    end
+
+    -- Fallback: match base name saja
+    for _, container in ipairs(locations) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                local name = parsePetName(tool.Name)
+                if name == petType then return tool end
+            end
+        end
+    end
+
+    return nil
+end
+        
+        local function giftSharingPet(sharingType)
     -- sharingType = "mutation" | "weight"
-    local enabled, selectedPet, savedInfo
+    local enabled, selectedPet, selectedUUID, savedInfo
 
     if sharingType == "mutation" then
         enabled = config.petSharingMutationEnabled
         selectedPet = config.petSharingMutationPet
+        selectedUUID = config.petSharingMutationPetUUID
         savedInfo = config.petSharingMutationSavedInfo
     elseif sharingType == "weight" then
         enabled = config.petSharingWeightEnabled
         selectedPet = config.petSharingWeightPet
+        selectedUUID = config.petSharingWeightPetUUID
         savedInfo = config.petSharingWeightSavedInfo
     else
         enabled = false
     end
 
     if not enabled then return false end
-    if not selectedPet then
+    if not selectedPet and not selectedUUID then
         warn("[Pet Sharing] Tidak ada pet yang dipilih untuk", sharingType)
         return false
     end
@@ -1915,10 +1959,27 @@ if isLeveling and not isCheckingPetSharing then
         return false
     end
 
-    local petName = selectedPet
-    local petTool = findPetToolByName(petName)
+    -- ⭐ Cari tool pakai UUID (fallback ke nama)
+    local petTool = nil
+    if selectedUUID then
+        petTool = findPetToolByUUID(selectedUUID)
+    end
+    if not petTool and selectedPet then
+        petTool = findPetToolByName(selectedPet)
+    end
+
     if not petTool then
-        warn("[Pet Sharing] Pet tidak ada di backpack:", petName)
+        warn("[Pet Sharing] Pet tidak ada di backpack:", tostring(selectedPet), "| UUID:", tostring(selectedUUID))
+        -- ⭐ Debug: list semua pet di backpack
+        print("[Pet Sharing] Daftar pet di backpack:")
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then
+            for _, tool in ipairs(backpack:GetChildren()) do
+                if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                    print("  -", tool.Name)
+                end
+            end
+        end
         return false
     end
 
@@ -1926,23 +1987,23 @@ if isLeveling and not isCheckingPetSharing then
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     if not humanoid then return false end
 
+    local petName = selectedPet or petTool.Name
     print(string.format("[Pet Sharing:%s] Proses gift %s → %s", sharingType, petName, config.petSharingTargetUsername))
 
-    -- STEP 1: Unequip kalau masih equipped
-    local petUUID = savedInfo and savedInfo.UUID
-    if petUUID then
+    -- STEP 1: Unequip kalau masih equipped (pakai UUID)
+    if selectedUUID then
         local equippedUUIDs = getEquippedPets()
         for _, uuid in ipairs(equippedUUIDs) do
-            if uuid == petUUID then
+            if uuid == selectedUUID then
                 print(string.format("[Pet Sharing:%s] Unequip %s", sharingType, petName))
-                pcall(function() PetsService:UnequipPet(petUUID) end)
+                pcall(function() PetsService:UnequipPet(selectedUUID) end)
                 task.wait(0.5)
                 break
             end
         end
     end
 
-    -- STEP 2: Unfavorit kalau favorit
+    -- STEP 2: Unfavorit
     if petTool:GetAttribute("d") == true then
         print(string.format("[Pet Sharing:%s] Unfavorit %s", sharingType, petName))
         pcall(function() FavoriteItemRE:FireServer(petTool) end)
@@ -1969,49 +2030,63 @@ if isLeveling and not isCheckingPetSharing then
     end
 
     return ok
-end
+        end
 
         -- ==================================================================
         -- PET SHARING: CEK GIFT MASUK
         -- ==================================================================
         local function checkPetSharingReceived(sharingType)
-    local selectedPet, savedInfo
+    local selectedPet, selectedUUID, savedInfo
     if sharingType == "mutation" then
         selectedPet = config.petSharingMutationPet
+        selectedUUID = config.petSharingMutationPetUUID
         savedInfo = config.petSharingMutationSavedInfo
     elseif sharingType == "weight" then
         selectedPet = config.petSharingWeightPet
+        selectedUUID = config.petSharingWeightPetUUID
         savedInfo = config.petSharingWeightSavedInfo
     else
         selectedPet = config.petSharingSelectedPet
         savedInfo = config.petSharingSavedPetInfo
     end
 
-    if not selectedPet then return false end
+    if not selectedUUID and not selectedPet then return false end
 
     local petsData = getPlayerPetData()
     if not petsData then return false end
 
     local inventory = petsData.PetInventory.Data or {}
-    local targetPetName = selectedPet
 
-    -- Cari pet di inventory
+    -- ⭐ Cari by UUID dulu, fallback ke nama
     local foundUUID = nil
-    for uuid, _ in pairs(inventory) do
-        if getPetType(uuid) == targetPetName then
-            foundUUID = uuid
-            break
+    if selectedUUID and inventory[selectedUUID] then
+        foundUUID = selectedUUID
+    elseif selectedPet then
+        for uuid, _ in pairs(inventory) do
+            if getPetType(uuid) == selectedPet then
+                foundUUID = uuid
+                break
+            end
         end
     end
 
     if not foundUUID then return false end
 
+    local targetPetName = getPetType(foundUUID)
+
     print(string.format("[Pet Sharing:%s] 🎁 Terima %s (UUID: %s)",
         sharingType, targetPetName, foundUUID:sub(1, 8)))
 
-    -- Cari tool di backpack
-    local petTool = findPetToolByName(targetPetName)
-    if not petTool then return false end
+    -- ⭐ Cari tool by UUID, fallback by nama
+    local petTool = findPetToolByUUID(foundUUID)
+    if not petTool then
+        petTool = findPetToolByName(targetPetName)
+    end
+
+    if not petTool then
+        warn(string.format("[Pet Sharing:%s] Tool tidak ditemukan untuk %s", sharingType, targetPetName))
+        return false
+    end
 
     -- STEP 1: Auto favorit
     if petTool:GetAttribute("d") ~= true then
@@ -2033,7 +2108,7 @@ end
     end
 
     if not currentPreset then
-        return true  -- Tidak perlu equip
+        return true
     end
 
     local preset = getPreset(currentPreset)
@@ -2050,9 +2125,17 @@ end
         end
     end
 
-    if not isInPreset then
-        return true  -- Bukan bagian tim
+    if isInPreset then
+        print(string.format("[Pet Sharing:%s] Equip %s (bagian tim %s)",
+            sharingType, targetPetName, currentPreset))
+        pcall(function()
+            PetsService:EquipPet(foundUUID, CFrame.new(0, 10, 0))
+        end)
+        task.wait(0.5)
     end
+
+    return true
+        end
 
     -- ============================================================
     -- STEP 3: CEK SLOT SEBELUM EQUIP
@@ -4098,6 +4181,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     local savedData = {
         UUID = item.uuid,
         PetType = item.petType,
+        DisplayName = item.displayName,
         Mutation = item.mutation,
         Level = item.level,
     }
@@ -4153,7 +4237,8 @@ weightSharingBtn.MouseButton1Click:Connect(function()
         weightSharingBtn.Text = config.petSharingWeightPet and ("🐘 " .. config.petSharingWeightPet) or "🐘 Pilih Pet Weight..."
         return
     end
-    config.petSharingWeightPet = config.petSharingWeightSavedInfo.PetType
+    config.petSharingWeightPetUUID = config.petSharingWeightSavedInfo.UUID
+    config.petSharingWeightPet = config.petSharingWeightSavedInfo.DisplayName
     weightSharingBtn.Text = "🐘 " .. config.petSharingWeightPet
     saveConfig()
 end)
@@ -4193,7 +4278,9 @@ mutationSharingBtnPet.MouseButton1Click:Connect(function()
         mutationSharingBtnPet.Text = config.petSharingMutationPet and ("🧬 " .. config.petSharingMutationPet) or "🧬 Pilih Pet Mutation..."
         return
     end
-    config.petSharingMutationPet = config.petSharingMutationSavedInfo.PetType
+    -- ⭐ Simpan UUID + display name
+    config.petSharingMutationPetUUID = config.petSharingMutationSavedInfo.UUID
+    config.petSharingMutationPet = config.petSharingMutationSavedInfo.DisplayName
     mutationSharingBtnPet.Text = "🧬 " .. config.petSharingMutationPet
     saveConfig()
 end)
