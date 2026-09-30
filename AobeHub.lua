@@ -1785,60 +1785,47 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
     print(string.format("[findPetToolByUUID] Cari: UUID=%s | PetType=%s | Expected=%s",
         petUUID:sub(1, 8), petType, expectedFull))
 
-    -- ⭐ DEBUG 1: Cek workspace (pet yang ter-equip)
-    local petsPhysical = workspace:FindFirstChild("PetsPhysical")
-    if petsPhysical then
-        print("[findPetToolByUUID] === Isi workspace.PetsPhysical ===")
-        for _, child in ipairs(petsPhysical:GetChildren()) do
-            if child.Name == "PetMover" then
-                for _, petModel in ipairs(child:GetChildren()) do
-                    if petModel.Name == petUUID then
-                        print(string.format("  ✅ DITEMUKAN di workspace: %s", petModel.Name))
+    -- ⭐ Retry 6x @ 0.5s = 3 detik (tunggu sync server)
+    for attempt = 1, 6 do
+        local locations = {}
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then table.insert(locations, backpack) end
+        if player.Character then table.insert(locations, player.Character) end
+
+        -- ⭐ PRIORITAS 1: Match PetType (paling reliable, karena PetType sudah include mutation)
+        for _, container in ipairs(locations) do
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                    local name = parsePetName(tool.Name)
+                    if name == petType then 
+                        print(string.format("[findPetToolByUUID] ✅ Match PetType: %s (attempt %d)", name, attempt))
+                        return tool 
                     end
                 end
             end
         end
-    end
 
-    -- ⭐ DEBUG 2: Cek Backpack
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        print("[findPetToolByUUID] === Isi Backpack (pet tools) ===")
-        local found = false
-        for _, tool in ipairs(backpack:GetChildren()) do
-            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
-                local name = parsePetName(tool.Name)
-                print(string.format("  - Tool: %s | Parsed: %s", tool.Name, tostring(name)))
-                if name == expectedFull or name == petType then
-                    print("  ✅ MATCH!")
-                    found = true
-                    return tool
+        -- ⭐ PRIORITAS 2: Match Expected (nama lengkap dengan mutation)
+        if expectedFull ~= petType then
+            for _, container in ipairs(locations) do
+                for _, tool in ipairs(container:GetChildren()) do
+                    if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                        local name = parsePetName(tool.Name)
+                        if name == expectedFull then 
+                            print(string.format("[findPetToolByUUID] ✅ Match Expected: %s (attempt %d)", name, attempt))
+                            return tool 
+                        end
+                    end
                 end
             end
         end
-        if not found then
-            print("  ❌ Tidak ada match di Backpack")
-        end
-    else
-        print("[findPetToolByUUID] ❌ Backpack tidak ada")
-    end
 
-    -- ⭐ DEBUG 3: Cek Character
-    if player.Character then
-        print("[findPetToolByUUID] === Isi Character (pet tools) ===")
-        for _, tool in ipairs(player.Character:GetChildren()) do
-            if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
-                local name = parsePetName(tool.Name)
-                print(string.format("  - Tool: %s | Parsed: %s", tool.Name, tostring(name)))
-                if name == expectedFull or name == petType then
-                    print("  ✅ MATCH di Character!")
-                    return tool
-                end
-            end
+        if attempt < 6 then
+            task.wait(0.5)
         end
     end
 
-    print("[findPetToolByUUID] ❌ TIDAK DITEMUKAN di semua lokasi")
+    print("[findPetToolByUUID] ❌ TIDAK DITEMUKAN setelah 6x retry")
     return nil
         end
         
@@ -1926,17 +1913,40 @@ end
     print(string.format("[Pet Sharing:%s] Proses gift %s → %s", sharingType, petName, config.petSharingTargetUsername))
 
     -- STEP 1: Unequip kalau masih equipped (pakai UUID)
-    if selectedUUID then
-        local equippedUUIDs = getEquippedPets()
-        for _, uuid in ipairs(equippedUUIDs) do
-            if uuid == selectedUUID then
-                print(string.format("[Pet Sharing:%s] Unequip %s", sharingType, petName))
-                pcall(function() PetsService:UnequipPet(selectedUUID) end)
-                task.wait(1.5)
+    -- STEP 1: Unequip kalau masih equipped (pakai UUID)
+if selectedUUID then
+    local equippedUUIDs = getEquippedPets()
+    local isEquipped = table.find(equippedUUIDs, selectedUUID) ~= nil
+
+    if isEquipped then
+        print(string.format("[Pet Sharing:%s] Unequip %s (masih di-equipped)", sharingType, petName))
+        pcall(function() PetsService:UnequipPet(selectedUUID) end)
+
+        -- ⭐ Tunggu sampai benar-benar keluar dari workspace
+        local timeout = 20
+        local waited = 0
+        while waited < timeout do
+            task.wait(0.5)
+            waited = waited + 0.5
+
+            -- Cek apakah sudah keluar dari equipped list
+            local stillEquipped = table.find(getEquippedPets(), selectedUUID) ~= nil
+            -- Cek apakah tool sudah muncul di backpack
+            local toolInBackpack = findPetToolByUUID(selectedUUID) ~= nil
+
+            if not stillEquipped and toolInBackpack then
+                print(string.format("[Pet Sharing:%s] ✅ Unequip selesai dalam %.1fs", sharingType, waited))
                 break
             end
+
+            if waited % 5 == 0 then
+                print(string.format("[Pet Sharing:%s] ⏳ Menunggu unequip... (%.1fs)", sharingType, waited))
+            end
         end
+    else
+        print(string.format("[Pet Sharing:%s] %s tidak ter-equip, skip unequip", sharingType, petName))
     end
+            end
 
     -- STEP 2: Unfavorit
     if petTool:GetAttribute("d") == true then
