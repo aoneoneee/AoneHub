@@ -18,6 +18,7 @@ local SellAllRE = ReplicatedStorage.GameEvents:WaitForChild("SellAllPets_RE")
 local GiftPetEvent = ReplicatedStorage.GameEvents:WaitForChild("GiftPet")
 local AcceptPetGift = ReplicatedStorage.GameEvents:WaitForChild("AcceptPetGift")
 local PetGiftingService = ReplicatedStorage.GameEvents:WaitForChild("PetGiftingService")
+local DeleteObjectRE = ReplicatedStorage.GameEvents:WaitForChild("DeleteObject")
 
 -- Services untuk Auto Leveling
 local DataService = require(ReplicatedStorage.Modules.DataService)
@@ -62,7 +63,7 @@ local speedPreset, hatchPreset, sellPreset, selectedTeamPreset, selectedWeightPr
     petSearchText, mutationSearchText, tempPresetPets, unwantedMutations, unwantedMutationsHatch, availableMutations,
     editingPresetName, isGuiDestroyed, isRunning, isGiftPetRunning, giftPetUserStarted,
     statusCallback, StatusLabel, updateStatus, rainbowTask, isAlive, A, rainbowColors,
-    colorIndex
+    colorIndex, isAutoShovelRunning, autoShovelStatus
 -- shared: diisi di BLOCK 3 (HELPER: PET COUNT, EGG, FARM, BACKPACK)
 local getBackpackEggs, parsePetName, getAllPetTypesFromRegistry, getPlayerNames
 -- shared: diisi di BLOCK 4 (PET DATA & PRESET FUNCTIONS)
@@ -74,7 +75,7 @@ local getPreset, getPlayerPetData, getPetType, getPetLevel, getPetDisplayName, g
     finishDiscordSession, sendProgressWebhook
 -- shared: diisi di BLOCK 5 (LOADOUT, FAVORIT, GIFT, MONITOR, AUTO HATCH LOOP)
 local lastLoadoutSlot, GIFT_STATS, giftQueue, autoGiftAllFiltered, giftSharingPet, monitorLabels,
-    refreshMonitor, startAutoHatch, stopAutoHatch
+    refreshMonitor, startAutoHatch, stopAutoHatch, startAutoShovel, stopAutoShovel
 
 do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
 
@@ -411,6 +412,9 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         isAutoAcceptActive = false
         isCheckingPetSharing = false
         statusCallback = nil
+        -- ⭐ Auto Shovel State
+        isAutoShovelRunning = false
+        autoShovelStatus = nil
 
         -- Forward declarations
         rainbowTask = nil
@@ -2805,10 +2809,200 @@ return true
             end)
         end
 
-        function stopAutoHatch()
-            isRunning = false
-            updatesStatus("⏹️ Stopping...")
+            function stopAutoHatch()
+        isRunning = false
+        updatesStatus("⏹️ Stopping...")
+    end
+
+    -- ==================================================================
+    -- AUTO SHOVEL SPRINKLER
+    -- ==================================================================
+    local function getMyFarmForShovel()
+        local farmContainer = workspace:FindFirstChild("Farm")
+        if not farmContainer then return nil end
+        for _, farm in ipairs(farmContainer:GetChildren()) do
+            local important = farm:FindFirstChild("Important")
+            local dataFolder = important and important:FindFirstChild("Data")
+            if dataFolder then
+                for _, obj in ipairs(dataFolder:GetChildren()) do
+                    if obj:IsA("StringValue") and obj.Value == player.Name then
+                        return farm
+                    end
+                end
+            end
         end
+        return nil
+    end
+
+    local function getObjectsPhysicalForShovel()
+        local farm = getMyFarmForShovel()
+        if not farm then return nil end
+        local important = farm:FindFirstChild("Important")
+        if important then
+            local objs = important:FindFirstChild("Objects_Physical")
+            if objs then return objs end
+        end
+        for _, desc in ipairs(farm:GetDescendants()) do
+            if desc.Name == "Objects_Physical" then return desc end
+        end
+        return nil
+    end
+
+    local function scanSprinklers()
+        local objs = getObjectsPhysicalForShovel()
+        if not objs then return {} end
+
+        local result = {}
+        for _, obj in ipairs(objs:GetChildren()) do
+            if obj:IsA("Model") then
+                local nameMatch = obj.Name:lower():find("sprinkler")
+                local typeAttr = obj:GetAttribute("OBJECT_TYPE")
+                local typeMatch = typeAttr and tostring(typeAttr):lower():find("sprinkler")
+                if nameMatch or typeMatch then
+                    table.insert(result, obj)
+                end
+            end
+        end
+        return result
+    end
+
+    local function findShovelForAuto()
+        local shovelName = "Shovel [Destroy Plants]"
+        local locations = {}
+        local backpack = player:FindFirstChild("Backpack")
+        if backpack then table.insert(locations, backpack) end
+        if player.Character then table.insert(locations, player.Character) end
+
+        for _, container in ipairs(locations) do
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") and tool.Name == shovelName then
+                    return tool
+                end
+            end
+        end
+        return nil
+    end
+
+    local function equipShovelForAuto()
+        local shovel = findShovelForAuto()
+        if not shovel then
+            warn("[Auto Shovel] ❌ Shovel tidak ditemukan: Shovel [Destroy Plants]")
+            return false
+        end
+
+        local character = player.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return false end
+
+        if shovel.Parent == character then
+            return true
+        end
+
+        pcall(function() humanoid:EquipTool(shovel) end)
+        task.wait(0.5)
+        return shovel.Parent == character
+    end
+
+    local function unequipShovelForAuto()
+        local shovel = findShovelForAuto()
+        if not shovel then return true end
+
+        local character = player.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return false end
+
+        if shovel.Parent == character then
+            pcall(function() humanoid:UnequipTools() end)
+            task.wait(0.5)
+        end
+        return true
+    end
+
+    local function deleteSprinklerObject(sprinkler)
+        if not sprinkler or not sprinkler.Parent then return false end
+
+        local ok = pcall(function()
+            DeleteObjectRE:FireServer(sprinkler)
+        end)
+
+        task.wait(0.3)
+
+        return ok and not sprinkler.Parent
+    end
+
+    function startAutoShovel()
+        if isAutoShovelRunning then return end
+        if isRunning then
+            if autoShovelStatus then autoShovelStatus("⚠️ Stop Auto Hatch dulu") end
+            return
+        end
+        if isLeveling then
+            if autoShovelStatus then autoShovelStatus("⚠️ Stop Auto Leveling dulu") end
+            return
+        end
+
+        isAutoShovelRunning = true
+
+        task.spawn(function()
+            -- 1. Scan sprinkler
+            if autoShovelStatus then autoShovelStatus("🔍 Scan sprinkler...") end
+            local sprinklers = scanSprinklers()
+
+            if #sprinklers == 0 then
+                if autoShovelStatus then autoShovelStatus("⚠️ Tidak ada sprinkler") end
+                isAutoShovelRunning = false
+                return
+            end
+
+            if autoShovelStatus then
+                autoShovelStatus(string.format("🎯 %d sprinkler ditemukan", #sprinklers))
+            end
+
+            -- 2. Equip shovel
+            if autoShovelStatus then autoShovelStatus("🔨 Equip shovel...") end
+            if not equipShovelForAuto() then
+                if autoShovelStatus then autoShovelStatus("❌ Gagal equip shovel") end
+                isAutoShovelRunning = false
+                return
+            end
+
+            -- 3. Shovel semua sprinkler
+            local successCount = 0
+            for i, sprinkler in ipairs(sprinklers) do
+                if not isAutoShovelRunning then break end
+                if not sprinkler.Parent then
+                    continue
+                end
+
+                if autoShovelStatus then
+                    autoShovelStatus(string.format("🔄 [%d/%d] %s",
+                        i, #sprinklers, sprinkler.Name))
+                end
+
+                if deleteSprinklerObject(sprinkler) then
+                    successCount = successCount + 1
+                end
+
+                task.wait(0.5)
+            end
+
+            -- 4. Unequip shovel
+            if autoShovelStatus then autoShovelStatus("🔨 Unequip shovel...") end
+            unequipShovelForAuto()
+
+            -- 5. Selesai
+            if autoShovelStatus then
+                autoShovelStatus(string.format("✅ Selesai! %d/%d terhapus",
+                    successCount, #sprinklers))
+            end
+            isAutoShovelRunning = false
+        end)
+    end
+
+    function stopAutoShovel()
+        isAutoShovelRunning = false
+        if autoShovelStatus then autoShovelStatus("⏹️ Stopping...") end
+    end
     end -- BLOCK 5
 end -- GROUP: BACKEND (logic, state, helper, data)
 
@@ -2833,6 +3027,7 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
     screenGui.Destroying:Connect(function()
         isGuiDestroyed = true
         isLeveling = false
+        isAutoShovelRunning = false
 
         rainbowMode = false
         if rainbowTask then
@@ -7422,4 +7617,100 @@ do -- BLOCK 13: TAB EKSTRA, WEBHOOK SETTINGS, INIT, ANTI-AFK
         end
     end
 end -- BLOCK 13
+
+-- shared: diisi di BLOCK 14 (TAB FARM: AUTO SHOVEL)
+do -- BLOCK 14: TAB FARM — AUTO SHOVEL
+    local farmTab = tabFrames["Farm"]
+
+    local farmScroll = Instance.new("ScrollingFrame")
+    farmScroll.Size = UDim2.new(1, -10, 1, -10)
+    farmScroll.Position = UDim2.new(0, 5, 0, 5)
+    farmScroll.BackgroundTransparency = 1
+    farmScroll.BorderSizePixel = 0
+    farmScroll.ScrollBarThickness = 4
+    farmScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+    farmScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    farmScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    farmScroll.Parent = farmTab
+
+    local farmLayout = Instance.new("UIListLayout")
+    farmLayout.Padding = UDim.new(0, 6)
+    farmLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    farmLayout.Parent = farmScroll
+
+    -- ==================================================================
+    -- SECTION: AUTO SHOVEL
+    -- ==================================================================
+    local ShovelSection = createSection(farmScroll, "🔨 Auto Shovel Sprinkler", "autoShovel")
+    ShovelSection.LayoutOrder = 1
+    ShovelSection.Size = UDim2.new(1, -10, 0, 130)
+
+    local infoLabel = Instance.new("TextLabel")
+    infoLabel.Size = UDim2.new(1, -20, 0, 34)
+    infoLabel.Position = UDim2.new(0, 10, 0, 32)
+    infoLabel.BackgroundTransparency = 1
+    infoLabel.Font = Enum.Font.Gotham
+    infoLabel.TextSize = 8
+    infoLabel.TextColor3 = C.textDim
+    infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+    infoLabel.TextYAlignment = Enum.TextYAlignment.Top
+    infoLabel.TextWrapped = true
+    infoLabel.Text = "Shovel: Shovel [Destroy Plants]\nTarget: Model dgn kata 'Sprinkler' di Objects_Physical"
+    infoLabel.Parent = ShovelSection
+
+    local AutoShovelBtn = Instance.new("TextButton")
+    AutoShovelBtn.Size = UDim2.new(1, -20, 0, 32)
+    AutoShovelBtn.Position = UDim2.new(0, 10, 0, 70)
+    AutoShovelBtn.BackgroundColor3 = C.success
+    AutoShovelBtn.BorderSizePixel = 0
+    AutoShovelBtn.Font = Enum.Font.GothamBold
+    AutoShovelBtn.Text = "▶️ START AUTO SHOVEL"
+    AutoShovelBtn.TextColor3 = C.text
+    AutoShovelBtn.TextSize = 10
+    AutoShovelBtn.Parent = ShovelSection
+    Instance.new("UICorner", AutoShovelBtn).CornerRadius = UDim.new(0, 5)
+
+    local AutoShovelStatus = Instance.new("TextLabel")
+    AutoShovelStatus.Size = UDim2.new(1, -20, 0, 14)
+    AutoShovelStatus.Position = UDim2.new(0, 10, 0, 106)
+    AutoShovelStatus.BackgroundTransparency = 1
+    AutoShovelStatus.Font = Enum.Font.GothamBold
+    AutoShovelStatus.Text = "Status: Idle"
+    AutoShovelStatus.TextColor3 = C.textDim
+    AutoShovelStatus.TextSize = 9
+    AutoShovelStatus.TextXAlignment = Enum.TextXAlignment.Left
+    AutoShovelStatus.Parent = ShovelSection
+
+    autoShovelStatus = function(text)
+        AutoShovelStatus.Text = text
+        AutoShovelStatus.TextColor3 = C.text
+        print("[Auto Shovel]", text)
+    end
+
+    AutoShovelBtn.MouseButton1Click:Connect(function()
+        if isAutoShovelRunning then
+            stopAutoShovel()
+            AutoShovelBtn.Text = "▶️ START AUTO SHOVEL"
+            AutoShovelBtn.BackgroundColor3 = C.success
+        else
+            AutoShovelBtn.Text = "⏹️ STOP"
+            AutoShovelBtn.BackgroundColor3 = C.danger
+
+            task.spawn(function()
+                startAutoShovel()
+
+                -- Auto-reset tombol setelah selesai
+                local waitStart = os.clock()
+                while isAutoShovelRunning and (os.clock() - waitStart) < 300 do
+                    task.wait(0.5)
+                end
+
+                if AutoShovelBtn and AutoShovelBtn.Parent then
+                    AutoShovelBtn.Text = "▶️ START AUTO SHOVEL"
+                    AutoShovelBtn.BackgroundColor3 = C.success
+                end
+            end)
+        end
+    end)
+end -- BLOCK 14
 
