@@ -4223,9 +4223,11 @@ do -- BLOCK 8: UI SECTION: PRESET, PET TARGET, PILIH TIM
         weightScroll
     )
 
+    makeInputRow(TeamSelectSection, 88, "Max Pet Target:", "maxNormalPetsPerSession", true, 1, 8)
+
     AdvLabel = Instance.new("TextLabel")
     AdvLabel.Size = UDim2.new(1, -20, 0, 22)
-    AdvLabel.Position = UDim2.new(0, 10, 0, 88)
+    AdvLabel.Position = UDim2.new(0, 10, 0, 109)
     AdvLabel.BackgroundTransparency = 1
     AdvLabel.Font = Enum.Font.GothamBold
     AdvLabel.Text = "🚀 Advanced Leveling"
@@ -4236,7 +4238,7 @@ do -- BLOCK 8: UI SECTION: PRESET, PET TARGET, PILIH TIM
 
     AdvancedToggleButton = Instance.new("TextButton")
     AdvancedToggleButton.Size = UDim2.new(1, -20, 0, 25)
-    AdvancedToggleButton.Position = UDim2.new(0, 10, 0, 115)
+    AdvancedToggleButton.Position = UDim2.new(0, 10, 0, 136)
     AdvancedToggleButton.BackgroundColor3 = isAdvancedLeveling and C.success or Color3.fromRGB(70, 70, 85)
     AdvancedToggleButton.BorderSizePixel = 0
     AdvancedToggleButton.Font = Enum.Font.GothamBold
@@ -4251,7 +4253,7 @@ do -- BLOCK 8: UI SECTION: PRESET, PET TARGET, PILIH TIM
 
     local AdvancedLevelInput = Instance.new("TextBox")
     AdvancedLevelInput.Size = UDim2.new(1, -20, 0, 22)
-    AdvancedLevelInput.Position = UDim2.new(0, 10, 0, 145)
+    AdvancedLevelInput.Position = UDim2.new(0, 10, 0, 166)
     AdvancedLevelInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
     AdvancedLevelInput.BorderSizePixel = 0
     AdvancedLevelInput.Font = Enum.Font.Gotham
@@ -4279,7 +4281,7 @@ do -- BLOCK 8: UI SECTION: PRESET, PET TARGET, PILIH TIM
     -- Dropdown Advanced Preset
     AdvancedPresetDropdown = createDynamicDropdown(
         TeamSelectSection,
-        UDim2.new(0, 10, 0, 172),
+        UDim2.new(0, 10, 0, 193),
         selectedAdvancedPreset and string.format("📂 %s", selectedAdvancedPreset) or "📂 Pilih Preset Advanced",
         TeamSelectSection,
         252,
@@ -4287,8 +4289,7 @@ do -- BLOCK 8: UI SECTION: PRESET, PET TARGET, PILIH TIM
     )
 
     -- ⭐ BARU: Input max pet/sesi
-    makeInputRow(TeamSelectSection, 205, "Max pet Normal/sesi:", "maxNormalPetsPerSession", true, 1, 8)
-    makeInputRow(TeamSelectSection, 226, "Max pet Advanced/sesi:", "maxAdvancedPetsPerSession", true, 1, 8)
+    makeInputRow(TeamSelectSection, 226, "Max pet Target:", "maxAdvancedPetsPerSession", true, 1, 8)
 end -- BLOCK 8
 
 -- shared: diisi di BLOCK 9 (UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS)
@@ -4344,7 +4345,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     )
 
     -- ⭐ BARU: Input max pet per sesi
-    makeInputRow(WeightSection, 124, "Jumlah Target Pet:", "maxWeightPetsPerSession", true, 1, 8)
+    makeInputRow(WeightSection, 124, "Max Pet Target:", "maxWeightPetsPerSession", true, 1, 8)
 
     -- Semua GUI yang ingin mengikuti warna rainbow
     local rainbowTargets = {
@@ -4384,11 +4385,11 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
     )
 
     -- ⭐ BARU: Input max pet per sesi
-    makeInputRow(MutationSection, 273, "Max pet/sesi:", "maxMutationPetsPerSession", true, 1, 8)
+    makeInputRow(MutationSection, 94, "Max Pet Target:", "maxMutationPetsPerSession", true, 1, 8)
 
     MutLabel = Instance.new("TextLabel")
     MutLabel.Size = UDim2.new(1, -20, 0, 22)
-    MutLabel.Position = UDim2.new(0, 10, 0, 94)
+    MutLabel.Position = UDim2.new(0, 10, 0, 115)
     MutLabel.BackgroundTransparency = 1
     MutLabel.Font = Enum.Font.GothamBold
     MutLabel.Text = "❌ Mutasi yg tidak diinginkan:"
@@ -4399,7 +4400,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
 
     local MutationSearchBox = Instance.new("TextBox")
     MutationSearchBox.Size = UDim2.new(1, -20, 0, 22)
-    MutationSearchBox.Position = UDim2.new(0, 10, 0, 121)
+    MutationSearchBox.Position = UDim2.new(0, 10, 0, 142)
     MutationSearchBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
     MutationSearchBox.BorderSizePixel = 0
     MutationSearchBox.Font = Enum.Font.Gotham
@@ -4415,7 +4416,7 @@ do -- BLOCK 9: UI SECTION: WEIGHT, MUTATION, KONTROL, POPULATE, EVENT HANDLERS
 
     local MutationListFrame = Instance.new("ScrollingFrame")
     MutationListFrame.Size = UDim2.new(1, -20, 0, 120)
-    MutationListFrame.Position = UDim2.new(0, 10, 0, 148)
+    MutationListFrame.Position = UDim2.new(0, 10, 0, 169)
     MutationListFrame.BackgroundTransparency = 1
     MutationListFrame.BorderSizePixel = 0
     MutationListFrame.ScrollBarThickness = 3
@@ -7643,24 +7644,11 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- ==================================================================
     local ShovelSection = createSection(farmScroll, "🔨 Auto Shovel Sprinkler", "autoShovel")
     ShovelSection.LayoutOrder = 1
-    ShovelSection.Size = UDim2.new(1, -10, 0, 130)
-
-    local infoLabel = Instance.new("TextLabel")
-    infoLabel.Size = UDim2.new(1, -20, 0, 34)
-    infoLabel.Position = UDim2.new(0, 10, 0, 32)
-    infoLabel.BackgroundTransparency = 1
-    infoLabel.Font = Enum.Font.Gotham
-    infoLabel.TextSize = 8
-    infoLabel.TextColor3 = C.textDim
-    infoLabel.TextXAlignment = Enum.TextXAlignment.Left
-    infoLabel.TextYAlignment = Enum.TextYAlignment.Top
-    infoLabel.TextWrapped = true
-    infoLabel.Text = "Shovel: Shovel [Destroy Plants]\nTarget: Model dgn kata 'Sprinkler' di Objects_Physical"
-    infoLabel.Parent = ShovelSection
+    ShovelSection.Size = UDim2.new(1, -10, 0, 89)
 
     local AutoShovelBtn = Instance.new("TextButton")
     AutoShovelBtn.Size = UDim2.new(1, -20, 0, 32)
-    AutoShovelBtn.Position = UDim2.new(0, 10, 0, 70)
+    AutoShovelBtn.Position = UDim2.new(0, 10, 0, 28)
     AutoShovelBtn.BackgroundColor3 = C.success
     AutoShovelBtn.BorderSizePixel = 0
     AutoShovelBtn.Font = Enum.Font.GothamBold
@@ -7672,7 +7660,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
 
     local AutoShovelStatus = Instance.new("TextLabel")
     AutoShovelStatus.Size = UDim2.new(1, -20, 0, 14)
-    AutoShovelStatus.Position = UDim2.new(0, 10, 0, 106)
+    AutoShovelStatus.Position = UDim2.new(0, 10, 0, 65)
     AutoShovelStatus.BackgroundTransparency = 1
     AutoShovelStatus.Font = Enum.Font.GothamBold
     AutoShovelStatus.Text = "Status: Idle"
