@@ -1324,6 +1324,13 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             totalPets = 0,
             modes = {},
             presets = {},
+            -- ⭐ BARU: Progress tracking
+            progress = {
+                weight = { done = {}, total = {} },       -- { done = {UUID=true}, total = {UUID=true} }
+                mutation = { done = {}, total = {} },
+                normal = { done = {}, total = {} },
+                advanced = { done = {}, total = {} },
+            },
         }
 
         local function getSessionModesText()
@@ -1398,6 +1405,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                 weight = isAutoWeight,
                 mutation = isAutoMutation,
                 advanced = isAdvancedLeveling,
+                normal = true,
             }
             sessionStats.presets = {
                 team = selectedTeamPreset,
@@ -1406,75 +1414,199 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                 advanced = selectedAdvancedPreset,
             }
 
-            local description = string.format(
-                "## 🚀 Session Dimulai\n\n" ..
-                "**👤 Player:** `%s`\n" ..
-                "**🐾 Total Pet:** `%d`\n\n" ..
-                "### ⚙️ Mode\n%s\n\n" ..
-                "### 📋 Preset\n" ..
-                "**Team:** `%s`\n" ..
-                "**Weight:** `%s`\n" ..
-                "**Mutation:** `%s`\n" ..
-                "**Advanced:** `%s`",
-                player.Name,
-                sessionStats.totalPets,
-                getSessionModesText(),
-                tostring(sessionStats.presets.team or "-"),
-                tostring(sessionStats.presets.weight or "-"),
-                tostring(sessionStats.presets.mutation or "-"),
-                tostring(sessionStats.presets.advanced or "-")
-            )
+            -- ⭐ RESET progress tracking
+            sessionStats.progress = {
+                weight = { done = {}, total = {} },
+                mutation = { done = {}, total = {} },
+                normal = { done = {}, total = {} },
+                advanced = { done = {}, total = {} },
+            }
 
-            sendDiscordEmbed("🟢 AoneHub Session Dimulai", description, 5763719)
+            -- ⭐ ISI total pet per sesi
+            if isAutoWeight then
+                for _, uuid in ipairs(getPetsForWeight()) do
+                    sessionStats.progress.weight.total[uuid] = true
+                end
+            end
+            if isAutoMutation then
+                for _, uuid in ipairs(getPetsForMutation()) do
+                    sessionStats.progress.mutation.total[uuid] = true
+                end
+            end
+            for _, uuid in ipairs(getPetsForNormalLeveling()) do
+                sessionStats.progress.normal.total[uuid] = true
+            end
+            if isAdvancedLeveling then
+                for _, uuid in ipairs(getPetsForAdvanced()) do
+                    sessionStats.progress.advanced.total[uuid] = true
+                end
+            end
         end
 
         function finishDiscordSession(reason)
-            if not sessionStats.active then
-                return
-            end
-
-            local duration = math.max(0, os.time() - sessionStats.startedAt)
-            local processed = getSessionProcessedCount()
-            local total = sessionStats.totalPets
-            local remaining = math.max(0, total - processed)
-            local completed = remaining == 0 and reason ~= "stopped"
-            local title = completed and "📊 AoneHub Session Selesai" or "📊 AoneHub Session Summary"
-            local statusText = completed and "✅ Selesai" or (reason == "stopped" and "⏹️ Dihentikan" or "⚠️ Berakhir")
-            local color = completed and 5763719 or 16776960
-
-            local description = string.format(
-                "## %s\n\n" ..
-                "**👤 Player:** `%s`\n\n" ..
-                "### 🐾 Pet\n" ..
-                "**Total:** `%d`\n" ..
-                "**Diproses:** `%d`\n" ..
-                "**Tersisa:** `%d`\n\n" ..
-                "### ⚙️ Mode\n%s\n\n" ..
-                "### 📋 Preset\n" ..
-                "**Team:** `%s`\n" ..
-                "**Weight:** `%s`\n" ..
-                "**Mutation:** `%s`\n" ..
-                "**Advanced:** `%s`\n\n" ..
-                "### ⏱️ Durasi\n`%s`\n\n" ..
-                "**Status:** %s",
-                statusText,
-                player.Name,
-                total,
-                processed,
-                remaining,
-                getSessionModesText(),
-                tostring(sessionStats.presets.team or "-"),
-                tostring(sessionStats.presets.weight or "-"),
-                tostring(sessionStats.presets.mutation or "-"),
-                tostring(sessionStats.presets.advanced or "-"),
-                formatDuration(duration),
-                statusText
-            )
-
-            sendDiscordEmbed(title, description, color)
             sessionStats.active = false
         end
 
+        -- ==================================================================
+-- PROGRESS WEBHOOK
+-- ==================================================================
+local function countPetsByType(uuidSet)
+    local groups = {}
+    for uuid, _ in pairs(uuidSet) do
+        if isPetValid(uuid) then
+            local petType = getPetType(uuid)
+            groups[petType] = (groups[petType] or 0) + 1
+        end
+    end
+    local list = {}
+    for name, count in pairs(groups) do
+        table.insert(list, { name = name, count = count })
+    end
+    table.sort(list, function(a, b) return a.count > b.count end)
+    return list
+end
+
+local function formatPetGroups(list)
+    if #list == 0 then return "• (kosong)" end
+    local parts = {}
+    for _, item in ipairs(list) do
+        table.insert(parts, string.format("• %s x%d", item.name, item.count))
+    end
+    return table.concat(parts, "\n")
+end
+
+local function countDonePets(doneSet)
+    local count = 0
+    for _ in pairs(doneSet) do count = count + 1 end
+    return count
+end
+
+local function countTotalPets(totalSet)
+    local count = 0
+    for _ in pairs(totalSet) do count = count + 1 end
+    return count
+end
+
+local function getPresetTextForWebhook()
+    local function formatOnePreset(presetName)
+        if not presetName then return "-" end
+        local preset = getPreset(presetName)
+        if not preset or not preset.pets then return "-" end
+        local groups = {}
+        for _, petInfo in ipairs(preset.pets) do
+            local key = petInfo.PetType or "?"
+            if petInfo.Mutation and petInfo.Mutation ~= "Normal" then
+                key = petInfo.Mutation .. " " .. key
+            end
+            groups[key] = (groups[key] or 0) + 1
+        end
+        local list = {}
+        for name, count in pairs(groups) do
+            table.insert(list, string.format("%d %s", count, name))
+        end
+        return table.concat(list, ", ")
+    end
+    return {
+        leveling = formatOnePreset(selectedTeamPreset),
+        weight = formatOnePreset(selectedWeightPreset),
+        mutation = formatOnePreset(selectedMutationPreset),
+        advanced = formatOnePreset(selectedAdvancedPreset),
+    }
+end
+
+local function formatDurationHMS(seconds)
+    local h = math.floor(seconds / 3600)
+    local m = math.floor((seconds % 3600) / 60)
+    local s = seconds % 60
+    return string.format("%02d:%02d:%02d", h, m, s)
+end
+
+function sendProgressWebhook()
+    if not config.discordWebhookEnabled then return end
+    if not sessionStats.active then return end
+
+    local progress = sessionStats.progress
+    local presets = getPresetTextForWebhook()
+    local duration = math.max(0, os.time() - sessionStats.startedAt)
+
+    local lines = {}
+    table.insert(lines, "## 📊 AoneHub")
+    table.insert(lines, "")
+    table.insert(lines, string.format("**👤 Player:** `%s`", player.Name))
+    table.insert(lines, "")
+
+    -- ⭐ Auto Weight
+    local wDone = countDonePets(progress.weight.done)
+    local wTotal = countTotalPets(progress.weight.total)
+    table.insert(lines, string.format("**⚖️ Auto Weight %d/%d**", wDone, wTotal))
+    table.insert(lines, formatPetGroups(countPetsByType(progress.weight.total)))
+    table.insert(lines, "")
+
+    -- ⭐ Auto Mutation
+    local mDone = countDonePets(progress.mutation.done)
+    local mTotal = countTotalPets(progress.mutation.total)
+    table.insert(lines, string.format("**🧬 Auto Mutation %d/%d**", mDone, mTotal))
+    table.insert(lines, formatPetGroups(countPetsByType(progress.mutation.total)))
+    table.insert(lines, "")
+
+    -- ⭐ Normal Leveling
+    local nDone = countDonePets(progress.normal.done)
+    local nTotal = countTotalPets(progress.normal.total)
+    table.insert(lines, string.format("**📈 Normal Leveling %d/%d**", nDone, nTotal))
+    table.insert(lines, formatPetGroups(countPetsByType(progress.normal.total)))
+    table.insert(lines, "")
+
+    -- ⭐ Advanced (kalau aktif)
+    if sessionStats.modes.advanced then
+        local aDone = countDonePets(progress.advanced.done)
+        local aTotal = countTotalPets(progress.advanced.total)
+        table.insert(lines, string.format("**🚀 Advanced %d/%d**", aDone, aTotal))
+        table.insert(lines, formatPetGroups(countPetsByType(progress.advanced.total)))
+        table.insert(lines, "")
+    end
+
+    -- ⭐ Preset
+    table.insert(lines, "**📋 Preset**")
+    table.insert(lines, string.format("> Leveling: %s", presets.leveling))
+    table.insert(lines, string.format("> Weight: %s", presets.weight))
+    table.insert(lines, string.format("> Mutation: %s", presets.mutation))
+    table.insert(lines, string.format("> Advanced: %s", presets.advanced))
+    table.insert(lines, "")
+
+    -- ⭐ Durasi
+    table.insert(lines, "**⏱️ Durasi**")
+    table.insert(lines, formatDurationHMS(duration))
+    table.insert(lines, "")
+
+    -- ⭐ Status
+    local allDone = (
+        wDone == wTotal and wTotal > 0 or not sessionStats.modes.weight
+    ) and (
+        mDone == mTotal and mTotal > 0 or not sessionStats.modes.mutation
+    ) and (
+        nDone == nTotal and nTotal > 0 or not sessionStats.modes.normal
+    ) and (
+        aDone == aTotal and aTotal > 0 or not sessionStats.modes.advanced
+    )
+
+    local status = allDone and "✅ Selesai" or "⏳ Proses"
+    table.insert(lines, string.format("**Status:** %s", status))
+
+    local description = table.concat(lines, "\n")
+
+    task.spawn(function()
+        sendDiscordWebhook({
+            username = "AoneHub",
+            embeds = {{
+                title = "📊 AoneHub Progress",
+                description = description,
+                color = allDone and 5763719 or 16776960,
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+            }}
+        })
+    end)
+end
+        
         function buildWebhookEmbed()
             local eggName = "?"
             for name, _ in pairs(config.selectedEggs) do eggName = name break end
@@ -2690,11 +2822,6 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
         if rainbowTask then
             task.cancel(rainbowTask)
             rainbowTask = nil
-        end
-
-        -- ⭐ Finish Discord session jika masih aktif
-        if sessionStats.active then
-            finishDiscordSession("stopped")
         end
 
         config.selectedTeamPreset = selectedTeamPreset
@@ -5221,7 +5348,6 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
     ToggleButton.MouseButton1Click:Connect(function()
         if isLeveling then
             isLeveling = false
-            finishDiscordSession("stopped")
             ToggleButton.Text = "▶️ Mulai"
             ToggleButton.BackgroundColor3 = C.success
             updateStatus()
@@ -5264,7 +5390,6 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
         end
 
         isLeveling = true
-        startDiscordSession()
         ToggleButton.Text = "⏹️ Stop"
         ToggleButton.BackgroundColor3 = C.danger
 
@@ -5414,6 +5539,9 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                                 if getPetLevel(petUUID) >= levelTargetForWeight then
                                     pcall(function() unequipPet(petUUID) end)
                                     table.remove(levelingEquippedPets, i)
+    
+                                    -- ⭐ TRIGGER WEBHOOK
+                                    task.spawn(function() sendProgressWebhook() end)
 
                                     if #pendingLevelTargets > 0 then
                                         local nextPet = pendingLevelTargets[1]
@@ -5499,6 +5627,12 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                                 if getPetWeight(petUUID) >= weightTarget then
                                     pcall(function() unequipPet(petUUID) end)
                                     table.remove(weightEquippedPets, i)
+    
+                                    -- ⭐ TRACK DONE + TRIGGER WEBHOOK
+                                    if sessionStats.active then
+                                        sessionStats.progress.weight.done[petUUID] = true
+                                        task.spawn(function() sendProgressWebhook() end)
+                                    end
 
                                     if #pendingWeightPets > 0 then
                                         local nextPet = pendingWeightPets[1]
@@ -5654,6 +5788,12 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                                 StatusLabel.Text = string.format("✅ %s dapat %s!", petType, mutationName)
                                 pcall(function() unequipPet(petUUID) end)
                                 table.remove(equippedForMutation, i)
+    
+                                -- ⭐ TRACK DONE + TRIGGER WEBHOOK
+                                if sessionStats.active then
+                                    sessionStats.progress.mutation.done[petUUID] = true
+                                    task.spawn(function() sendProgressWebhook() end)
+                                end
                                 wait(1)
 
                                 if #pendingMutationList > 0 then
@@ -5757,7 +5897,13 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                             if getPetLevel(petUUID) >= targetLevel then
                                 pcall(function() unequipPet(petUUID) end)
                                 table.remove(normalEquippedPets, i)
-
+    
+                                -- ⭐ TRACK DONE + TRIGGER WEBHOOK
+                                if sessionStats.active then
+                                    sessionStats.progress.normal.done[petUUID] = true
+                                    task.spawn(function() sendProgressWebhook() end)
+                                end
+                                        
                                 if #pendingNormalList > 0 then
                                     local nextPet = pendingNormalList[1]
                                     table.remove(pendingNormalList, 1)
@@ -5844,6 +5990,12 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                             if getPetLevel(petUUID) >= advancedTargetLevel then
                                 pcall(function() unequipPet(petUUID) end)
                                 table.remove(advancedEquippedPets, i)
+    
+                                -- ⭐ TRACK DONE + TRIGGER WEBHOOK
+                                if sessionStats.active then
+                                    sessionStats.progress.advanced.done[petUUID] = true
+                                    task.spawn(function() sendProgressWebhook() end)
+                                end
 
                                 if #pendingAdvancedList > 0 then
                                     local nextPet = pendingAdvancedList[1]
@@ -5909,7 +6061,6 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
             if isGuiDestroyed then return end
 
             -- SELESAI
-            finishDiscordSession("completed")
             StatusLabel.Text = "🎉 Semua proses selesai!"
             isLeveling = false
             ToggleButton.Text = "▶️ Mulai"
