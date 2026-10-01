@@ -1541,13 +1541,14 @@ function sendProgressWebhook()
     local duration = math.max(0, os.time() - sessionStats.startedAt)
 
     local lines = {}
-    table.insert(lines, string.format("**👤 Player:** `%s`", player.Name))
+    table.insert(lines, "")
+    table.insert(lines, string.format("**👤 Username:** `%s`", player.Name))
     table.insert(lines, "")
 
     -- ⭐ Auto Weight
     local wDone = countDonePets(progress.weight.done)
     local wTotal = countTotalPets(progress.weight.total)
-    table.insert(lines, string.format("**⚖️ Auto Weight %d/%d**", wDone, wTotal))
+    table.insert(lines, string.format("**🐘 Auto Weight %d/%d**", wDone, wTotal))
     table.insert(lines, formatPetGroups(countPetsByType(progress.weight.total)))
     table.insert(lines, "")
 
