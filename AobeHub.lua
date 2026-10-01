@@ -71,7 +71,7 @@ local getPreset, getPlayerPetData, getPetType, getPetLevel, getPetDisplayName, g
     useCleansingShard, saveTeamPreset, loadTeamPresets, getPresetUUIDs, deletePreset,
     getWeightTarget, getLevelTargetForWeight, getPetsForWeight, getPetsForMutation,
     getPetsForAdvanced, getPetsForNormalLeveling, sessionStats, startDiscordSession,
-    finishDiscordSession
+    finishDiscordSession, sendProgressWebhook
 -- shared: diisi di BLOCK 5 (LOADOUT, FAVORIT, GIFT, MONITOR, AUTO HATCH LOOP)
 local lastLoadoutSlot, GIFT_STATS, giftQueue, autoGiftAllFiltered, giftSharingPet, monitorLabels,
     refreshMonitor, startAutoHatch, stopAutoHatch
