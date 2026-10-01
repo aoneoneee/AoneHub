@@ -5401,6 +5401,7 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
         end
 
         isLeveling = true
+        startDiscordSession()
         ToggleButton.Text = "⏹️ Stop"
         ToggleButton.BackgroundColor3 = C.danger
 
@@ -5550,9 +5551,12 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
                                 if getPetLevel(petUUID) >= levelTargetForWeight then
                                     pcall(function() unequipPet(petUUID) end)
                                     table.remove(levelingEquippedPets, i)
-    
-                                    -- ⭐ TRIGGER WEBHOOK
-                                    task.spawn(function() sendProgressWebhook() end)
+
+                                    -- ⭐ TRACK DONE + TRIGGER WEBHOOK
+                                    if sessionStats.active then
+                                        sessionStats.progress.weight.done[petUUID] = true
+                                        task.spawn(function() sendProgressWebhook() end)
+                                    end
 
                                     if #pendingLevelTargets > 0 then
                                         local nextPet = pendingLevelTargets[1]
