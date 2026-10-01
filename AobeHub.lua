@@ -1522,8 +1522,19 @@ local function formatDurationHMS(seconds)
 end
 
 function sendProgressWebhook()
-    if not config.discordWebhookEnabled then return end
-    if not sessionStats.active then return end
+    print("[Webhook Debug] sendProgressWebhook dipanggil")
+    print(string.format("[Webhook Debug] discordWebhookEnabled=%s | sessionStats.active=%s",
+        tostring(config.discordWebhookEnabled),
+        tostring(sessionStats.active)))
+
+    if not config.discordWebhookEnabled then 
+        print("[Webhook Debug] ❌ Webhook disabled")
+        return 
+    end
+    if not sessionStats.active then 
+        print("[Webhook Debug] ❌ Session not active")
+        return 
+    end
 
     local progress = sessionStats.progress
     local presets = getPresetTextForWebhook()
