@@ -1541,8 +1541,6 @@ function sendProgressWebhook()
     local duration = math.max(0, os.time() - sessionStats.startedAt)
 
     local lines = {}
-    table.insert(lines, "## 📊 AoneHub")
-    table.insert(lines, "")
     table.insert(lines, string.format("**👤 Player:** `%s`", player.Name))
     table.insert(lines, "")
 
@@ -1568,13 +1566,12 @@ function sendProgressWebhook()
     table.insert(lines, "")
 
     -- ⭐ Advanced (kalau aktif)
-    if sessionStats.modes.advanced then
-        local aDone = countDonePets(progress.advanced.done)
-        local aTotal = countTotalPets(progress.advanced.total)
-        table.insert(lines, string.format("**🚀 Advanced %d/%d**", aDone, aTotal))
-        table.insert(lines, formatPetGroups(countPetsByType(progress.advanced.total)))
-        table.insert(lines, "")
-    end
+    
+    local aDone = countDonePets(progress.advanced.done)
+    local aTotal = countTotalPets(progress.advanced.total)
+    table.insert(lines, string.format("**🚀 Advanced %d/%d**", aDone, aTotal))
+    table.insert(lines, formatPetGroups(countPetsByType(progress.advanced.total)))
+    table.insert(lines, "")
 
     -- ⭐ Preset
     table.insert(lines, "**📋 Preset**")
@@ -1589,16 +1586,23 @@ function sendProgressWebhook()
     table.insert(lines, formatDurationHMS(duration))
     table.insert(lines, "")
 
-    -- ⭐ Status
-    local allDone = (
-        wDone == wTotal and wTotal > 0 or not sessionStats.modes.weight
-    ) and (
-        mDone == mTotal and mTotal > 0 or not sessionStats.modes.mutation
-    ) and (
-        nDone == nTotal and nTotal > 0 or not sessionStats.modes.normal
-    ) and (
-        aDone == aTotal and aTotal > 0 or not sessionStats.modes.advanced
-    )
+    -- ⭐ Helper: mode dianggap selesai kalau:
+--   - total = 0 (tidak ada pet) → dianggap selesai otomatis
+--   - atau done == total dan total > 0
+local function isModeDone(done, total, modeEnabled)
+    -- Kalau mode tidak aktif → skip
+    if not modeEnabled then return true end
+    -- Kalau tidak ada pet di mode ini → dianggap selesai
+    if total == 0 then return true end
+    -- Normal: done harus sama dengan total
+    return done >= total
+end
+
+local allDone = 
+    isModeDone(wDone, wTotal, sessionStats.modes.weight) and
+    isModeDone(mDone, mTotal, sessionStats.modes.mutation) and
+    isModeDone(nDone, nTotal, sessionStats.modes.normal) and
+    isModeDone(aDone, aTotal, sessionStats.modes.advanced)
 
     local status = allDone and "✅ Selesai" or "⏳ Proses"
     table.insert(lines, string.format("**Status:** %s", status))
