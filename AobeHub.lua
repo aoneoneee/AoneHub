@@ -19,6 +19,14 @@ local GiftPetEvent = ReplicatedStorage.GameEvents:WaitForChild("GiftPet")
 local AcceptPetGift = ReplicatedStorage.GameEvents:WaitForChild("AcceptPetGift")
 local PetGiftingService = ReplicatedStorage.GameEvents:WaitForChild("PetGiftingService")
 local DeleteObjectRE = ReplicatedStorage.GameEvents:WaitForChild("DeleteObject")
+local CropsCollectRE = ReplicatedStorage.GameEvents:WaitForChild("Crops"):WaitForChild("Collect")
+local SellInventoryRE = ReplicatedStorage.GameEvents:WaitForChild("Sell_Inventory")
+
+-- ⭐ Modules untuk teleport & data (pakai pcall, tidak butuh safeRequire)
+local TeleportPlayer = nil
+local GetFarm = nil
+pcall(function() TeleportPlayer = require(ReplicatedStorage.Modules.TeleportPlayer) end)
+pcall(function() GetFarm = require(ReplicatedStorage.Modules.GetFarm) end)
 
 -- Services untuk Auto Leveling
 local DataService = require(ReplicatedStorage.Modules.DataService)
@@ -63,7 +71,11 @@ local speedPreset, hatchPreset, sellPreset, selectedTeamPreset, selectedWeightPr
     petSearchText, mutationSearchText, tempPresetPets, unwantedMutations, unwantedMutationsHatch, availableMutations,
     editingPresetName, isGuiDestroyed, isRunning, isGiftPetRunning, giftPetUserStarted,
     statusCallback, StatusLabel, updateStatus, rainbowTask, isAlive, A, rainbowColors,
-    colorIndex, isAutoShovelRunning, autoShovelStatus
+    colorIndex, isAutoShovelRunning, autoShovelStatus,
+    isAutoCollectRunning, autoCollectStatus, autoCollectSelectedFruits,
+    autoCollectSelectedMutations, autoCollectMaxWeight, autoCollectInterval,
+    autoCollectSellEnabled, autoCollectDelayAfterTeleport,
+    autoCollectDelayAfterSell, autoCollectDelayAfterReturn
 -- shared: diisi di BLOCK 3 (HELPER: PET COUNT, EGG, FARM, BACKPACK)
 local getBackpackEggs, parsePetName, getAllPetTypesFromRegistry, getPlayerNames
 -- shared: diisi di BLOCK 4 (PET DATA & PRESET FUNCTIONS)
@@ -75,7 +87,10 @@ local getPreset, getPlayerPetData, getPetType, getPetLevel, getPetDisplayName, g
     finishDiscordSession, sendProgressWebhook
 -- shared: diisi di BLOCK 5 (LOADOUT, FAVORIT, GIFT, MONITOR, AUTO HATCH LOOP)
 local lastLoadoutSlot, GIFT_STATS, giftQueue, autoGiftAllFiltered, giftSharingPet, monitorLabels,
-    refreshMonitor, startAutoHatch, stopAutoHatch, startAutoShovel, stopAutoShovel
+    refreshMonitor, startAutoHatch, stopAutoHatch,
+    startAutoShovel, stopAutoShovel,
+    startAutoCollect, stopAutoCollect, scanFruits,
+    loadMutationList, loadFruitList
 
 do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
 
@@ -201,6 +216,16 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             discordWebhookEnabled = false,
             discordWebhook = "",
             sectionStates = {},
+
+            -- Auto Collect
+            autoCollectMaxWeight = 5.0,
+            autoCollectInterval = 1.5,
+            autoCollectSellEnabled = true,
+            autoCollectDelayAfterTeleport = 1,
+            autoCollectDelayAfterSell = 4,
+            autoCollectDelayAfterReturn = 1,
+            autoCollectSelectedFruits = {},
+            autoCollectSelectedMutations = {},
         }
 
         local function loadConfig()
@@ -246,6 +271,14 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
                     if config.petSharingWeightSavedInfo == nil then config.petSharingWeightSavedInfo = nil end
                     if config.petSharingMutationPet == nil then config.petSharingMutationPet = nil end
                     if config.petSharingMutationSavedInfo == nil then config.petSharingMutationSavedInfo = nil end
+                    if config.autoCollectMaxWeight == nil then config.autoCollectMaxWeight = 0 end
+                    if config.autoCollectInterval == nil then config.autoCollectInterval = 2 end
+                    if config.autoCollectSellEnabled == nil then config.autoCollectSellEnabled = true end
+                    if config.autoCollectDelayAfterTeleport == nil then config.autoCollectDelayAfterTeleport = 1 end
+                    if config.autoCollectDelayAfterSell == nil then config.autoCollectDelayAfterSell = 3 end
+                    if config.autoCollectDelayAfterReturn == nil then config.autoCollectDelayAfterReturn = 1 end
+                    if config.autoCollectSelectedFruits == nil then config.autoCollectSelectedFruits = {} end
+                    if config.autoCollectSelectedMutations == nil then config.autoCollectSelectedMutations = {} end
 
                     return true
                 end
@@ -415,6 +448,18 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         -- ⭐ Auto Shovel State
         isAutoShovelRunning = false
         autoShovelStatus = nil
+
+        -- ⭐ Auto Collect State
+        isAutoCollectRunning = false
+        autoCollectStatus = nil
+        autoCollectSelectedFruits = {}     -- set: ["strawberry"] = true
+        autoCollectSelectedMutations = {}  -- set: ["glimmering"] = true
+        autoCollectMaxWeight = 0
+        autoCollectInterval = 2
+        autoCollectSellEnabled = true
+        autoCollectDelayAfterTeleport = 1
+        autoCollectDelayAfterSell = 3
+        autoCollectDelayAfterReturn = 1
 
         -- Forward declarations
         rainbowTask = nil
@@ -2999,11 +3044,315 @@ return true
         end)
     end
 
-    function stopAutoShovel()
+        function stopAutoShovel()
         isAutoShovelRunning = false
         if autoShovelStatus then autoShovelStatus("⏹️ Stopping...") end
     end
-    end -- BLOCK 5
+
+    -- ==================================================================
+    -- AUTO COLLECT FRUIT
+    -- ==================================================================
+    local KNOWN_FRUITS = {}
+    local KNOWN_MUTATIONS = {}
+
+    function loadMutationList()
+        local ok, MutationHandler = pcall(function()
+            return require(ReplicatedStorage.Modules.MutationHandler)
+        end)
+        if ok and MutationHandler then
+            local success, mutations = pcall(function()
+                return MutationHandler:GetMutations()
+            end)
+            if success and mutations then
+                for name, _ in pairs(mutations) do
+                    KNOWN_MUTATIONS[name] = true
+                end
+                return
+            end
+        end
+        -- Fallback: minimal mutations
+        warn("[Auto Collect] Fallback mutations")
+        local FALLBACK = {
+            "Glimmering","Wet","Chilled","Frozen","Gold","Rainbow",
+            "Diamond","Silver","Bronze","Disco","Gilded","Enchanted",
+            "Shocked","Fried","Molten","Vamp","Ghostly","Volcanic",
+            "Flaming","Blazing","Infernal","Corrupt","Toxic","Acidic",
+            "Cosmic","Astral","Abyssal","Stormbound","Riptide","Grim",
+        }
+        for _, name in ipairs(FALLBACK) do
+            KNOWN_MUTATIONS[name] = true
+        end
+    end
+
+    function loadFruitList()
+        local ok, fruitData = pcall(function()
+            return require(ReplicatedStorage.Modules.PlantTraitsData.Fruit)
+        end)
+        if ok and fruitData and fruitData.Plants then
+            for _, fruitName in ipairs(fruitData.Plants) do
+                KNOWN_FRUITS[fruitName:lower()] = fruitName
+            end
+            return
+        end
+        -- Fallback
+        warn("[Auto Collect] Fallback fruits")
+        local FALLBACK = {
+            "Apple","Banana","Blueberry","Cherry","Coconut",
+            "Cranberry","Dragon Fruit","Durian","Grape","Lemon",
+            "Lime","Mango","Papaya","Passionfruit","Peach","Pear",
+            "Pineapple","Raspberry","Strawberry","Watermelon",
+            "Starfruit","Kiwi","Tomato","Pumpkin","Corn","Carrot",
+        }
+        for _, name in ipairs(FALLBACK) do
+            KNOWN_FRUITS[name:lower()] = name
+        end
+    end
+
+    local function getFruitCapacity()
+        if not DataService then return 0, 0 end
+        local data = DataService:GetData()
+        if not data or not data.InventoryData then return 0, 0 end
+        local count = 0
+        for _, item in pairs(data.InventoryData) do
+            if item.ItemType == "Holdable" then count = count + 1 end
+        end
+        local bonus = player:GetAttribute("BonusBackpackSize") or 0
+        return count, 200 + bonus
+    end
+
+    local function isFruitInventoryFull()
+        local current, max = getFruitCapacity()
+        return current >= max, current, max
+    end
+
+    local function getFruitInfo(fruit)
+        if not fruit then return nil end
+        local name = fruit.Name
+        local weight = 0
+
+        local w1 = fruit:GetAttribute("Weight")
+        local w2 = fruit:GetAttribute("BaseWeight")
+        if w1 then weight = tonumber(w1) or 0
+        elseif w2 then weight = tonumber(w2) or 0 end
+
+        if weight == 0 then
+            for _, child in ipairs(fruit:GetChildren()) do
+                if child:IsA("NumberValue") or child:IsA("IntValue") then
+                    local cn = child.Name:lower()
+                    if cn:find("weight") or cn:find("value") then
+                        weight = tonumber(child.Value) or 0
+                        break
+                    end
+                end
+            end
+        end
+
+        local mutationList = {}
+        for attrName, attrValue in pairs(fruit:GetAttributes()) do
+            if attrValue == true and KNOWN_MUTATIONS[attrName] then
+                table.insert(mutationList, attrName)
+            end
+        end
+        table.sort(mutationList)
+
+        return {
+            instance = fruit,
+            name = name,
+            weight = weight,
+            mutationList = mutationList,
+            mutationStr = #mutationList > 0 and table.concat(mutationList, ","):lower() or "",
+        }
+    end
+
+    local function isFruit(object)
+        if not object or not object:IsA("Model") then return false end
+        local nameLower = object.Name:lower()
+        if KNOWN_FRUITS[nameLower] then return true end
+        for fruitLower, _ in pairs(KNOWN_FRUITS) do
+            if nameLower:find(fruitLower, 1, true) then return true end
+        end
+        return false
+    end
+
+    local function matchTargetFruit(fruitInfo)
+        if next(autoCollectSelectedFruits) == nil then return true end
+        local nameLower = fruitInfo.name:lower()
+        for selected in pairs(autoCollectSelectedFruits) do
+            if nameLower:find(selected, 1, true) then return true end
+        end
+        return false
+    end
+
+    local function matchWeight(fruitInfo)
+        if autoCollectMaxWeight <= 0 then return true end
+        if fruitInfo.weight <= 0 then return true end
+        return fruitInfo.weight <= autoCollectMaxWeight
+    end
+
+    local function matchMutation(fruitInfo)
+        if next(autoCollectSelectedMutations) == nil then return true end
+        if fruitInfo.mutationStr == "" then return false end
+        for selected in pairs(autoCollectSelectedMutations) do
+            if fruitInfo.mutationStr:find(selected, 1, true) then return true end
+        end
+        return false
+    end
+
+    function scanFruits()
+        local farm = getMyFarmForShovel()
+        if not farm then return {}, {} end
+
+        local matched, allFound = {}, {}
+        for _, desc in ipairs(farm:GetDescendants()) do
+            if isFruit(desc) then
+                local info = getFruitInfo(desc)
+                if info and info.name ~= "" then
+                    table.insert(allFound, info)
+                    if matchTargetFruit(info) and matchWeight(info) and matchMutation(info) then
+                        table.insert(matched, info)
+                    end
+                end
+            end
+        end
+        return matched, allFound
+    end
+
+    local function autoSellFruit()
+        if not autoCollectSellEnabled then
+            return false, "Auto Sell OFF"
+        end
+
+        local full, current, max = isFruitInventoryFull()
+        if not full then
+            return false, string.format("Belum penuh (%d/%d)", current, max)
+        end
+
+        if autoCollectStatus then
+            autoCollectStatus(string.format("💰 Penuh (%d/%d), auto sell...", current, max))
+        end
+
+        -- Simpan posisi
+        local character = player.Character
+        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+        local savedCFrame = hrp and hrp.CFrame or nil
+
+        -- Teleport ke Sell Shop
+        if TeleportPlayer then
+            local tp = workspace:FindFirstChild("Tutorial_Points")
+            local sellPoint = tp and tp:FindFirstChild("Tutorial_Point_2")
+            if sellPoint then
+                pcall(function()
+                    TeleportPlayer(player, sellPoint.CFrame, "Sell Shop")
+                end)
+            end
+        end
+        task.wait(autoCollectDelayAfterTeleport)
+
+        -- Sell
+        pcall(function()
+            SellInventoryRE:FireServer()
+        end)
+        task.wait(autoCollectDelayAfterSell)
+
+        -- Teleport balik ke posisi terakhir
+        if TeleportPlayer and savedCFrame then
+            pcall(function()
+                TeleportPlayer(player, savedCFrame, "Return")
+            end)
+        elseif TeleportPlayer and GetFarm then
+            local ok, farm = pcall(function() return GetFarm(player) end)
+            if ok and farm then
+                local sp = farm:FindFirstChild("Spawn_Point")
+                if sp then
+                    pcall(function()
+                        TeleportPlayer(player, sp.CFrame, "Farm")
+                    end)
+                end
+            end
+        end
+        task.wait(autoCollectDelayAfterReturn)
+
+        local newCurrent, newMax = getFruitCapacity()
+        return true, string.format("Selesai: %d/%d", newCurrent, newMax)
+    end
+
+    function startAutoCollect()
+        if isAutoCollectRunning then return end
+        if isRunning then
+            if autoCollectStatus then autoCollectStatus("⚠️ Stop Auto Hatch dulu") end
+            return
+        end
+        if isLeveling then
+            if autoCollectStatus then autoCollectStatus("⚠️ Stop Auto Leveling dulu") end
+            return
+        end
+        if isAutoShovelRunning then
+            if autoCollectStatus then autoCollectStatus("⚠️ Stop Auto Shovel dulu") end
+            return
+        end
+
+        isAutoCollectRunning = true
+
+        task.spawn(function()
+            while isAutoCollectRunning and not isGuiDestroyed do
+                task.wait(autoCollectInterval)
+
+                if not player.Character or not player.Character:FindFirstChildOfClass("Humanoid") then
+                    continue
+                end
+
+                -- Cek inventory penuh
+                local full, current, max = isFruitInventoryFull()
+                if full then
+                    if autoCollectStatus then
+                        autoCollectStatus(string.format("💰 Penuh (%d/%d), auto sell...", current, max))
+                    end
+                    local ok, msg = autoSellFruit()
+                    if not ok and autoCollectStatus then
+                        autoCollectStatus("⚠️ " .. tostring(msg))
+                        task.wait(5)
+                    end
+                    continue
+                end
+
+                -- Scan & collect
+                local matched, allFound = scanFruits()
+
+                if #matched == 0 then
+                    if autoCollectStatus then
+                        autoCollectStatus(string.format("⏳ Tidak ada cocok (%d found, %d/%d)",
+                            #allFound, current, max))
+                    end
+                    continue
+                end
+
+                if autoCollectStatus then
+                    autoCollectStatus(string.format("🔄 Collect %d buah (%d/%d)",
+                        #matched, current, max))
+                end
+
+                local instances = {}
+                for _, info in ipairs(matched) do
+                    table.insert(instances, info.instance)
+                end
+
+                pcall(function()
+                    CropsCollectRE:FireServer(instances)
+                end)
+            end
+
+            if autoCollectStatus and not isGuiDestroyed then
+                autoCollectStatus("⏹️ Stopped")
+            end
+            isAutoCollectRunning = false
+        end)
+    end
+
+    function stopAutoCollect()
+        isAutoCollectRunning = false
+        if autoCollectStatus then autoCollectStatus("⏹️ Stopping...") end
+    end
+end -- BLOCK 5
 end -- GROUP: BACKEND (logic, state, helper, data)
 
 -- shared: diisi di BLOCK 6 (GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB)
@@ -3028,6 +3377,7 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
         isGuiDestroyed = true
         isLeveling = false
         isAutoShovelRunning = false
+        isAutoCollectRunning = false
 
         rainbowMode = false
         if rainbowTask then
@@ -7698,6 +8048,560 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
                     AutoShovelBtn.BackgroundColor3 = C.success
                 end
             end)
+        end
+    end)
+
+        -- ==================================================================
+    -- SECTION: AUTO COLLECT FRUIT
+    -- ==================================================================
+    local CollectSection = createSection(farmScroll, "🍓 Auto Collect Fruit", "autoCollect")
+    CollectSection.LayoutOrder = 2
+    CollectSection.Size = UDim2.new(1, -10, 0, 260)
+
+    -- Info label
+    local collectInfoLabel = Instance.new("TextLabel")
+    collectInfoLabel.Size = UDim2.new(1, -20, 0, 24)
+    collectInfoLabel.Position = UDim2.new(0, 10, 0, 32)
+    collectInfoLabel.BackgroundTransparency = 1
+    collectInfoLabel.Font = Enum.Font.Gotham
+    collectInfoLabel.TextSize = 8
+    collectInfoLabel.TextColor3 = C.textDim
+    collectInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+    collectInfoLabel.TextWrapped = true
+    collectInfoLabel.Text = "🎯 Klik 'Buka List' untuk pilih buah & mutation\nKosong = semua"
+    collectInfoLabel.Parent = CollectSection
+
+    -- Tombol Buka List Buah
+    local openFruitListBtn = Instance.new("TextButton")
+    openFruitListBtn.Size = UDim2.new(0.5, -15, 0, 26)
+    openFruitListBtn.Position = UDim2.new(0, 10, 0, 62)
+    openFruitListBtn.BackgroundColor3 = C.accent
+    openFruitListBtn.BorderSizePixel = 0
+    openFruitListBtn.Font = Enum.Font.GothamBold
+    openFruitListBtn.Text = "🍎 Pilih Buah"
+    openFruitListBtn.TextColor3 = C.text
+    openFruitListBtn.TextSize = 9
+    openFruitListBtn.AutoButtonColor = false
+    openFruitListBtn.Parent = CollectSection
+    Instance.new("UICorner", openFruitListBtn).CornerRadius = UDim.new(0, 4)
+
+    -- Tombol Buka List Mutation
+    local openMutListBtn = Instance.new("TextButton")
+    openMutListBtn.Size = UDim2.new(0.5, -15, 0, 26)
+    openMutListBtn.Position = UDim2.new(0.5, 5, 0, 62)
+    openMutListBtn.BackgroundColor3 = C.accent
+    openMutListBtn.BorderSizePixel = 0
+    openMutListBtn.Font = Enum.Font.GothamBold
+    openMutListBtn.Text = "✨ Pilih Mutation"
+    openMutListBtn.TextColor3 = C.text
+    openMutListBtn.TextSize = 9
+    openMutListBtn.AutoButtonColor = false
+    openMutListBtn.Parent = CollectSection
+    Instance.new("UICorner", openMutListBtn).CornerRadius = UDim.new(0, 4)
+
+    -- Input max weight
+    local maxWeightLbl = Instance.new("TextLabel")
+    maxWeightLbl.Size = UDim2.new(0.55, -15, 0, 14)
+    maxWeightLbl.Position = UDim2.new(0, 10, 0, 96)
+    maxWeightLbl.BackgroundTransparency = 1
+    maxWeightLbl.Text = "⚖️ Max Weight (0 = unlimited):"
+    maxWeightLbl.TextColor3 = C.textDim
+    maxWeightLbl.Font = Enum.Font.Gotham
+    maxWeightLbl.TextSize = 8
+    maxWeightLbl.TextXAlignment = Enum.TextXAlignment.Left
+    maxWeightLbl.Parent = CollectSection
+
+    local maxWeightInput = Instance.new("TextBox")
+    maxWeightInput.Size = UDim2.new(0.45, -15, 0, 20)
+    maxWeightInput.Position = UDim2.new(0.55, 5, 0, 93)
+    maxWeightInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    maxWeightInput.BorderSizePixel = 0
+    maxWeightInput.Font = Enum.Font.Gotham
+    maxWeightInput.Text = tostring(autoCollectMaxWeight)
+    maxWeightInput.TextColor3 = C.text
+    maxWeightInput.TextSize = 9
+    maxWeightInput.Parent = CollectSection
+    Instance.new("UICorner", maxWeightInput).CornerRadius = UDim.new(0, 3)
+
+    maxWeightInput.FocusLost:Connect(function()
+        local n = tonumber(maxWeightInput.Text)
+        autoCollectMaxWeight = n or 0
+        config.autoCollectMaxWeight = autoCollectMaxWeight
+        saveConfig()
+        maxWeightInput.Text = tostring(autoCollectMaxWeight)
+    end)
+
+    -- Toggle Auto Sell
+    local autoSellToggle = Instance.new("TextButton")
+    autoSellToggle.Size = UDim2.new(1, -20, 0, 26)
+    autoSellToggle.Position = UDim2.new(0, 10, 0, 122)
+    autoSellToggle.BackgroundColor3 = autoCollectSellEnabled and C.success or Color3.fromRGB(70, 70, 85)
+    autoSellToggle.BorderSizePixel = 0
+    autoSellToggle.Font = Enum.Font.GothamBold
+    autoSellToggle.Text = autoCollectSellEnabled
+        and "💰 Auto Sell when Full: ON"
+        or "💰 Auto Sell when Full: OFF"
+    autoSellToggle.TextColor3 = C.text
+    autoSellToggle.TextSize = 9
+    autoSellToggle.AutoButtonColor = false
+    autoSellToggle.Parent = CollectSection
+    Instance.new("UICorner", autoSellToggle).CornerRadius = UDim.new(0, 4)
+
+    autoSellToggle.MouseButton1Click:Connect(function()
+        autoCollectSellEnabled = not autoCollectSellEnabled
+        config.autoCollectSellEnabled = autoCollectSellEnabled
+        saveConfig()
+        autoSellToggle.Text = autoCollectSellEnabled
+            and "💰 Auto Sell when Full: ON"
+            or "💰 Auto Sell when Full: OFF"
+        autoSellToggle.BackgroundColor3 = autoCollectSellEnabled and C.success or Color3.fromRGB(70, 70, 85)
+    end)
+
+    -- Info kapasitas
+    local capacityLabel = Instance.new("TextLabel")
+    capacityLabel.Size = UDim2.new(1, -20, 0, 14)
+    capacityLabel.Position = UDim2.new(0, 10, 0, 155)
+    capacityLabel.BackgroundTransparency = 1
+    capacityLabel.Text = "📦 Fruit: -/-"
+    capacityLabel.TextColor3 = C.textDim
+    capacityLabel.Font = Enum.Font.Gotham
+    capacityLabel.TextSize = 8
+    capacityLabel.TextXAlignment = Enum.TextXAlignment.Left
+    capacityLabel.Parent = CollectSection
+
+    -- Update capacity berkala
+    task.spawn(function()
+        while CollectSection and CollectSection.Parent and not isGuiDestroyed do
+            task.wait(2)
+            local current, max = getFruitCapacity()
+            local fruitSel = 0
+            for _ in pairs(autoCollectSelectedFruits) do fruitSel = fruitSel + 1 end
+            local mutSel = 0
+            for _ in pairs(autoCollectSelectedMutations) do mutSel = mutSel + 1 end
+            capacityLabel.Text = string.format("📦 Fruit: %d/%d | 🍎 %d selected | ✨ %d selected",
+                current, max, fruitSel, mutSel)
+        end
+    end)
+
+    -- Tombol START
+    local AutoCollectBtn = Instance.new("TextButton")
+    AutoCollectBtn.Size = UDim2.new(1, -20, 0, 32)
+    AutoCollectBtn.Position = UDim2.new(0, 10, 0, 178)
+    AutoCollectBtn.BackgroundColor3 = C.success
+    AutoCollectBtn.BorderSizePixel = 0
+    AutoCollectBtn.Font = Enum.Font.GothamBold
+    AutoCollectBtn.Text = "▶️ START AUTO COLLECT"
+    AutoCollectBtn.TextColor3 = C.text
+    AutoCollectBtn.TextSize = 10
+    AutoCollectBtn.AutoButtonColor = false
+    AutoCollectBtn.Parent = CollectSection
+    Instance.new("UICorner", AutoCollectBtn).CornerRadius = UDim.new(0, 5)
+
+    -- Status
+    local AutoCollectStatusLbl = Instance.new("TextLabel")
+    AutoCollectStatusLbl.Size = UDim2.new(1, -20, 0, 14)
+    AutoCollectStatusLbl.Position = UDim2.new(0, 10, 0, 215)
+    AutoCollectStatusLbl.BackgroundTransparency = 1
+    AutoCollectStatusLbl.Text = "Status: Idle"
+    AutoCollectStatusLbl.TextColor3 = C.textDim
+    AutoCollectStatusLbl.Font = Enum.Font.GothamBold
+    AutoCollectStatusLbl.TextSize = 9
+    AutoCollectStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+    AutoCollectStatusLbl.Parent = CollectSection
+
+    -- Binding status
+    autoCollectStatus = function(text)
+        AutoCollectStatusLbl.Text = text
+        AutoCollectStatusLbl.TextColor3 = C.text
+        print("[Auto Collect]", text)
+    end
+
+    AutoCollectBtn.MouseButton1Click:Connect(function()
+        if isAutoCollectRunning then
+            stopAutoCollect()
+            AutoCollectBtn.Text = "▶️ START AUTO COLLECT"
+            AutoCollectBtn.BackgroundColor3 = C.success
+        else
+            AutoCollectBtn.Text = "⏹️ STOP"
+            AutoCollectBtn.BackgroundColor3 = C.danger
+            task.spawn(function()
+                startAutoCollect()
+                local waitStart = os.clock()
+                while isAutoCollectRunning and (os.clock() - waitStart) < 3600 do
+                    task.wait(0.5)
+                end
+                if AutoCollectBtn and AutoCollectBtn.Parent then
+                    AutoCollectBtn.Text = "▶️ START AUTO COLLECT"
+                    AutoCollectBtn.BackgroundColor3 = C.success
+                end
+            end)
+        end
+    end)
+
+    -- ============================================================
+    -- POPUP: Pilih Buah
+    -- ============================================================
+    local function openFruitSelector()
+        local popup = Instance.new("Frame")
+        popup.Size = UDim2.new(0, 400, 0, 420)
+        popup.Position = UDim2.new(0.5, -200, 0.5, -210)
+        popup.BackgroundColor3 = C.bg
+        popup.BorderSizePixel = 0
+        popup.Parent = screenGui
+        Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
+
+        -- Title bar
+        local ptb = Instance.new("Frame")
+        ptb.Size = UDim2.new(1, 0, 0, 28)
+        ptb.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+        ptb.BorderSizePixel = 0
+        ptb.Active = true
+        ptb.Parent = popup
+        Instance.new("UICorner", ptb).CornerRadius = UDim.new(0, 8)
+
+        local pt = Instance.new("TextLabel")
+        pt.Size = UDim2.new(1, -50, 1, 0)
+        pt.Position = UDim2.new(0, 12, 0, 0)
+        pt.BackgroundTransparency = 1
+        pt.Text = "🍎 Pilih Buah"
+        pt.TextColor3 = C.text
+        pt.Font = Enum.Font.GothamBold
+        pt.TextSize = 11
+        pt.TextXAlignment = Enum.TextXAlignment.Left
+        pt.Parent = ptb
+
+        local pclose = Instance.new("TextButton")
+        pclose.Size = UDim2.new(0, 22, 0, 22)
+        pclose.Position = UDim2.new(1, -26, 0, 3)
+        pclose.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+        pclose.Text = "✕"
+        pclose.TextColor3 = Color3.fromRGB(255, 120, 120)
+        pclose.Font = Enum.Font.GothamBold
+        pclose.TextSize = 11
+        pclose.BorderSizePixel = 0
+        pclose.AutoButtonColor = false
+        pclose.Parent = ptb
+        Instance.new("UICorner", pclose).CornerRadius = UDim.new(0, 4)
+        pclose.MouseButton1Click:Connect(function() popup:Destroy() end)
+
+        -- Search
+        local search = Instance.new("TextBox")
+        search.Size = UDim2.new(1, -20, 0, 24)
+        search.Position = UDim2.new(0, 10, 0, 35)
+        search.BackgroundColor3 = C.input
+        search.BorderSizePixel = 0
+        search.Font = Enum.Font.Gotham
+        search.PlaceholderText = "🔍 Cari buah..."
+        search.Text = ""
+        search.TextColor3 = C.text
+        search.TextSize = 9
+        search.ClearTextOnFocus = false
+        search.Parent = popup
+        Instance.new("UICorner", search).CornerRadius = UDim.new(0, 4)
+
+        -- Buttons
+        local sAllBtn = Instance.new("TextButton")
+        sAllBtn.Size = UDim2.new(0.5, -15, 0, 22)
+        sAllBtn.Position = UDim2.new(0, 10, 0, 65)
+        sAllBtn.BackgroundColor3 = C.accent
+        sAllBtn.BorderSizePixel = 0
+        sAllBtn.Text = "✓ All"
+        sAllBtn.TextColor3 = C.text
+        sAllBtn.Font = Enum.Font.GothamBold
+        sAllBtn.TextSize = 8
+        sAllBtn.AutoButtonColor = false
+        sAllBtn.Parent = popup
+        Instance.new("UICorner", sAllBtn).CornerRadius = UDim.new(0, 3)
+
+        local cAllBtn = Instance.new("TextButton")
+        cAllBtn.Size = UDim2.new(0.5, -15, 0, 22)
+        cAllBtn.Position = UDim2.new(0.5, 5, 0, 65)
+        cAllBtn.BackgroundColor3 = C.danger
+        cAllBtn.BorderSizePixel = 0
+        cAllBtn.Text = "✕ Clear"
+        cAllBtn.TextColor3 = C.text
+        cAllBtn.Font = Enum.Font.GothamBold
+        cAllBtn.TextSize = 8
+        cAllBtn.AutoButtonColor = false
+        cAllBtn.Parent = popup
+        Instance.new("UICorner", cAllBtn).CornerRadius = UDim.new(0, 3)
+
+        -- Scroll list
+        local scr = Instance.new("ScrollingFrame")
+        scr.Size = UDim2.new(1, -20, 1, -105)
+        scr.Position = UDim2.new(0, 10, 0, 95)
+        scr.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+        scr.BorderSizePixel = 0
+        scr.ScrollBarThickness = 4
+        scr.ScrollBarImageColor3 = C.accent
+        scr.CanvasSize = UDim2.new(0, 0, 0, 0)
+        scr.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scr.Parent = popup
+        Instance.new("UICorner", scr).CornerRadius = UDim.new(0, 4)
+
+        local lay = Instance.new("UIListLayout")
+        lay.Padding = UDim.new(0, 2)
+        lay.SortOrder = Enum.SortOrder.LayoutOrder
+        lay.Parent = scr
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 4)
+        pad.PaddingRight = UDim.new(0, 4)
+        pad.PaddingTop = UDim.new(0, 4)
+        pad.Parent = scr
+
+        local buttons = {}
+        local function render()
+            for _, b in ipairs(buttons) do b:Destroy() end
+            buttons = {}
+
+            local s = search.Text:lower()
+            local list = {}
+            for lower, orig in pairs(KNOWN_FRUITS) do
+                if s == "" or lower:find(s, 1, true) then
+                    table.insert(list, orig)
+                end
+            end
+            table.sort(list)
+
+            for i, name in ipairs(list) do
+                local isSel = autoCollectSelectedFruits[name:lower()] == true
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(1, 0, 0, 22)
+                btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
+                btn.BorderSizePixel = 0
+                btn.Font = Enum.Font.Gotham
+                btn.Text = string.format("%s %s", isSel and "✓" or "○", name)
+                btn.TextColor3 = C.text
+                btn.TextSize = 9
+                btn.TextXAlignment = Enum.TextXAlignment.Left
+                btn.LayoutOrder = i
+                btn.AutoButtonColor = false
+                btn.Parent = scr
+                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+                local p = Instance.new("UIPadding")
+                p.PaddingLeft = UDim.new(0, 6)
+                p.Parent = btn
+                btn.MouseButton1Click:Connect(function()
+                    local k = name:lower()
+                    if autoCollectSelectedFruits[k] then
+                        autoCollectSelectedFruits[k] = nil
+                    else
+                        autoCollectSelectedFruits[k] = true
+                    end
+                    config.autoCollectSelectedFruits = autoCollectSelectedFruits
+                    saveConfig()
+                    render()
+                end)
+                table.insert(buttons, btn)
+            end
+        end
+
+        search:GetPropertyChangedSignal("Text"):Connect(render)
+        sAllBtn.MouseButton1Click:Connect(function()
+            for lower, _ in pairs(KNOWN_FRUITS) do
+                autoCollectSelectedFruits[lower] = true
+            end
+            config.autoCollectSelectedFruits = autoCollectSelectedFruits
+            saveConfig()
+            render()
+        end)
+        cAllBtn.MouseButton1Click:Connect(function()
+            autoCollectSelectedFruits = {}
+            config.autoCollectSelectedFruits = {}
+            saveConfig()
+            render()
+        end)
+        render()
+    end
+
+    -- ============================================================
+    -- POPUP: Pilih Mutation
+    -- ============================================================
+    local function openMutSelector()
+        local popup = Instance.new("Frame")
+        popup.Size = UDim2.new(0, 400, 0, 420)
+        popup.Position = UDim2.new(0.5, -200, 0.5, -210)
+        popup.BackgroundColor3 = C.bg
+        popup.BorderSizePixel = 0
+        popup.Parent = screenGui
+        Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
+
+        local ptb = Instance.new("Frame")
+        ptb.Size = UDim2.new(1, 0, 0, 28)
+        ptb.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+        ptb.BorderSizePixel = 0
+        ptb.Active = true
+        ptb.Parent = popup
+        Instance.new("UICorner", ptb).CornerRadius = UDim.new(0, 8)
+
+        local pt = Instance.new("TextLabel")
+        pt.Size = UDim2.new(1, -50, 1, 0)
+        pt.Position = UDim2.new(0, 12, 0, 0)
+        pt.BackgroundTransparency = 1
+        pt.Text = "✨ Pilih Mutation"
+        pt.TextColor3 = C.text
+        pt.Font = Enum.Font.GothamBold
+        pt.TextSize = 11
+        pt.TextXAlignment = Enum.TextXAlignment.Left
+        pt.Parent = ptb
+
+        local pclose = Instance.new("TextButton")
+        pclose.Size = UDim2.new(0, 22, 0, 22)
+        pclose.Position = UDim2.new(1, -26, 0, 3)
+        pclose.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+        pclose.Text = "✕"
+        pclose.TextColor3 = Color3.fromRGB(255, 120, 120)
+        pclose.Font = Enum.Font.GothamBold
+        pclose.TextSize = 11
+        pclose.BorderSizePixel = 0
+        pclose.AutoButtonColor = false
+        pclose.Parent = ptb
+        Instance.new("UICorner", pclose).CornerRadius = UDim.new(0, 4)
+        pclose.MouseButton1Click:Connect(function() popup:Destroy() end)
+
+        local search = Instance.new("TextBox")
+        search.Size = UDim2.new(1, -20, 0, 24)
+        search.Position = UDim2.new(0, 10, 0, 35)
+        search.BackgroundColor3 = C.input
+        search.BorderSizePixel = 0
+        search.Font = Enum.Font.Gotham
+        search.PlaceholderText = "🔍 Cari mutasi..."
+        search.Text = ""
+        search.TextColor3 = C.text
+        search.TextSize = 9
+        search.ClearTextOnFocus = false
+        search.Parent = popup
+        Instance.new("UICorner", search).CornerRadius = UDim.new(0, 4)
+
+        local sAllBtn = Instance.new("TextButton")
+        sAllBtn.Size = UDim2.new(0.5, -15, 0, 22)
+        sAllBtn.Position = UDim2.new(0, 10, 0, 65)
+        sAllBtn.BackgroundColor3 = C.accent
+        sAllBtn.BorderSizePixel = 0
+        sAllBtn.Text = "✓ All"
+        sAllBtn.TextColor3 = C.text
+        sAllBtn.Font = Enum.Font.GothamBold
+        sAllBtn.TextSize = 8
+        sAllBtn.AutoButtonColor = false
+        sAllBtn.Parent = popup
+        Instance.new("UICorner", sAllBtn).CornerRadius = UDim.new(0, 3)
+
+        local cAllBtn = Instance.new("TextButton")
+        cAllBtn.Size = UDim2.new(0.5, -15, 0, 22)
+        cAllBtn.Position = UDim2.new(0.5, 5, 0, 65)
+        cAllBtn.BackgroundColor3 = C.danger
+        cAllBtn.BorderSizePixel = 0
+        cAllBtn.Text = "✕ Clear"
+        cAllBtn.TextColor3 = C.text
+        cAllBtn.Font = Enum.Font.GothamBold
+        cAllBtn.TextSize = 8
+        cAllBtn.AutoButtonColor = false
+        cAllBtn.Parent = popup
+        Instance.new("UICorner", cAllBtn).CornerRadius = UDim.new(0, 3)
+
+        local scr = Instance.new("ScrollingFrame")
+        scr.Size = UDim2.new(1, -20, 1, -105)
+        scr.Position = UDim2.new(0, 10, 0, 95)
+        scr.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+        scr.BorderSizePixel = 0
+        scr.ScrollBarThickness = 4
+        scr.ScrollBarImageColor3 = C.accent
+        scr.CanvasSize = UDim2.new(0, 0, 0, 0)
+        scr.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scr.Parent = popup
+        Instance.new("UICorner", scr).CornerRadius = UDim.new(0, 4)
+
+        local lay = Instance.new("UIListLayout")
+        lay.Padding = UDim.new(0, 2)
+        lay.SortOrder = Enum.SortOrder.LayoutOrder
+        lay.Parent = scr
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 4)
+        pad.PaddingRight = UDim.new(0, 4)
+        pad.PaddingTop = UDim.new(0, 4)
+        pad.Parent = scr
+
+        local buttons = {}
+        local function render()
+            for _, b in ipairs(buttons) do b:Destroy() end
+            buttons = {}
+
+            local s = search.Text:lower()
+            local list = {}
+            for name, _ in pairs(KNOWN_MUTATIONS) do
+                if s == "" or name:lower():find(s, 1, true) then
+                    table.insert(list, name)
+                end
+            end
+            table.sort(list)
+
+            for i, name in ipairs(list) do
+                local key = name:lower()
+                local isSel = autoCollectSelectedMutations[key] == true
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(1, 0, 0, 22)
+                btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
+                btn.BorderSizePixel = 0
+                btn.Font = Enum.Font.Gotham
+                btn.Text = string.format("%s %s", isSel and "✓" or "○", name)
+                btn.TextColor3 = C.text
+                btn.TextSize = 9
+                btn.TextXAlignment = Enum.TextXAlignment.Left
+                btn.LayoutOrder = i
+                btn.AutoButtonColor = false
+                btn.Parent = scr
+                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+                local p = Instance.new("UIPadding")
+                p.PaddingLeft = UDim.new(0, 6)
+                p.Parent = btn
+                btn.MouseButton1Click:Connect(function()
+                    if autoCollectSelectedMutations[key] then
+                        autoCollectSelectedMutations[key] = nil
+                    else
+                        autoCollectSelectedMutations[key] = true
+                    end
+                    config.autoCollectSelectedMutations = autoCollectSelectedMutations
+                    saveConfig()
+                    render()
+                end)
+                table.insert(buttons, btn)
+            end
+        end
+
+        search:GetPropertyChangedSignal("Text"):Connect(render)
+        sAllBtn.MouseButton1Click:Connect(function()
+            for name, _ in pairs(KNOWN_MUTATIONS) do
+                autoCollectSelectedMutations[name:lower()] = true
+            end
+            config.autoCollectSelectedMutations = autoCollectSelectedMutations
+            saveConfig()
+            render()
+        end)
+        cAllBtn.MouseButton1Click:Connect(function()
+            autoCollectSelectedMutations = {}
+            config.autoCollectSelectedMutations = {}
+            saveConfig()
+            render()
+        end)
+        render()
+    end
+
+    openFruitListBtn.MouseButton1Click:Connect(openFruitSelector)
+    openMutListBtn.MouseButton1Click:Connect(openMutSelector)
+
+    -- Load initial
+    task.spawn(function()
+        task.wait(0.5)
+        loadMutationList()
+        loadFruitList()
+        -- Load saved selections
+        if config.autoCollectSelectedFruits then
+            autoCollectSelectedFruits = config.autoCollectSelectedFruits
+        end
+        if config.autoCollectSelectedMutations then
+            autoCollectSelectedMutations = config.autoCollectSelectedMutations
         end
     end)
 end -- BLOCK 14
