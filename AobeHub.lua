@@ -91,7 +91,7 @@ local lastLoadoutSlot, GIFT_STATS, giftQueue, autoGiftAllFiltered, giftSharingPe
     refreshMonitor, startAutoHatch, stopAutoHatch,
     startAutoShovel, stopAutoShovel,
     startAutoCollect, stopAutoCollect, scanFruits,
-    loadMutationList, loadFruitList
+    loadMutationList, loadFruitList, KNOWN_FRUITS, KNOWN_MUTATIONS
 
 do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
 
@@ -3053,8 +3053,8 @@ return true
     -- ==================================================================
     -- AUTO COLLECT FRUIT
     -- ==================================================================
-    local KNOWN_FRUITS = {}
-    local KNOWN_MUTATIONS = {}
+    KNOWN_FRUITS = {}
+    KNOWN_MUTATIONS = {}
 
     function loadMutationList()
         local ok, MutationHandler = pcall(function()
