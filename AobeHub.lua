@@ -8555,29 +8555,29 @@ end
         pad.PaddingTop = UDim.new(0, 4)
         pad.Parent = scr
 
-        local buttons = {}
+                local buttons = {}
 local function render()
     for _, b in ipairs(buttons) do b:Destroy() end
     buttons = {}
 
     local s = search.Text:lower()
     local list = {}
-    for lower, orig in pairs(KNOWN_MUTATIONS) do
-        if s == "" or lower:find(s, 1, true) then
-            table.insert(list, orig)
+    for name, _ in pairs(KNOWN_MUTATIONS) do   -- ⭐ pakai key saja
+        local nameLower = name:lower()
+        if s == "" or nameLower:find(s, 1, true) then
+            table.insert(list, name)   -- ⭐ insert name
         end
     end
     table.sort(list)
 
-    -- ⭐ Set CanvasSize berdasarkan jumlah item
     scr.CanvasSize = UDim2.new(0, 0, 0, #list * 24 + 8)
     print("[Debug Render] CanvasSize set:", scr.CanvasSize, "Items:", #list)
 
     for i, name in ipairs(list) do
-        local isSel = autoCollectSelectedFruits[name:lower()] == true
+        local isSel = autoCollectSelectedMutations[name:lower()] == true   -- ⭐ mutations
         local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(1, -8, 0, 22)   -- ⭐ ada margin kiri kanan
-        btn.Position = UDim2.new(0, 4, 0, (i-1) * 24 + 4)  -- ⭐ POSISI MANUAL
+        btn.Size = UDim2.new(1, -8, 0, 22)
+        btn.Position = UDim2.new(0, 4, 0, (i-1) * 24 + 4)
         btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
         btn.BorderSizePixel = 0
         btn.Font = Enum.Font.Gotham
@@ -8587,8 +8587,8 @@ local function render()
         btn.TextXAlignment = Enum.TextXAlignment.Left
         btn.LayoutOrder = i
         btn.AutoButtonColor = false
-        btn.Visible = true                          -- ⭐ pastikan visible
-        btn.ZIndex = 200                            -- ⭐ di atas ScrollingFrame
+        btn.Visible = true
+        btn.ZIndex = 200
         btn.Parent = scr
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
         local p = Instance.new("UIPadding")
@@ -8596,18 +8596,18 @@ local function render()
         p.Parent = btn
         btn.MouseButton1Click:Connect(function()
             local k = name:lower()
-            if autoCollectSelectedFruits[k] then
-                autoCollectSelectedFruits[k] = nil
+            if autoCollectSelectedMutations[k] then   -- ⭐ mutations
+                autoCollectSelectedMutations[k] = nil   -- ⭐
             else
-                autoCollectSelectedFruits[k] = true
+                autoCollectSelectedMutations[k] = true   -- ⭐
             end
-            config.autoCollectSelectedFruits = autoCollectSelectedFruits
+            config.autoCollectSelectedMutations = autoCollectSelectedMutations   -- ⭐
             saveConfig()
             render()
         end)
         table.insert(buttons, btn)
     end
-end
+        end
 
         search:GetPropertyChangedSignal("Text"):Connect(render)
         sAllBtn.MouseButton1Click:Connect(function()
