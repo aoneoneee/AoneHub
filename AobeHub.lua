@@ -91,7 +91,7 @@ local lastLoadoutSlot, GIFT_STATS, giftQueue, autoGiftAllFiltered, giftSharingPe
     refreshMonitor, startAutoHatch, stopAutoHatch,
     startAutoShovel, stopAutoShovel,
     startAutoCollect, stopAutoCollect, scanFruits,
-    loadMutationList, loadFruitList, KNOWN_FRUITS, KNOWN_MUTATIONS
+    loadMutationList, loadFruitList, KNOWN_FRUITS, KNOWN_MUTATIONS, getFruitCapacity
 
 do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
 
@@ -3109,7 +3109,7 @@ return true
         end
     end
 
-    local function getFruitCapacity()
+    function getFruitCapacity()
         if not DataService then return 0, 0 end
         local data = DataService:GetData()
         if not data or not data.InventoryData then return 0, 0 end
@@ -8242,7 +8242,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
         popup.Position = UDim2.new(0.5, -200, 0.5, -210)
         popup.BackgroundColor3 = C.bg
         popup.BorderSizePixel = 0
-        popup.Parent = screenGui
+        popup.Parent = playerGui
         Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
 
         -- Title bar
@@ -8419,7 +8419,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
         popup.Position = UDim2.new(0.5, -200, 0.5, -210)
         popup.BackgroundColor3 = C.bg
         popup.BorderSizePixel = 0
-        popup.Parent = screenGui
+        popup.Parent = playerGui
         Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
 
         local ptb = Instance.new("Frame")
