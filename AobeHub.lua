@@ -8421,6 +8421,12 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
             saveConfig()
             render()
         end)
+        -- Set semua descendant ZIndex = 200
+        for _, child in ipairs(popup:GetDescendants()) do
+            if child:IsA("GuiObject") then
+                child.ZIndex = 200
+            end
+        end
         render()
     end
 
@@ -8604,6 +8610,12 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
             saveConfig()
             render()
         end)
+        -- Set semua descendant ZIndex = 200
+        for _, child in ipairs(popup:GetDescendants()) do
+            if child:IsA("GuiObject") then
+                child.ZIndex = 200
+            end
+        end
         render()
     end
 
