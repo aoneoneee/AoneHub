@@ -8345,6 +8345,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
         scr.ScrollBarImageColor3 = C.accent
         scr.CanvasSize = UDim2.new(0, 0, 0, 0)
         scr.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scr.ZIndex = 150
         scr.Parent = popup
         Instance.new("UICorner", scr).CornerRadius = UDim.new(0, 4)
 
@@ -8386,6 +8387,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
                 btn.TextXAlignment = Enum.TextXAlignment.Left
                 btn.LayoutOrder = i
                 btn.AutoButtonColor = false
+                btn.ZIndex = 160
                 btn.Parent = scr
                 Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
                 local p = Instance.new("UIPadding")
@@ -8534,6 +8536,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
         scr.ScrollBarImageColor3 = C.accent
         scr.CanvasSize = UDim2.new(0, 0, 0, 0)
         scr.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scr.ZIndex = 150
         scr.Parent = popup
         Instance.new("UICorner", scr).CornerRadius = UDim.new(0, 4)
 
@@ -8576,6 +8579,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
                 btn.TextXAlignment = Enum.TextXAlignment.Left
                 btn.LayoutOrder = i
                 btn.AutoButtonColor = false
+                btn.ZIndex = 160
                 btn.Parent = scr
                 Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
                 local p = Instance.new("UIPadding")
