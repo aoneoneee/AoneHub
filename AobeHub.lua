@@ -3055,9 +3055,7 @@ return true
     -- ==================================================================
     KNOWN_FRUITS = {}
     KNOWN_MUTATIONS = {}
-    print("[Debug] KNOWN_FRUITS initialized:", KNOWN_FRUITS)
-    print("[Debug] KNOWN_MUTATIONS initialized:", KNOWN_MUTATIONS)
-
+    
     function loadMutationList()
         local ok, MutationHandler = pcall(function()
             return require(ReplicatedStorage.Modules.MutationHandler)
@@ -8564,7 +8562,7 @@ local function render()
 
     local s = search.Text:lower()
     local list = {}
-    for lower, orig in pairs(KNOWN_FRUITS) do
+    for lower, orig in pairs(KNOWN_MUTATIONS) do
         if s == "" or lower:find(s, 1, true) then
             table.insert(list, orig)
         end
@@ -8635,24 +8633,17 @@ end
         render()
     end
 
-    print("[Debug] Connecting fruit & mutation buttons...")
-
 openFruitListBtn.MouseButton1Click:Connect(function()
-    print("[Debug] 🍎 Pilih Buah clicked!")
     openFruitSelector()
 end)
 
 openMutListBtn.MouseButton1Click:Connect(function()
-    print("[Debug] ✨ Pilih Mutation clicked!")
     openMutSelector()
 end)
-
-print("[Debug] Buttons connected!")
     
     -- Load initial
     task.spawn(function()
     task.wait(0.5)
-    print("[Debug] Loading mutation & fruit list...")
     loadMutationList()
     loadFruitList()
     
@@ -8660,10 +8651,7 @@ print("[Debug] Buttons connected!")
     for _ in pairs(KNOWN_FRUITS or {}) do fruitCount = fruitCount + 1 end
     local mutCount = 0
     for _ in pairs(KNOWN_MUTATIONS or {}) do mutCount = mutCount + 1 end
-    
-    print("[Debug] Fruits loaded:", fruitCount)
-    print("[Debug] Mutations loaded:", mutCount)
-    
+        
     if config.autoCollectSelectedFruits then
         autoCollectSelectedFruits = config.autoCollectSelectedFruits
     end
