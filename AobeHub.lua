@@ -3055,6 +3055,8 @@ return true
     -- ==================================================================
     KNOWN_FRUITS = {}
     KNOWN_MUTATIONS = {}
+    print("[Debug] KNOWN_FRUITS initialized:", KNOWN_FRUITS)
+    print("[Debug] KNOWN_MUTATIONS initialized:", KNOWN_MUTATIONS)
 
     function loadMutationList()
         local ok, MutationHandler = pcall(function()
@@ -8360,18 +8362,25 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
         pad.Parent = scr
 
         local buttons = {}
-        local function render()
-            for _, b in ipairs(buttons) do b:Destroy() end
-            buttons = {}
+local function render()
+    for _, b in ipairs(buttons) do b:Destroy() end
+    buttons = {}
 
-            local s = search.Text:lower()
-            local list = {}
-            for lower, orig in pairs(KNOWN_FRUITS) do
-                if s == "" or lower:find(s, 1, true) then
-                    table.insert(list, orig)
-                end
-            end
-            table.sort(list)
+    local s = search.Text:lower()
+    local list = {}
+    for lower, orig in pairs(KNOWN_FRUITS) do
+        if s == "" or lower:find(s, 1, true) then
+            table.insert(list, orig)
+        end
+    end
+    table.sort(list)
+    
+    -- ⭐ Tambahkan print di sini
+    print("[Debug Render] Total fruits:", #list)
+    if #list > 0 then
+        print("[Debug Render] First 3:", list[1], list[2], list[3])
+    end
+    print("[Debug Render] KNOWN_FRUITS count:", (function() local c=0 for _ in pairs(KNOWN_FRUITS or {}) do c=c+1 end return c end)())
 
             for i, name in ipairs(list) do
                 local isSel = autoCollectSelectedFruits[name:lower()] == true
@@ -8635,16 +8644,25 @@ print("[Debug] Buttons connected!")
     
     -- Load initial
     task.spawn(function()
-        task.wait(2)
-        loadMutationList()
-        loadFruitList()
-        -- Load saved selections
-        if config.autoCollectSelectedFruits then
-            autoCollectSelectedFruits = config.autoCollectSelectedFruits
-        end
-        if config.autoCollectSelectedMutations then
-            autoCollectSelectedMutations = config.autoCollectSelectedMutations
-        end
-    end)
+    task.wait(0.5)
+    print("[Debug] Loading mutation & fruit list...")
+    loadMutationList()
+    loadFruitList()
+    
+    local fruitCount = 0
+    for _ in pairs(KNOWN_FRUITS or {}) do fruitCount = fruitCount + 1 end
+    local mutCount = 0
+    for _ in pairs(KNOWN_MUTATIONS or {}) do mutCount = mutCount + 1 end
+    
+    print("[Debug] Fruits loaded:", fruitCount)
+    print("[Debug] Mutations loaded:", mutCount)
+    
+    if config.autoCollectSelectedFruits then
+        autoCollectSelectedFruits = config.autoCollectSelectedFruits
+    end
+    if config.autoCollectSelectedMutations then
+        autoCollectSelectedMutations = config.autoCollectSelectedMutations
+    end
+end)
 end -- BLOCK 14
 
