@@ -8239,16 +8239,24 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     local function openFruitSelector()
     print("[Debug] openFruitSelector START")
     
+    -- ⭐ Bungkus dalam ScreenGui dengan DisplayOrder tinggi
+    local popupGui = Instance.new("ScreenGui")
+    popupGui.Name = "AutoCollectFruitPopup"
+    popupGui.DisplayOrder = 999
+    popupGui.ResetOnSpawn = false
+    popupGui.Parent = playerGui
+    
     local popup = Instance.new("Frame")
     popup.Size = UDim2.new(0, 400, 0, 420)
     popup.Position = UDim2.new(0.5, -200, 0.5, -210)
     popup.BackgroundColor3 = C.bg
     popup.BorderSizePixel = 0
-    popup.Parent = playerGui
+    popup.ZIndex = 100
+    popup.Parent = popupGui   -- ⭐ parent ke popupGui
     Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
     
     print("[Debug] Popup created, Parent:", popup.Parent, "Visible:", popup.Visible)
-    
+        
         -- Title bar
         local ptb = Instance.new("Frame")
         ptb.Size = UDim2.new(1, 0, 0, 28)
@@ -8281,8 +8289,10 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
         pclose.AutoButtonColor = false
         pclose.Parent = ptb
         Instance.new("UICorner", pclose).CornerRadius = UDim.new(0, 4)
-        pclose.MouseButton1Click:Connect(function() popup:Destroy() end)
-
+        pclose.MouseButton1Click:Connect(function() 
+            popupGui:Destroy()   -- ⭐ destroy popupGui, bukan cuma popup
+        end)
+        
         -- Search
         local search = Instance.new("TextBox")
         search.Size = UDim2.new(1, -20, 0, 24)
@@ -8418,14 +8428,23 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- POPUP: Pilih Mutation
     -- ============================================================
     local function openMutSelector()
-        local popup = Instance.new("Frame")
-        popup.Size = UDim2.new(0, 400, 0, 420)
-        popup.Position = UDim2.new(0.5, -200, 0.5, -210)
-        popup.BackgroundColor3 = C.bg
-        popup.BorderSizePixel = 0
-        popup.Parent = playerGui
-        Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
-
+    local function openMutSelector()
+    -- ⭐ Bungkus dalam ScreenGui
+    local popupGui = Instance.new("ScreenGui")
+    popupGui.Name = "AutoCollectMutPopup"
+    popupGui.DisplayOrder = 999
+    popupGui.ResetOnSpawn = false
+    popupGui.Parent = playerGui
+    
+    local popup = Instance.new("Frame")
+    popup.Size = UDim2.new(0, 400, 0, 420)
+    popup.Position = UDim2.new(0.5, -200, 0.5, -210)
+    popup.BackgroundColor3 = C.bg
+    popup.BorderSizePixel = 0
+    popup.ZIndex = 100
+    popup.Parent = popupGui   -- ⭐
+    Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
+    
         local ptb = Instance.new("Frame")
         ptb.Size = UDim2.new(1, 0, 0, 28)
         ptb.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
@@ -8457,8 +8476,10 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
         pclose.AutoButtonColor = false
         pclose.Parent = ptb
         Instance.new("UICorner", pclose).CornerRadius = UDim.new(0, 4)
-        pclose.MouseButton1Click:Connect(function() popup:Destroy() end)
-
+        pclose.MouseButton1Click:Connect(function() 
+            popupGui:Destroy()   -- ⭐
+        end)
+            
         local search = Instance.new("TextBox")
         search.Size = UDim2.new(1, -20, 0, 24)
         search.Position = UDim2.new(0, 10, 0, 35)
