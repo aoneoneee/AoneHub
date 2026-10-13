@@ -8374,46 +8374,46 @@ local function render()
         end
     end
     table.sort(list)
-    
-    -- ⭐ Tambahkan print di sini
-    print("[Debug Render] Total fruits:", #list)
-    if #list > 0 then
-        print("[Debug Render] First 3:", list[1], list[2], list[3])
-    end
-    print("[Debug Render] KNOWN_FRUITS count:", (function() local c=0 for _ in pairs(KNOWN_FRUITS or {}) do c=c+1 end return c end)())
 
-            for i, name in ipairs(list) do
-                local isSel = autoCollectSelectedFruits[name:lower()] == true
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, 0, 0, 22)
-                btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
-                btn.BorderSizePixel = 0
-                btn.Font = Enum.Font.Gotham
-                btn.Text = string.format("%s %s", isSel and "✓" or "○", name)
-                btn.TextColor3 = C.text
-                btn.TextSize = 9
-                btn.TextXAlignment = Enum.TextXAlignment.Left
-                btn.LayoutOrder = i
-                btn.AutoButtonColor = false
-                btn.Parent = scr
-                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
-                local p = Instance.new("UIPadding")
-                p.PaddingLeft = UDim.new(0, 6)
-                p.Parent = btn
-                btn.MouseButton1Click:Connect(function()
-                    local k = name:lower()
-                    if autoCollectSelectedFruits[k] then
-                        autoCollectSelectedFruits[k] = nil
-                    else
-                        autoCollectSelectedFruits[k] = true
-                    end
-                    config.autoCollectSelectedFruits = autoCollectSelectedFruits
-                    saveConfig()
-                    render()
-                end)
-                table.insert(buttons, btn)
+    -- ⭐ Set CanvasSize berdasarkan jumlah item
+    scr.CanvasSize = UDim2.new(0, 0, 0, #list * 24 + 8)
+    print("[Debug Render] CanvasSize set:", scr.CanvasSize, "Items:", #list)
+
+    for i, name in ipairs(list) do
+        local isSel = autoCollectSelectedFruits[name:lower()] == true
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -8, 0, 22)   -- ⭐ ada margin kiri kanan
+        btn.Position = UDim2.new(0, 4, 0, (i-1) * 24 + 4)  -- ⭐ POSISI MANUAL
+        btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.Text = string.format("%s %s", isSel and "✓" or "○", name)
+        btn.TextColor3 = C.text
+        btn.TextSize = 9
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.LayoutOrder = i
+        btn.AutoButtonColor = false
+        btn.Visible = true                          -- ⭐ pastikan visible
+        btn.ZIndex = 200                            -- ⭐ di atas ScrollingFrame
+        btn.Parent = scr
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+        local p = Instance.new("UIPadding")
+        p.PaddingLeft = UDim.new(0, 6)
+        p.Parent = btn
+        btn.MouseButton1Click:Connect(function()
+            local k = name:lower()
+            if autoCollectSelectedFruits[k] then
+                autoCollectSelectedFruits[k] = nil
+            else
+                autoCollectSelectedFruits[k] = true
             end
-        end
+            config.autoCollectSelectedFruits = autoCollectSelectedFruits
+            saveConfig()
+            render()
+        end)
+        table.insert(buttons, btn)
+    end
+end
 
         search:GetPropertyChangedSignal("Text"):Connect(render)
         sAllBtn.MouseButton1Click:Connect(function()
@@ -8558,51 +8558,58 @@ local function render()
         pad.Parent = scr
 
         local buttons = {}
-        local function render()
-            for _, b in ipairs(buttons) do b:Destroy() end
-            buttons = {}
+local function render()
+    for _, b in ipairs(buttons) do b:Destroy() end
+    buttons = {}
 
-            local s = search.Text:lower()
-            local list = {}
-            for name, _ in pairs(KNOWN_MUTATIONS) do
-                if s == "" or name:lower():find(s, 1, true) then
-                    table.insert(list, name)
-                end
-            end
-            table.sort(list)
-
-            for i, name in ipairs(list) do
-                local key = name:lower()
-                local isSel = autoCollectSelectedMutations[key] == true
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, 0, 0, 22)
-                btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
-                btn.BorderSizePixel = 0
-                btn.Font = Enum.Font.Gotham
-                btn.Text = string.format("%s %s", isSel and "✓" or "○", name)
-                btn.TextColor3 = C.text
-                btn.TextSize = 9
-                btn.TextXAlignment = Enum.TextXAlignment.Left
-                btn.LayoutOrder = i
-                btn.AutoButtonColor = false
-                btn.Parent = scr
-                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
-                local p = Instance.new("UIPadding")
-                p.PaddingLeft = UDim.new(0, 6)
-                p.Parent = btn
-                btn.MouseButton1Click:Connect(function()
-                    if autoCollectSelectedMutations[key] then
-                        autoCollectSelectedMutations[key] = nil
-                    else
-                        autoCollectSelectedMutations[key] = true
-                    end
-                    config.autoCollectSelectedMutations = autoCollectSelectedMutations
-                    saveConfig()
-                    render()
-                end)
-                table.insert(buttons, btn)
-            end
+    local s = search.Text:lower()
+    local list = {}
+    for lower, orig in pairs(KNOWN_FRUITS) do
+        if s == "" or lower:find(s, 1, true) then
+            table.insert(list, orig)
         end
+    end
+    table.sort(list)
+
+    -- ⭐ Set CanvasSize berdasarkan jumlah item
+    scr.CanvasSize = UDim2.new(0, 0, 0, #list * 24 + 8)
+    print("[Debug Render] CanvasSize set:", scr.CanvasSize, "Items:", #list)
+
+    for i, name in ipairs(list) do
+        local isSel = autoCollectSelectedFruits[name:lower()] == true
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -8, 0, 22)   -- ⭐ ada margin kiri kanan
+        btn.Position = UDim2.new(0, 4, 0, (i-1) * 24 + 4)  -- ⭐ POSISI MANUAL
+        btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.Text = string.format("%s %s", isSel and "✓" or "○", name)
+        btn.TextColor3 = C.text
+        btn.TextSize = 9
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.LayoutOrder = i
+        btn.AutoButtonColor = false
+        btn.Visible = true                          -- ⭐ pastikan visible
+        btn.ZIndex = 200                            -- ⭐ di atas ScrollingFrame
+        btn.Parent = scr
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+        local p = Instance.new("UIPadding")
+        p.PaddingLeft = UDim.new(0, 6)
+        p.Parent = btn
+        btn.MouseButton1Click:Connect(function()
+            local k = name:lower()
+            if autoCollectSelectedFruits[k] then
+                autoCollectSelectedFruits[k] = nil
+            else
+                autoCollectSelectedFruits[k] = true
+            end
+            config.autoCollectSelectedFruits = autoCollectSelectedFruits
+            saveConfig()
+            render()
+        end)
+        table.insert(buttons, btn)
+    end
+end
 
         search:GetPropertyChangedSignal("Text"):Connect(render)
         sAllBtn.MouseButton1Click:Connect(function()
