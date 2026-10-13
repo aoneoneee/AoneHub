@@ -8428,7 +8428,6 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- POPUP: Pilih Mutation
     -- ============================================================
     local function openMutSelector()
-    local function openMutSelector()
     -- ⭐ Bungkus dalam ScreenGui
     local popupGui = Instance.new("ScreenGui")
     popupGui.Name = "AutoCollectMutPopup"
