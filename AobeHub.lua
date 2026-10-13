@@ -53,6 +53,7 @@ local C = {
     danger = Color3.fromRGB(200, 50, 50),
     warning = Color3.fromRGB(255, 200, 0),
     section = Color3.fromRGB(38, 38, 48),
+    input = Color3.fromRGB(55, 55, 70),
 }
 
 -- ==================================================================
