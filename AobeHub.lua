@@ -5688,36 +5688,30 @@ end)
     -- ==================================================================
     -- HOOK DROPDOWN TOGGLE UNTUK POPULATE
     -- ==================================================================
-    local teamDropdownOriginalToggle = TeamPresetDropdown.Toggle
-    local function teamToggleWrapper()
+    TeamPresetDropdown.HeaderButton.MouseButton1Click:Connect(function()
         if not TeamPresetDropdown.IsOpen() then
             populateTeamPresetDropdown()
         end
-    end
-    TeamPresetDropdown.HeaderButton.MouseButton1Click:Connect(teamToggleWrapper)
+    end)
 
-    local weightDropdownOriginalToggle = WeightPresetDropdown.Toggle
     WeightPresetDropdown.HeaderButton.MouseButton1Click:Connect(function()
         if not WeightPresetDropdown.IsOpen() then
             populateWeightPresetDropdown()
         end
     end)
 
-    local mutationDropdownToggle = MutationPresetDropdown.Toggle
     MutationPresetDropdown.HeaderButton.MouseButton1Click:Connect(function()
         if not MutationPresetDropdown.IsOpen() then
             populateMutationPresetDropdown()
         end
     end)
 
-    local advancedDropdownToggle = AdvancedPresetDropdown.Toggle
     AdvancedPresetDropdown.HeaderButton.MouseButton1Click:Connect(function()
         if not AdvancedPresetDropdown.IsOpen() then
             populateAdvancedPresetDropdown()
         end
     end)
 
-    local editDropdownToggle = EditPresetDropdown.Toggle
     EditPresetDropdown.HeaderButton.MouseButton1Click:Connect(function()
         if not EditPresetDropdown.IsOpen() then
             populateEditPresetDropdown()
