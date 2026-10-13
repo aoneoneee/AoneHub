@@ -218,11 +218,11 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             sectionStates = {},
 
             -- Auto Collect
-            autoCollectMaxWeight = 5.0,
-            autoCollectInterval = 1.5,
+            autoCollectMaxWeight = 0,
+            autoCollectInterval = 2,
             autoCollectSellEnabled = true,
             autoCollectDelayAfterTeleport = 1,
-            autoCollectDelayAfterSell = 4,
+            autoCollectDelayAfterSell = 3,
             autoCollectDelayAfterReturn = 1,
             autoCollectSelectedFruits = {},
             autoCollectSelectedMutations = {},
