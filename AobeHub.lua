@@ -8237,14 +8237,18 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- POPUP: Pilih Buah
     -- ============================================================
     local function openFruitSelector()
-        local popup = Instance.new("Frame")
-        popup.Size = UDim2.new(0, 400, 0, 420)
-        popup.Position = UDim2.new(0.5, -200, 0.5, -210)
-        popup.BackgroundColor3 = C.bg
-        popup.BorderSizePixel = 0
-        popup.Parent = playerGui
-        Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
-
+    print("[Debug] openFruitSelector START")
+    
+    local popup = Instance.new("Frame")
+    popup.Size = UDim2.new(0, 400, 0, 420)
+    popup.Position = UDim2.new(0.5, -200, 0.5, -210)
+    popup.BackgroundColor3 = C.bg
+    popup.BorderSizePixel = 0
+    popup.Parent = playerGui
+    Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
+    
+    print("[Debug] Popup created, Parent:", popup.Parent, "Visible:", popup.Visible)
+    
         -- Title bar
         local ptb = Instance.new("Frame")
         ptb.Size = UDim2.new(1, 0, 0, 28)
@@ -8583,9 +8587,20 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
         render()
     end
 
-    openFruitListBtn.MouseButton1Click:Connect(openFruitSelector)
-    openMutListBtn.MouseButton1Click:Connect(openMutSelector)
+    print("[Debug] Connecting fruit & mutation buttons...")
 
+openFruitListBtn.MouseButton1Click:Connect(function()
+    print("[Debug] 🍎 Pilih Buah clicked!")
+    openFruitSelector()
+end)
+
+openMutListBtn.MouseButton1Click:Connect(function()
+    print("[Debug] ✨ Pilih Mutation clicked!")
+    openMutSelector()
+end)
+
+print("[Debug] Buttons connected!")
+    
     -- Load initial
     task.spawn(function()
         task.wait(0.5)
