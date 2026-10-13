@@ -8237,8 +8237,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- POPUP: Pilih Buah
     -- ============================================================
     local function openFruitSelector()
-    print("[Debug] openFruitSelector START")
-    
+        
     -- ⭐ Bungkus dalam ScreenGui dengan DisplayOrder tinggi
     local popupGui = Instance.new("ScreenGui")
     popupGui.Name = "AutoCollectFruitPopup"
@@ -8247,15 +8246,13 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     popupGui.Parent = playerGui
     
     local popup = Instance.new("Frame")
-    popup.Size = UDim2.new(0, 400, 0, 420)
+    popup.Size = UDim2.new(0, 400, 0, 400)
     popup.Position = UDim2.new(0.5, -200, 0.5, -210)
     popup.BackgroundColor3 = C.bg
     popup.BorderSizePixel = 0
     popup.ZIndex = 100
     popup.Parent = popupGui   -- ⭐ parent ke popupGui
     Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
-    
-    print("[Debug] Popup created, Parent:", popup.Parent, "Visible:", popup.Visible)
         
         -- Title bar
         local ptb = Instance.new("Frame")
@@ -8266,6 +8263,37 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
         ptb.Parent = popup
         Instance.new("UICorner", ptb).CornerRadius = UDim.new(0, 8)
 
+        -- ⭐ Drag handler untuk popup
+local dragging = false
+local dragStart = nil
+local startPos = nil
+
+ptb.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = popup.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        popup.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+        
         local pt = Instance.new("TextLabel")
         pt.Size = UDim2.new(1, -50, 1, 0)
         pt.Position = UDim2.new(0, 12, 0, 0)
@@ -8375,8 +8403,7 @@ local function render()
 
     -- ⭐ Set CanvasSize berdasarkan jumlah item
     scr.CanvasSize = UDim2.new(0, 0, 0, #list * 24 + 8)
-    print("[Debug Render] CanvasSize set:", scr.CanvasSize, "Items:", #list)
-
+    
     for i, name in ipairs(list) do
         local isSel = autoCollectSelectedFruits[name:lower()] == true
         local btn = Instance.new("TextButton")
@@ -8449,7 +8476,7 @@ end
     popupGui.Parent = playerGui
     
     local popup = Instance.new("Frame")
-    popup.Size = UDim2.new(0, 400, 0, 420)
+    popup.Size = UDim2.new(0, 400, 0, 400)
     popup.Position = UDim2.new(0.5, -200, 0.5, -210)
     popup.BackgroundColor3 = C.bg
     popup.BorderSizePixel = 0
@@ -8465,6 +8492,37 @@ end
         ptb.Parent = popup
         Instance.new("UICorner", ptb).CornerRadius = UDim.new(0, 8)
 
+        -- ⭐ Drag handler untuk popup
+local dragging = false
+local dragStart = nil
+local startPos = nil
+
+ptb.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = popup.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        popup.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+        
         local pt = Instance.new("TextLabel")
         pt.Size = UDim2.new(1, -50, 1, 0)
         pt.Position = UDim2.new(0, 12, 0, 0)
@@ -8571,8 +8629,7 @@ local function render()
     table.sort(list)
 
     scr.CanvasSize = UDim2.new(0, 0, 0, #list * 24 + 8)
-    print("[Debug Render] CanvasSize set:", scr.CanvasSize, "Items:", #list)
-
+    
     for i, name in ipairs(list) do
         local isSel = autoCollectSelectedMutations[name:lower()] == true   -- ⭐ mutations
         local btn = Instance.new("TextButton")
