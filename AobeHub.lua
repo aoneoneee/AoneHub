@@ -230,13 +230,6 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
 
             autoBuyEnabled = false,
             autoBuySelected = {},
-            autoBuyEnabled = false,
-            autoBuySelected = {},
-            autoBuyInterval = 1,
-            autoBuyDelay = 0.8,
-            autoBuyMaxPerCycle = 50,
-            autoBuyMinStock = 1,
-            autoBuySectionStates = {},
         }
 
         local function loadConfig()
@@ -8783,63 +8776,59 @@ end)
 end)
 end -- BLOCK 14
 
--- shared: diisi di BLOCK 15 (TAB AUTOBUY)
-do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
-    -- ==================================================================
-    -- ⭐ SEMUA DEPENDENCY DI SINI (isolated, gak nambah beban BLOCK lain)
-    -- ==================================================================
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- shared: deklarasi dependency Auto-Buy (dipakai lintas sub-block)
+local AB_BuySeedStock, AB_BuyDailySeedShopStock, AB_BuyPetEgg, AB_BuyGearStock,
+    AB_BuyCosmeticItem, AB_BuyCosmeticShopFence, AB_BuyTravelingMerchantShopStock,
+    AB_SeedShopData, AB_DailySeedShopData, AB_PetEggData, AB_GearShopData,
+    AB_CosmeticShopTabData, AB_TravelingMerchantData, AB_NPCLevelHandler,
+    AB_RebirthUnlocksService, AB_formatNumber, AB_getNPCLevel, AB_checkLevelLocks,
+    AB_checkRebirth, AB_getCurrencyAB, AB_scanSeeds, AB_scanEggs, AB_scanGear,
+    AB_scanCosmetics, AB_scanMerchant, AB_autoBuyLoop, AB_renderFns,
+    AB_autoBuyIsRunning, AB_lastRefreshPerSection
 
+do -- BLOCK 15A: AUTO-BUY DEPENDENCIES
     local function tryRequire(path)
         local ok, result = pcall(require, path)
         if ok then return result end
         warn("❌ Gagal require:", path)
         return nil
     end
+    local RS = game:GetService("ReplicatedStorage")
+    local GE = RS:WaitForChild("GameEvents")
 
-    -- Remotes
-    local GameEvents = ReplicatedStorage:WaitForChild("GameEvents")
-    local BuySeedStock = GameEvents:WaitForChild("BuySeedStock")
-    local BuyDailySeedShopStock = GameEvents:WaitForChild("BuyDailySeedShopStock")
-    local BuyPetEgg = GameEvents:WaitForChild("BuyPetEgg")
-    local BuyGearStock = GameEvents:WaitForChild("BuyGearStock")
-    local BuyCosmeticItem = GameEvents:WaitForChild("BuyCosmeticItem")
-    local BuyCosmeticShopFence = GameEvents:WaitForChild("BuyCosmeticShopFence")
-    local BuyTravelingMerchantShopStock = GameEvents:WaitForChild("BuyTravelingMerchantShopStock")
+    AB_BuySeedStock = GE:WaitForChild("BuySeedStock")
+    AB_BuyDailySeedShopStock = GE:WaitForChild("BuyDailySeedShopStock")
+    AB_BuyPetEgg = GE:WaitForChild("BuyPetEgg")
+    AB_BuyGearStock = GE:WaitForChild("BuyGearStock")
+    AB_BuyCosmeticItem = GE:WaitForChild("BuyCosmeticItem")
+    AB_BuyCosmeticShopFence = GE:WaitForChild("BuyCosmeticShopFence")
+    AB_BuyTravelingMerchantShopStock = GE:WaitForChild("BuyTravelingMerchantShopStock")
 
-    -- Config data
-    local SeedShopData = tryRequire(ReplicatedStorage.Data.SeedShopData) or {}
-    local DailySeedShopData = tryRequire(ReplicatedStorage.Data.DailySeedShopData) or {}
-    local PetEggData = tryRequire(ReplicatedStorage.Data.PetEggData) or {}
-    local GearShopData = tryRequire(ReplicatedStorage.Data.GearShopData) or {}
-    local CosmeticShopTabData = tryRequire(ReplicatedStorage.Data.CosmeticShopTabData) or {}
-    local TravelingMerchantData = tryRequire(ReplicatedStorage.Data.TravelingMerchant.TravelingMerchantData) or {}
-    local NPCLevelHandler = tryRequire(ReplicatedStorage.Modules.NPCLevelHandler)
-    local RebirthUnlocksService = tryRequire(ReplicatedStorage.Modules.RebirthUnlocksSharedService)
+    AB_SeedShopData = tryRequire(RS.Data.SeedShopData) or {}
+    AB_DailySeedShopData = tryRequire(RS.Data.DailySeedShopData) or {}
+    AB_PetEggData = tryRequire(RS.Data.PetEggData) or {}
+    AB_GearShopData = tryRequire(RS.Data.GearShopData) or {}
+    AB_CosmeticShopTabData = tryRequire(RS.Data.CosmeticShopTabData) or {}
+    AB_TravelingMerchantData = tryRequire(RS.Data.TravelingMerchant.TravelingMerchantData) or {}
+    AB_NPCLevelHandler = tryRequire(RS.Modules.NPCLevelHandler)
+    AB_RebirthUnlocksService = tryRequire(RS.Modules.RebirthUnlocksSharedService)
 
-    -- ==================================================================
-    -- ⭐ STATE (isolated di BLOCK 15)
-    -- ==================================================================
-    local autoBuyIsRunning = false
-    local lastRefreshPerSection = {}
+    AB_renderFns = {}
+    AB_autoBuyIsRunning = false
+    AB_lastRefreshPerSection = {}
+end
 
-    -- ==================================================================
-    -- ⭐ HELPERS
-    -- ==================================================================
-    local function formatNumber(n)
+do -- BLOCK 15B: AUTO-BUY HELPERS + SCANNERS
+    AB_formatNumber = function(n)
         if type(n) ~= "number" then return tostring(n) end
         if n ~= n then return "NaN" end
         if n == math.huge then return "∞" end
         if n == -math.huge then return "-∞" end
         local neg = n < 0
         n = math.abs(n)
-        if n < 1000 then
-            return (neg and "-" or "") .. tostring(math.floor(n))
-        end
-        local suffixes = {
-            "", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No",
-            "Dc", "UDc", "DDc", "TDc", "QaDc", "QiDc", "SxDc", "SpDc", "OcDc", "NoDc",
-        }
+        if n < 1000 then return (neg and "-" or "") .. tostring(math.floor(n)) end
+        local suffixes = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No",
+            "Dc", "UDc", "DDc", "TDc", "QaDc", "QiDc", "SxDc", "SpDc", "OcDc", "NoDc"}
         local tier = math.min(math.floor(math.log10(n) / 3), #suffixes - 1)
         local scaled = n / (10 ^ (tier * 3))
         local truncated = math.floor(scaled * 10) / 10
@@ -8849,44 +8838,44 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
         return (neg and "-" or "") .. str .. suffixes[tier + 1]
     end
 
-    local function getNPCLevel(npcName)
+    AB_getNPCLevel = function(npcName)
         local data = DataService:GetData()
         if not data or not data.Progress or not data.Progress.NPCPoints then return 0 end
         local points = data.Progress.NPCPoints[npcName] or 0
         return NPCLevelData and NPCLevelData:GetLevelFromPoints(npcName, points) or 0
     end
 
-    local function checkLevelLocks(levelLocks)
+    AB_checkLevelLocks = function(levelLocks)
         if not levelLocks then return true end
-        if NPCLevelHandler and NPCLevelHandler.HasRequiredNPCLevels then
+        if AB_NPCLevelHandler and AB_NPCLevelHandler.HasRequiredNPCLevels then
             local ok, result = pcall(function()
-                return NPCLevelHandler:HasRequiredNPCLevels(levelLocks)
+                return AB_NPCLevelHandler:HasRequiredNPCLevels(levelLocks)
             end)
             if ok then return result end
         end
         for npcName, requiredLevel in pairs(levelLocks) do
-            if getNPCLevel(npcName) < requiredLevel then return false end
+            if AB_getNPCLevel(npcName) < requiredLevel then return false end
         end
         return true
     end
 
-    local function checkRebirth(shopType, itemName)
-        if not RebirthUnlocksService then return true, 0 end
+    AB_checkRebirth = function(shopType, itemName)
+        if not AB_RebirthUnlocksService then return true, 0 end
         local okAB, hasAB = pcall(function()
-            return RebirthUnlocksService:HasBeenAssignedABTest(player)
+            return AB_RebirthUnlocksService:HasBeenAssignedABTest(player)
         end)
         if not okAB or not hasAB then return true, 0 end
         local okU, unlocked = pcall(function()
-            return RebirthUnlocksService:HasUnlockedShopItem(player, shopType, itemName)
+            return AB_RebirthUnlocksService:HasUnlockedShopItem(player, shopType, itemName)
         end)
         if not okU or unlocked then return true, 0 end
         local okR, remaining = pcall(function()
-            return RebirthUnlocksService:GetRemainingRebirthsNeededForItem(player, shopType, itemName)
+            return AB_RebirthUnlocksService:GetRemainingRebirthsNeededForItem(player, shopType, itemName)
         end)
         return false, (okR and remaining) or 0
     end
 
-    local function getCurrencyAB(currencyType)
+    AB_getCurrencyAB = function(currencyType)
         local data = DataService:GetData()
         if not data then return 0 end
         if currencyType == "Sheckles" then return data.Sheckles or 0 end
@@ -8896,16 +8885,11 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
         return 0
     end
 
-    -- ==================================================================
-    -- ⭐ SCANNERS
-    -- ==================================================================
-    local function scanSeedsAB()
-        local items = {}
+    AB_scanSeeds = function()
+        local items, seen = {}, {}
         local data = DataService:GetData()
         if not data or not data.SeedStocks then return items end
-        local seen = {}
-        local isSamUnlocked = getNPCLevel("Sam") >= 5
-
+        local isSamUnlocked = AB_getNPCLevel("Sam") >= 5
         local function add(seedName, cfg, shopName, currency)
             local key = shopName .. "::" .. seedName
             if seen[key] then return end
@@ -8918,59 +8902,51 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
             local isLocked, lockReason = false, ""
             if currency == "GardenCoins" and not isSamUnlocked then
                 isLocked = true
-                lockReason = string.format("Sam Lv.%d/5", getNPCLevel("Sam"))
+                lockReason = string.format("Sam Lv.%d/5", AB_getNPCLevel("Sam"))
             end
             if not isLocked then
-                local unlocked, remaining = checkRebirth("Seed", seedName)
+                local unlocked, remaining = AB_checkRebirth("Seed", seedName)
                 if not unlocked then
                     isLocked = true
                     lockReason = string.format("Rebirth %d+ lagi", remaining)
                 end
             end
             table.insert(items, {
-                key = "AB_Seeds::" .. key,
-                shopName = shopName,
-                itemName = seedName,
-                displayName = seedName,
-                stock = stock,
-                price = cfg.Price or 0,
-                currency = currency,
-                isLocked = isLocked,
-                isPaused = false,
-                lockReason = lockReason,
+                key = "AB_Seeds::" .. key, shopName = shopName,
+                itemName = seedName, displayName = seedName, stock = stock,
+                price = cfg.Price or 0, currency = currency,
+                isLocked = isLocked, isPaused = false, lockReason = lockReason,
                 prefix = shopName == "Daily Deals" and "🌙"
                     or (currency == "GardenCoins" and "🌼" or "🏪"),
                 buyFn = function()
                     if shopName == "Daily Deals" then
-                        BuyDailySeedShopStock:FireServer(seedName)
+                        AB_BuyDailySeedShopStock:FireServer(seedName)
                     else
-                        BuySeedStock:FireServer(shopName, seedName)
+                        AB_BuySeedStock:FireServer(shopName, seedName)
                     end
                 end,
             })
         end
-
         for shopName, shopData in pairs(data.SeedStocks) do
             if shopData.Stocks then
                 for seedName in pairs(shopData.Stocks) do
                     local cfg, currency
                     if shopName == "Daily Deals" then
-                        cfg = DailySeedShopData[seedName]
-                        currency = "Sheckles"
+                        cfg = AB_DailySeedShopData[seedName]; currency = "Sheckles"
                     else
-                        cfg = SeedShopData[seedName]
+                        cfg = AB_SeedShopData[seedName]
                         currency = (cfg and cfg.SpecialCurrencyType) or "Sheckles"
                     end
                     if cfg then add(seedName, cfg, shopName, currency) end
                 end
             end
         end
-        for seedName, cfg in pairs(SeedShopData) do
+        for seedName, cfg in pairs(AB_SeedShopData) do
             if cfg.DisplayInShop and not seen["Shop::" .. seedName] then
                 add(seedName, cfg, "Shop", cfg.SpecialCurrencyType or "Sheckles")
             end
         end
-        for seedName, cfg in pairs(DailySeedShopData) do
+        for seedName, cfg in pairs(AB_DailySeedShopData) do
             if not seen["Daily Deals::" .. seedName] then
                 add(seedName, cfg, "Daily Deals", "Sheckles")
             end
@@ -8978,7 +8954,7 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
         return items
     end
 
-    local function scanEggsAB()
+    AB_scanEggs = function()
         local items = {}
         local data = DataService:GetData()
         if not data or not data.PetEggStock then return items end
@@ -8986,11 +8962,11 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
         for _, entry in ipairs(data.PetEggStock.Stocks or {}) do
             stockMap[entry.EggName] = (stockMap[entry.EggName] or 0) + entry.Stock
         end
-        for eggName, cfg in pairs(PetEggData) do
+        for eggName, cfg in pairs(AB_PetEggData) do
             if cfg.DisplayInShop == false then continue end
             local stock = stockMap[eggName] or 0
             local isLocked, lockReason = false, ""
-            if cfg.LevelLocks and not checkLevelLocks(cfg.LevelLocks) then
+            if cfg.LevelLocks and not AB_checkLevelLocks(cfg.LevelLocks) then
                 isLocked = true
                 local highest, npcName = 0, ""
                 for name, lvl in pairs(cfg.LevelLocks) do
@@ -8999,69 +8975,60 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
                 lockReason = string.format("%s Lv.%d", npcName, highest)
             end
             if not isLocked then
-                local unlocked, remaining = checkRebirth("Egg", eggName)
+                local unlocked, remaining = AB_checkRebirth("Egg", eggName)
                 if not unlocked then
                     isLocked = true
                     lockReason = string.format("Rebirth %d+ lagi", remaining)
                 end
             end
             table.insert(items, {
-                key = "AB_Eggs::Shop::" .. eggName,
-                shopName = "Pet Shop",
-                itemName = eggName,
-                displayName = eggName,
-                stock = stock,
-                price = cfg.Price or 0,
-                currency = cfg.SpecialCurrencyType or "Sheckles",
+                key = "AB_Eggs::Shop::" .. eggName, shopName = "Pet Shop",
+                itemName = eggName, displayName = eggName, stock = stock,
+                price = cfg.Price or 0, currency = cfg.SpecialCurrencyType or "Sheckles",
                 isLocked = isLocked, isPaused = false, lockReason = lockReason,
                 prefix = "🥚",
-                buyFn = function() BuyPetEgg:FireServer(eggName) end,
+                buyFn = function() AB_BuyPetEgg:FireServer(eggName) end,
             })
         end
         return items
     end
 
-    local function scanGearAB()
+    AB_scanGear = function()
         local items = {}
         local data = DataService:GetData()
         if not data or not data.GearStock then return items end
-        for gearName, cfg in pairs(GearShopData.Gear or {}) do
+        for gearName, cfg in pairs(AB_GearShopData.Gear or {}) do
             if cfg.LayoutOrder == -1 then continue end
             local stockData = data.GearStock.Stocks[gearName]
             local stock = stockData and stockData.Stock or 0
             local isLocked, lockReason = false, ""
-            if cfg.LevelLocks and not checkLevelLocks(cfg.LevelLocks) then
-                isLocked = true
-                lockReason = "NPC Level"
+            if cfg.LevelLocks and not AB_checkLevelLocks(cfg.LevelLocks) then
+                isLocked = true; lockReason = "NPC Level"
             end
             if not isLocked then
-                local unlocked, remaining = checkRebirth("Gear", gearName)
+                local unlocked, remaining = AB_checkRebirth("Gear", gearName)
                 if not unlocked then
                     isLocked = true
                     lockReason = string.format("Rebirth %d+ lagi", remaining)
                 end
             end
             table.insert(items, {
-                key = "AB_Gear::Shop::" .. gearName,
-                shopName = "Gear Shop",
-                itemName = gearName,
-                displayName = gearName,
-                stock = stock,
-                price = cfg.Price or 0,
-                currency = "Sheckles",
+                key = "AB_Gear::Shop::" .. gearName, shopName = "Gear Shop",
+                itemName = gearName, displayName = gearName, stock = stock,
+                price = cfg.Price or 0, currency = "Sheckles",
                 isLocked = isLocked, isPaused = false, lockReason = lockReason,
                 prefix = "⚙️",
-                buyFn = function() BuyGearStock:FireServer(gearName) end,
+                buyFn = function() AB_BuyGearStock:FireServer(gearName) end,
             })
         end
         return items
     end
 
-    local function scanCosmeticsAB()
+    AB_scanCosmetics = function()
         local items = {}
         local data = DataService:GetData()
         if not data or not data.CosmeticStock then return items end
-        local tabData = CosmeticShopTabData.Tabs and CosmeticShopTabData.Tabs["Cosmetics"]
+        local tabData = AB_CosmeticShopTabData.Tabs and AB_CosmeticShopTabData.Tabs["Cosmetics"]
         if not tabData then return items end
         local itemStocks = data.CosmeticStock.TabStocks["Cosmetics"]
             and data.CosmeticStock.TabStocks["Cosmetics"].ItemStocks or {}
@@ -9070,42 +9037,36 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
             if not cfg then continue end
             table.insert(items, {
                 key = "AB_Cosmetics::Cosmetics::" .. itemName,
-                shopName = "Cosmetic Shop",
-                itemName = itemName,
-                displayName = itemName,
-                stock = stockInfo.Stock or 0,
-                price = cfg.Price or 0,
-                currency = "Sheckles",
+                shopName = "Cosmetic Shop", itemName = itemName,
+                displayName = itemName, stock = stockInfo.Stock or 0,
+                price = cfg.Price or 0, currency = "Sheckles",
                 isLocked = false, isPaused = false, lockReason = "",
                 prefix = "🎨",
-                buyFn = function() BuyCosmeticItem:FireServer(itemName, "Cosmetics") end,
+                buyFn = function() AB_BuyCosmeticItem:FireServer(itemName, "Cosmetics") end,
             })
         end
         local fenceStocks = data.CosmeticStock.TabStocks["Cosmetics"]
             and data.CosmeticStock.TabStocks["Cosmetics"].FenceStocks or {}
-        local fenceTab = CosmeticShopTabData.Tabs["Fences"]
+        local fenceTab = AB_CosmeticShopTabData.Tabs["Fences"]
         if fenceTab then
             for fenceName, stockInfo in pairs(fenceStocks) do
                 local cfg = fenceTab.Fences and fenceTab.Fences[fenceName]
                 if not cfg then continue end
                 table.insert(items, {
                     key = "AB_Cosmetics::Fences::" .. fenceName,
-                    shopName = "Fence Shop",
-                    itemName = fenceName,
-                    displayName = fenceName,
-                    stock = stockInfo.Stock or 0,
-                    price = cfg.Price or 0,
-                    currency = "Sheckles",
+                    shopName = "Fence Shop", itemName = fenceName,
+                    displayName = fenceName, stock = stockInfo.Stock or 0,
+                    price = cfg.Price or 0, currency = "Sheckles",
                     isLocked = false, isPaused = false, lockReason = "",
                     prefix = "🚧",
-                    buyFn = function() BuyCosmeticShopFence:FireServer(fenceName, "Fences") end,
+                    buyFn = function() AB_BuyCosmeticShopFence:FireServer(fenceName, "Fences") end,
                 })
             end
         end
         return items
     end
 
-    local function scanMerchantAB()
+    AB_scanMerchant = function()
         local items = {}
         local data = DataService:GetData()
         if not data then return items end
@@ -9115,7 +9076,7 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
             activeMerchant = merchantStock.MerchantType
         end
         local activeStocks = (merchantStock and merchantStock.Stocks) or {}
-        for merchantType, merchantInfo in pairs(TravelingMerchantData) do
+        for merchantType, merchantInfo in pairs(AB_TravelingMerchantData) do
             if not merchantInfo.ShopData then continue end
             for itemName, cfg in pairs(merchantInfo.ShopData) do
                 if cfg.DisplayInShop == false then continue end
@@ -9138,57 +9099,46 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
                 table.insert(items, {
                     key = "AB_Merchant::" .. merchantType .. "::" .. itemName,
                     shopName = merchantInfo.Title or merchantType,
-                    merchantType = merchantType,
-                    itemName = itemName,
-                    displayName = itemName,
-                    stock = stock,
+                    merchantType = merchantType, itemName = itemName,
+                    displayName = itemName, stock = stock,
                     price = cfg.Price or 0,
                     currency = cfg.SpecialCurrencyType or "Sheckles",
-                    isLocked = false,
-                    isPaused = isPaused,
-                    lockReason = "",
+                    isLocked = false, isPaused = isPaused, lockReason = "",
                     prefix = isPaused and ("⏸️" .. prefix) or prefix,
-                    buyFn = function() BuyTravelingMerchantShopStock:FireServer(itemName) end,
+                    buyFn = function() AB_BuyTravelingMerchantShopStock:FireServer(itemName) end,
                 })
             end
         end
         return items
     end
+end
 
-    -- ==================================================================
-    -- ⭐ MAIN LOOP
-    -- ==================================================================
-    local function autoBuyLoop()
-        while autoBuyIsRunning and not isGuiDestroyed do
+do -- BLOCK 15C: AUTO-BUY MAIN LOOP
+    AB_autoBuyLoop = function()
+        while AB_autoBuyIsRunning and not isGuiDestroyed do
             task.wait(3)
             if not config.autoBuyEnabled then continue end
-            local selectedCount = 0
-            for _ in pairs(config.autoBuySelected) do selectedCount = selectedCount + 1 end
-            if selectedCount == 0 then continue end
-
-            local buys = 0
-            local available = 0
+            local count = 0
+            for _ in pairs(config.autoBuySelected) do count = count + 1 end
+            if count == 0 then continue end
+            local buys, available = 0, 0
             local scanners = {
-                {scanSeedsAB, "Seeds"},
-                {scanEggsAB, "Eggs"},
-                {scanGearAB, "Gear"},
-                {scanCosmeticsAB, "Cosmetics"},
-                {scanMerchantAB, "Merchant"},
+                {AB_scanSeeds, "Seeds"}, {AB_scanEggs, "Eggs"},
+                {AB_scanGear, "Gear"}, {AB_scanCosmetics, "Cosmetics"},
+                {AB_scanMerchant, "Merchant"},
             }
             for _, entry in ipairs(scanners) do
-                if not autoBuyIsRunning then break end
+                if not AB_autoBuyIsRunning then break end
                 if buys >= 5 then break end
-                local items = entry[1]()
-                for _, item in ipairs(items) do
-                    if not autoBuyIsRunning then break end
+                for _, item in ipairs(entry[1]()) do
+                    if not AB_autoBuyIsRunning then break end
                     if buys >= 5 then break end
                     if not config.autoBuySelected[item.key] then continue end
                     if item.isLocked then continue end
                     if item.isPaused then continue end
                     if item.stock < 1 then continue end
                     available = available + 1
-                    local balance = getCurrencyAB(item.currency)
-                    if balance >= item.price then
+                    if AB_getCurrencyAB(item.currency) >= item.price then
                         print(string.format("[Auto-Buy] 🛒 %s [%s]", item.itemName, item.shopName))
                         pcall(item.buyFn)
                         buys = buys + 1
@@ -9197,15 +9147,13 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
                 end
             end
             if StatusLabel and not isGuiDestroyed then
-                StatusLabel.Text = string.format("🛒 %d/%d | beli:%d",
-                    available, selectedCount, buys)
+                StatusLabel.Text = string.format("🛒 %d/%d | beli:%d", available, count, buys)
             end
         end
     end
+end
 
-    -- ==================================================================
-    -- ⭐ BUILD GUI
-    -- ==================================================================
+do -- BLOCK 15D: AUTO-BUY GUI
     local abTab = tabFrames["AutoBuy"]
     local abScroll = Instance.new("ScrollingFrame")
     abScroll.Size = UDim2.new(1, -10, 1, -10)
@@ -9223,13 +9171,10 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
     abLayout.SortOrder = Enum.SortOrder.LayoutOrder
     abLayout.Parent = abScroll
 
-    local renderFns = {}
-
     local function createSectionAB(title, sectionKey, order, scannerFn, listHeight)
         local section = createSection(abScroll, title, sectionKey)
         section.LayoutOrder = order
-        local totalH = 120 + (listHeight or 100)
-        section.Size = UDim2.new(1, -10, 0, totalH)
+        section.Size = UDim2.new(1, -10, 0, 120 + listHeight)
 
         local search = Instance.new("TextBox")
         search.Size = UDim2.new(1, -20, 0, 22)
@@ -9269,7 +9214,7 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
         Instance.new("UICorner", clrBtn).CornerRadius = UDim.new(0, 3)
 
         local listFrame = Instance.new("ScrollingFrame")
-        listFrame.Size = UDim2.new(1, -20, 0, listHeight or 100)
+        listFrame.Size = UDim2.new(1, -20, 0, listHeight)
         listFrame.Position = UDim2.new(0, 10, 0, 82)
         listFrame.BackgroundTransparency = 1
         listFrame.BorderSizePixel = 0
@@ -9304,15 +9249,13 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
                 if a.shopName ~= b.shopName then return a.shopName < b.shopName end
                 return a.displayName < b.displayName
             end)
-
             for i, item in ipairs(filtered) do
                 local btn = Instance.new("TextButton")
                 btn.Size = UDim2.new(1, -8, 0, 24)
-                -- ⭐ URUTAN WARNA: selected dulu (BIRU), baru paused/locked
                 if item.isLocked then
                     btn.BackgroundColor3 = C.danger
                 elseif config.autoBuySelected[item.key] then
-                    btn.BackgroundColor3 = Color3.fromRGB(60, 130, 220)  -- ⭐ BIRU
+                    btn.BackgroundColor3 = Color3.fromRGB(60, 130, 220)
                 elseif item.isPaused then
                     btn.BackgroundColor3 = Color3.fromRGB(40, 45, 55)
                 else
@@ -9356,7 +9299,7 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
                 stockLbl.Position = UDim2.new(0.75, 0, 0, 0)
                 stockLbl.BackgroundTransparency = 1
                 if item.stock > 0 then
-                    stockLbl.Text = "📦" .. formatNumber(item.stock)
+                    stockLbl.Text = "📦" .. AB_formatNumber(item.stock)
                     stockLbl.TextColor3 = Color3.fromRGB(50, 180, 50)
                 else
                     stockLbl.Text = "❌0"
@@ -9383,37 +9326,28 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
                 table.insert(btns, btn)
             end
         end
-
         search:GetPropertyChangedSignal("Text"):Connect(render)
         selAll.MouseButton1Click:Connect(function()
             for _, item in ipairs(scannerFn()) do
-                if not item.isLocked then
-                    config.autoBuySelected[item.key] = true
-                end
+                if not item.isLocked then config.autoBuySelected[item.key] = true end
             end
-            saveConfig()
-            render()
+            saveConfig(); render()
         end)
         clrBtn.MouseButton1Click:Connect(function()
             for _, item in ipairs(scannerFn()) do
                 config.autoBuySelected[item.key] = nil
             end
-            saveConfig()
-            render()
+            saveConfig(); render()
         end)
-
-        table.insert(renderFns, render)
-        return section, render
+        table.insert(AB_renderFns, render)
     end
 
-    -- ⭐ 5 SECTIONS
-    createSectionAB("🌱 Seeds", "abSeeds", 1, scanSeedsAB, 130)
-    createSectionAB("🥚 Eggs", "abEggs", 2, scanEggsAB, 100)
-    createSectionAB("⚙️ Gear", "abGear", 3, scanGearAB, 100)
-    createSectionAB("🎨 Cosmetics", "abCosmetics", 4, scanCosmeticsAB, 100)
-    createSectionAB("🛒 Merchant", "abMerchant", 5, scanMerchantAB, 150)
+    createSectionAB("🌱 Seeds", "abSeeds", 1, AB_scanSeeds, 130)
+    createSectionAB("🥚 Eggs", "abEggs", 2, AB_scanEggs, 100)
+    createSectionAB("⚙️ Gear", "abGear", 3, AB_scanGear, 100)
+    createSectionAB("🎨 Cosmetics", "abCosmetics", 4, AB_scanCosmetics, 100)
+    createSectionAB("🛒 Merchant", "abMerchant", 5, AB_scanMerchant, 150)
 
-    -- ⭐ CONTROL SECTION
     local ctrlSection = createSection(abScroll)
     ctrlSection.LayoutOrder = 6
     ctrlSection.Size = UDim2.new(1, -10, 0, 89)
@@ -9444,7 +9378,7 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
     abBtn.MouseButton1Click:Connect(function()
         if config.autoBuyEnabled then
             config.autoBuyEnabled = false
-            autoBuyIsRunning = false
+            AB_autoBuyIsRunning = false
             abBtn.Text = "▶️ START AUTO-BUY"
             abBtn.BackgroundColor3 = C.success
             abStat.Text = "Status: Stopped"
@@ -9456,27 +9390,24 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
                 return
             end
             config.autoBuyEnabled = true
-            autoBuyIsRunning = true
+            AB_autoBuyIsRunning = true
             abBtn.Text = "⏹️ STOP AUTO-BUY"
             abBtn.BackgroundColor3 = C.danger
             abStat.Text = string.format("✅ Running (%d item)", count)
             saveConfig()
-            task.spawn(autoBuyLoop)
+            task.spawn(AB_autoBuyLoop)
         end
     end)
 
-    -- ⭐ AUTO REFRESH per section
     task.spawn(function()
         local intervals = { Seeds = 5, Gear = 5, Eggs = 10, Cosmetics = 10, Merchant = 10 }
         while not isGuiDestroyed do
             local now = os.date("*t")
             if now.sec >= 2 then
                 for sectionName, interval in pairs(intervals) do
-                    if now.min % interval == 0 and lastRefreshPerSection[sectionName] ~= now.min then
-                        lastRefreshPerSection[sectionName] = now.min
-                        for _, r in ipairs(renderFns) do
-                            pcall(r)
-                        end
+                    if now.min % interval == 0 and AB_lastRefreshPerSection[sectionName] ~= now.min then
+                        AB_lastRefreshPerSection[sectionName] = now.min
+                        for _, r in ipairs(AB_renderFns) do pcall(r) end
                     end
                 end
             end
@@ -9484,6 +9415,5 @@ do -- BLOCK 15: TAB AUTOBUY (SELF-CONTAINED)
         end
     end)
 
-    -- Initial render
-    for _, r in ipairs(renderFns) do pcall(r) end
-end -- BLOCK 15
+    for _, r in ipairs(AB_renderFns) do pcall(r) end
+end
