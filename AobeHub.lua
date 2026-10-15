@@ -8430,7 +8430,7 @@ do -- BLOCK 14A: AUTO BUY BACKEND (Config, Scanner, Loop)
     print("✅ [AutoBuy] Backend loaded")
 end -- BLOCK 14A
 
-do -- BLOCK 14B: AUTO BUY FRONTEND (GUI 5 Sections)
+do -- BLOCK 14B: AUTO BUY FRONTEND (2 Sections)
     if not AutoBuyBackend then
         warn("❌ AutoBuyBackend tidak ada, skip frontend")
         return
@@ -8439,9 +8439,6 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (GUI 5 Sections)
     local ABCfg = AutoBuyBackend.Cfg
     local scanByTab = AutoBuyBackend.scanByTab
     local fmtNum = AutoBuyBackend.fmtNum
-    local isGuiDestroyedFn = function()
-        return isGuiDestroyed
-    end
 
     local buyTab = tabFrames["AutoBuy"]
     if not buyTab then
@@ -8477,8 +8474,8 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (GUI 5 Sections)
     -- ==================================================================
     -- SECTION 1: CONTROL
     -- ==================================================================
-    local ControlSection = createSection(buyScroll, "🎮 Auto Buy Control", "autoBuyControl")
-    ControlSection.LayoutOrder = 1
+    local ControlSection = createSection(buyScroll)
+    ControlSection.LayoutOrder = 2
     ControlSection.Size = UDim2.new(1, -10, 0, 89)
 
     local startABBtn = Instance.new("TextButton")
@@ -8530,7 +8527,7 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (GUI 5 Sections)
     -- SECTION 2: ITEM LIST
     -- ==================================================================
     local ListSection = createSection(buyScroll, "📋 Item List", "autoBuyList")
-    ListSection.LayoutOrder = 2
+    ListSection.LayoutOrder = 1
     ListSection.Size = UDim2.new(1, -10, 0, 400)
 
     -- Sub tabs
@@ -8689,7 +8686,7 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (GUI 5 Sections)
             btn.Size = UDim2.new(1, -8, 0, 24)
 
             local isSel = ABCfg.selected[item.key] == true
-            -- ⭐ Urutan prioritas: Locked → Selected → Paused → Unselected
+            -- Urutan prioritas: Locked → Selected → Paused → Unselected
             if item.isLocked then
                 btn.BackgroundColor3 = Color3.fromRGB(60, 40, 40)
             elseif isSel then
@@ -8765,14 +8762,14 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (GUI 5 Sections)
                 priceL.TextColor3 = Color3.fromRGB(255, 200, 0)
             end
             priceL.Font = Enum.Font.Gotham
-            priceL.TextSize = 7
+            priceL.TextSize = 8
             priceL.TextXAlignment = Enum.TextXAlignment.Right
             priceL.Parent = btn
 
             -- Stock
             local stockL = Instance.new("TextLabel")
             stockL.Size = UDim2.new(0.13, 0, 1, 0)
-            stockL.Position = UDim2.new(0.87, 0, 0, 0)
+            stockL.Position = UDim2.new(0.80, 0, 0, 0)
             stockL.BackgroundTransparency = 1
             if item.stock > 0 then
                 stockL.Text = "📦" .. fmtNum(item.stock)
@@ -8784,7 +8781,7 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (GUI 5 Sections)
                     or item.isPaused and Color3.fromRGB(130, 140, 160) or C.danger
             end
             stockL.Font = Enum.Font.GothamBold
-            stockL.TextSize = 7
+            stockL.TextSize = 8
             stockL.TextXAlignment = Enum.TextXAlignment.Right
             stockL.Parent = btn
 
@@ -8837,159 +8834,6 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (GUI 5 Sections)
     setBuyTab("Seeds")
 
     -- ==================================================================
-    -- SECTION 3: SETTINGS
-    -- ==================================================================
-    local SettingsSection = createSection(buyScroll, "⚙️ Auto Buy Settings", "autoBuySettings")
-    SettingsSection.LayoutOrder = 3
-    SettingsSection.Size = UDim2.new(1, -10, 0, 180)
-
-    local function makeABInput(yPos, label, key, isNum, min, max)
-        local lbl = Instance.new("TextLabel")
-        lbl.Size = UDim2.new(0.55, -15, 0, 16)
-        lbl.Position = UDim2.new(0, 10, 0, yPos)
-        lbl.Text = label
-        lbl.TextColor3 = C.textDim
-        lbl.Font = Enum.Font.Gotham
-        lbl.TextSize = 8
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.BackgroundTransparency = 1
-        lbl.Parent = SettingsSection
-
-        local input = Instance.new("TextBox")
-        input.Size = UDim2.new(0.45, -15, 0, 20)
-        input.Position = UDim2.new(0.55, 5, 0, yPos)
-        input.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-        input.BorderSizePixel = 0
-        input.Font = Enum.Font.Gotham
-        input.Text = tostring(ABCfg[key])
-        input.TextColor3 = C.text
-        input.TextSize = 8
-        input.Parent = SettingsSection
-        Instance.new("UICorner", input).CornerRadius = UDim.new(0, 3)
-
-        input.FocusLost:Connect(function()
-            local n = tonumber(input.Text)
-            if n and (min == nil or n >= min) and (max == nil or n <= max) then
-                ABCfg[key] = n
-                AutoBuyBackend.saveConfig()
-            end
-            input.Text = tostring(ABCfg[key])
-        end)
-    end
-
-    makeABInput(30, "Check Interval (s):", "checkInterval", true, 1, 30)
-    makeABInput(51, "Buy Delay (s):", "buyDelay", true, 0.1, 5)
-    makeABInput(72, "Max Buys/Cycle:", "maxBuysPerCycle", true, 1, 20)
-    makeABInput(93, "Min Stock:", "minStock", true, 1, 100)
-    makeABInput(114, "Required NPC Level:", "requiredNPCLevel", true, 1, 10)
-
-    local resetBtn = Instance.new("TextButton")
-    resetBtn.Size = UDim2.new(1, -20, 0, 24)
-    resetBtn.Position = UDim2.new(0, 10, 0, 140)
-    resetBtn.BackgroundColor3 = C.danger
-    resetBtn.BorderSizePixel = 0
-    resetBtn.Font = Enum.Font.GothamBold
-    resetBtn.Text = "🗑️ Reset Selection"
-    resetBtn.TextColor3 = C.text
-    resetBtn.TextSize = 9
-    resetBtn.Parent = SettingsSection
-    Instance.new("UICorner", resetBtn).CornerRadius = UDim.new(0, 4)
-
-    resetBtn.MouseButton1Click:Connect(function()
-        ABCfg.selected = {}
-        AutoBuyBackend.saveConfig()
-        renderList()
-        if statusLabelAB then statusLabelAB.Text = "✅ Selection direset" end
-    end)
-
-    -- ==================================================================
-    -- SECTION 4: STATISTIK
-    -- ==================================================================
-    local StatsSection = createSection(buyScroll, "📊 Statistik", "autoBuyStats")
-    StatsSection.LayoutOrder = 4
-    StatsSection.Size = UDim2.new(1, -10, 0, 100)
-
-    local statsLabel = Instance.new("TextLabel")
-    statsLabel.Size = UDim2.new(1, -20, 0, 70)
-    statsLabel.Position = UDim2.new(0, 10, 0, 28)
-    statsLabel.BackgroundTransparency = 1
-    statsLabel.Text = "Loading stats..."
-    statsLabel.TextColor3 = C.text
-    statsLabel.Font = Enum.Font.Code
-    statsLabel.TextSize = 8
-    statsLabel.TextXAlignment = Enum.TextXAlignment.Left
-    statsLabel.TextYAlignment = Enum.TextYAlignment.Top
-    statsLabel.TextWrapped = true
-    statsLabel.Parent = StatsSection
-
-    task.spawn(function()
-        while not isGuiDestroyed and StatsSection and StatsSection.Parent do
-            task.wait(3)
-            local total, locked, paused, inStock, sel = 0, 0, 0, 0, 0
-            local byTab = { Seeds = 0, Eggs = 0, Gear = 0, Cosmetics = 0, Merchant = 0 }
-
-            for _, tabName in ipairs({"Seeds", "Eggs", "Gear", "Cosmetics", "Merchant"}) do
-                local items = scanByTab(tabName)
-                byTab[tabName] = #items
-                for _, item in ipairs(items) do
-                    total = total + 1
-                    if item.isLocked then locked = locked + 1 end
-                    if item.isPaused then paused = paused + 1 end
-                    if item.stock > 0 and not item.isLocked and not item.isPaused then
-                        inStock = inStock + 1
-                    end
-                    if ABCfg.selected[item.key] then sel = sel + 1 end
-                end
-            end
-
-            statsLabel.Text = string.format(
-                "Total: %d | 🔒 %d | ⏸️ %d\n📦 Tersedia: %d | ✅ Dipilih: %d\n\n" ..
-                "🌱 %d | 🥚 %d | ⚙️ %d | 🎨 %d | 🛒 %d",
-                total, locked, paused, inStock, sel,
-                byTab.Seeds, byTab.Eggs, byTab.Gear,
-                byTab.Cosmetics, byTab.Merchant
-            )
-        end
-    end)
-
-    -- ==================================================================
-    -- SECTION 5: INFO & REFRESH
-    -- ==================================================================
-    local InfoSection = createSection(buyScroll, "ℹ️ Info & Refresh", "autoBuyInfo")
-    InfoSection.LayoutOrder = 5
-    InfoSection.Size = UDim2.new(1, -10, 0, 130)
-
-    local infoLabel = Instance.new("TextLabel")
-    infoLabel.Size = UDim2.new(1, -20, 0, 50)
-    infoLabel.Position = UDim2.new(0, 10, 0, 28)
-    infoLabel.BackgroundTransparency = 1
-    infoLabel.Text = "Auto-refresh:\n🌱 Seeds: 5 menit   ⚙️ Gear: 5 menit\n🥚 Eggs: 10 menit   🎨 Cosmetics: 10 menit\n🛒 Merchant: 10 menit"
-    infoLabel.TextColor3 = C.textDim
-    infoLabel.Font = Enum.Font.Gotham
-    infoLabel.TextSize = 8
-    infoLabel.TextXAlignment = Enum.TextXAlignment.Left
-    infoLabel.TextYAlignment = Enum.TextYAlignment.Top
-    infoLabel.TextWrapped = true
-    infoLabel.Parent = InfoSection
-
-    local refreshNowBtn = Instance.new("TextButton")
-    refreshNowBtn.Size = UDim2.new(1, -20, 0, 26)
-    refreshNowBtn.Position = UDim2.new(0, 10, 0, 82)
-    refreshNowBtn.BackgroundColor3 = C.accent
-    refreshNowBtn.BorderSizePixel = 0
-    refreshNowBtn.Font = Enum.Font.GothamBold
-    refreshNowBtn.Text = "🔄 Refresh Sekarang"
-    refreshNowBtn.TextColor3 = C.text
-    refreshNowBtn.TextSize = 9
-    refreshNowBtn.Parent = InfoSection
-    Instance.new("UICorner", refreshNowBtn).CornerRadius = UDim.new(0, 4)
-
-    refreshNowBtn.MouseButton1Click:Connect(function()
-        pcall(renderList)
-        if statusLabelAB then statusLabelAB.Text = "🔄 Refreshed" end
-    end)
-
-    -- ==================================================================
     -- AUTO REFRESH per tab
     -- ==================================================================
     local lastRefreshBuyTab = {}
@@ -9017,7 +8861,7 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (GUI 5 Sections)
         pcall(renderList)
     end)
 
-    print("✅ [AutoBuy] Frontend loaded — 5 sections")
+    print("✅ [AutoBuy] Frontend loaded — 2 sections")
 end -- BLOCK 14B
 
 -- shared: diisi di BLOCK 14 (TAB FARM: AUTO SHOVEL)
