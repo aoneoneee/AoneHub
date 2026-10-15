@@ -227,9 +227,6 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             autoCollectDelayAfterReturn = 1,
             autoCollectSelectedFruits = {},
             autoCollectSelectedMutations = {},
-
-            autoBuyEnabled = false,
-            autoBuySelected = {},
         }
 
         local function loadConfig()
@@ -7967,6 +7964,1093 @@ do -- BLOCK 13: TAB EKSTRA, WEBHOOK SETTINGS, INIT, ANTI-AFK
     end
 end -- BLOCK 13
 
+do -- BLOCK 14BARU: TAB AUTO BUY (5 SECTIONS)
+    -- ==================================================================
+    -- AUTO BUY CONFIG
+    -- ==================================================================
+    local AutoBuyConfig = {
+        selected = {},              -- Key: "shop::name"
+        autoBuyEnabled = false,
+        checkInterval = 3,
+        buyDelay = 0.8,
+        maxBuysPerCycle = 5,
+        minStock = 1,
+        refreshIntervals = {
+            Seeds = 5, Gear = 5, Eggs = 10, Cosmetics = 10, Merchant = 10,
+        },
+        refreshDelaySeconds = 2,
+        requiredNPC = "Sam",
+        requiredNPCLevel = 5,
+    }
+    
+    -- Load config
+    if config.autoBuySelected then
+        AutoBuyConfig.selected = config.autoBuySelected
+    end
+    if config.autoBuyEnabled ~= nil then
+        AutoBuyConfig.autoBuyEnabled = config.autoBuyEnabled
+    end
+    
+    local function saveAutoBuyConfig()
+        config.autoBuySelected = AutoBuyConfig.selected
+        config.autoBuyEnabled = AutoBuyConfig.autoBuyEnabled
+        saveConfig()
+    end
+
+    -- ==================================================================
+    -- DEPENDENCIES (lokal biar tidak ganggu global)
+    -- ==================================================================
+    local DataSvc = DataService
+    
+    local SeedShop = safeRequire(ReplicatedStorage.Data.SeedShopData) or {}
+    local DailySeedShop = safeRequire(ReplicatedStorage.Data.DailySeedShopData) or {}
+    local NPCLevel = safeRequire(ReplicatedStorage.Data.NPCLevels.NPCLevelData) or {}
+    local PetEgg = safeRequire(ReplicatedStorage.Data.PetEggData) or {}
+    local GearShop = safeRequire(ReplicatedStorage.Data.GearShopData) or {}
+    local CosmeticTab = safeRequire(ReplicatedStorage.Data.CosmeticShopTabData) or {}
+    local MerchantData = safeRequire(ReplicatedStorage.Data.TravelingMerchant.TravelingMerchantData) or {}
+    
+    local NPCLevelHandlerLocal = safeRequire(ReplicatedStorage.Modules.NPCLevelHandler)
+    local RebirthService = safeRequire(ReplicatedStorage.Modules.RebirthUnlocksSharedService)
+    
+    local GameEventsAB = ReplicatedStorage:WaitForChild("GameEvents")
+    local BuySeedRE = GameEventsAB:WaitForChild("BuySeedStock")
+    local BuyDailySeedRE = GameEventsAB:WaitForChild("BuyDailySeedShopStock")
+    local BuyPetEggRE = GameEventsAB:WaitForChild("BuyPetEgg")
+    local BuyGearRE = GameEventsAB:WaitForChild("BuyGearStock")
+    local BuyCosmeticRE = GameEventsAB:WaitForChild("BuyCosmeticItem")
+    local BuyFenceRE = GameEventsAB:WaitForChild("BuyCosmeticShopFence")
+    local BuyMerchantRE = GameEventsAB:WaitForChild("BuyTravelingMerchantShopStock")
+
+    -- ==================================================================
+    -- HELPER: Format Number (truncate)
+    -- ==================================================================
+    local function fmtNum(n)
+        if type(n) ~= "number" then return tostring(n) end
+        if n ~= n then return "NaN" end
+        if n == math.huge then return "∞" end
+        
+        local neg = n < 0
+        n = math.abs(n)
+        if n < 1000 then
+            return (neg and "-" or "") .. tostring(math.floor(n))
+        end
+        
+        local suf = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No",
+                     "Dc", "UDc", "DDc", "TDc", "QaDc", "QiDc", "SxDc", "SpDc", "OcDc"}
+        local tier = math.min(math.floor(math.log10(n) / 3), #suf - 1)
+        local scaled = n / (10 ^ (tier * 3))
+        local trunc = math.floor(scaled * 10) / 10
+        local str = trunc >= 100 and string.format("%d", math.floor(trunc))
+                    or string.format("%.1f", trunc)
+        str = str:gsub("%.0$", "")
+        return (neg and "-" or "") .. str .. suf[tier + 1]
+    end
+
+    -- ==================================================================
+    -- HELPER: NPC Level & Lock Check
+    -- ==================================================================
+    local function getNPCLevel(npcName)
+        if not NPCLevel then return 0 end
+        local d = DataSvc:GetData()
+        if not d or not d.Progress or not d.Progress.NPCPoints then return 0 end
+        local pts = d.Progress.NPCPoints[npcName] or 0
+        return NPCLevel:GetLevelFromPoints(npcName, pts)
+    end
+    
+    local function isSamUnlocked()
+        return getNPCLevel("Sam") >= AutoBuyConfig.requiredNPCLevel
+    end
+    
+    local function checkLevelLocks(levelLocks)
+        if not levelLocks then return true end
+        if NPCLevelHandlerLocal and NPCLevelHandlerLocal.HasRequiredNPCLevels then
+            local ok, res = pcall(function()
+                return NPCLevelHandlerLocal:HasRequiredNPCLevels(levelLocks)
+            end)
+            if ok then return res end
+        end
+        if not NPCLevel then return true end
+        for npcName, reqLvl in pairs(levelLocks) do
+            if getNPCLevel(npcName) < reqLvl then return false end
+        end
+        return true
+    end
+    
+    local function checkRebirth(shopType, itemName)
+        if not RebirthService then return true, 0 end
+        local okAB, hasAB = pcall(function()
+            return RebirthService:HasBeenAssignedABTest(player)
+        end)
+        if not okAB or not hasAB then return true, 0 end
+        
+        local okU, isU = pcall(function()
+            return RebirthService:HasUnlockedShopItem(player, shopType, itemName)
+        end)
+        if not okU or isU then return true, 0 end
+        
+        local okR, rem = pcall(function()
+            return RebirthService:GetRemainingRebirthsNeededForItem(player, shopType, itemName)
+        end)
+        return false, (okR and rem) or 0
+    end
+    
+    local function getPlayerCurrency(currencyType)
+        local d = DataSvc:GetData()
+        if not d then return 0 end
+        if currencyType == "Sheckles" then return d.Sheckles or 0 end
+        if d.SpecialCurrency and d.SpecialCurrency[currencyType] then
+            return d.SpecialCurrency[currencyType] or 0
+        end
+        return 0
+    end
+
+    -- ==================================================================
+    -- SCANNERS
+    -- ==================================================================
+    local function scanSeeds()
+        local items = {}
+        local d = DataSvc:GetData()
+        if not d or not d.SeedStocks then return items end
+        local seen = {}
+        local isUnlock = isSamUnlocked()
+        
+        local function add(name, cfg, shopName, currency)
+            local key = shopName .. "::" .. name
+            if seen[key] then return end
+            seen[key] = true
+            
+            local stock = 0
+            local sd = d.SeedStocks[shopName]
+            if sd and sd.Stocks and sd.Stocks[name] then
+                stock = sd.Stocks[name].Stock or 0
+            end
+            
+            local isLocked, lockReason = false, ""
+            if currency == "GardenCoins" and not isUnlock then
+                isLocked = true
+                lockReason = string.format("Sam Lv.%d/5", getNPCLevel("Sam"))
+            end
+            if not isLocked then
+                local unlocked, rem = checkRebirth("Seed", name)
+                if not unlocked then
+                    isLocked = true
+                    lockReason = string.format("Rebirth %d+ lagi", rem)
+                end
+            end
+            
+            table.insert(items, {
+                key = "Seeds::" .. key,
+                shopName = shopName,
+                itemName = name,
+                displayName = name,
+                stock = stock,
+                price = cfg.Price or 0,
+                currency = currency,
+                isLocked = isLocked,
+                isPaused = false,
+                lockReason = lockReason,
+                prefix = shopName == "Daily Deals" and "🌙"
+                    or (currency == "GardenCoins" and "🌼" or "🏪"),
+                buyFn = function()
+                    if shopName == "Daily Deals" then
+                        BuyDailySeedRE:FireServer(name)
+                    else
+                        BuySeedRE:FireServer(shopName, name)
+                    end
+                end,
+            })
+        end
+        
+        -- Iterate SeedStocks
+        for shopName, sd in pairs(d.SeedStocks) do
+            if sd.Stocks then
+                for name in pairs(sd.Stocks) do
+                    local cfg, curr
+                    if shopName == "Daily Deals" then
+                        cfg = DailySeedShop[name]; curr = "Sheckles"
+                    else
+                        cfg = SeedShop[name]
+                        curr = (cfg and cfg.SpecialCurrencyType) or "Sheckles"
+                    end
+                    if cfg then add(name, cfg, shopName, curr) end
+                end
+            end
+        end
+        
+        -- Fallback SeedShop
+        for name, cfg in pairs(SeedShop) do
+            if cfg.DisplayInShop then
+                local key = "Shop::" .. name
+                if not seen[key] then
+                    add(name, cfg, "Shop", cfg.SpecialCurrencyType or "Sheckles")
+                end
+            end
+        end
+        
+        -- Fallback DailySeedShop
+        for name, cfg in pairs(DailySeedShop) do
+            local key = "Daily Deals::" .. name
+            if not seen[key] then
+                add(name, cfg, "Daily Deals", "Sheckles")
+            end
+        end
+        
+        return items
+    end
+    
+    local function scanEggs()
+        local items = {}
+        local d = DataSvc:GetData()
+        if not d or not d.PetEggStock then return items end
+        
+        local stockMap = {}
+        for _, e in ipairs(d.PetEggStock.Stocks or {}) do
+            stockMap[e.EggName] = (stockMap[e.EggName] or 0) + e.Stock
+        end
+        
+        for eggName, cfg in pairs(PetEgg) do
+            if cfg.DisplayInShop == false then continue end
+            local stock = stockMap[eggName] or 0
+            local isLocked, lockReason = false, ""
+            
+            if cfg.LevelLocks and not checkLevelLocks(cfg.LevelLocks) then
+                isLocked = true
+                local highest, npcName = 0, ""
+                for n, l in pairs(cfg.LevelLocks) do
+                    if l > highest then highest = l; npcName = n end
+                end
+                lockReason = string.format("%s Lv.%d", npcName, highest)
+            end
+            if not isLocked then
+                local unlocked, rem = checkRebirth("Egg", eggName)
+                if not unlocked then
+                    isLocked = true
+                    lockReason = string.format("Rebirth %d+ lagi", rem)
+                end
+            end
+            
+            table.insert(items, {
+                key = "Eggs::Shop::" .. eggName,
+                shopName = "Pet Shop",
+                itemName = eggName,
+                displayName = eggName,
+                stock = stock,
+                price = cfg.Price or 0,
+                currency = cfg.SpecialCurrencyType or "Sheckles",
+                isLocked = isLocked,
+                isPaused = false,
+                lockReason = lockReason,
+                prefix = "🥚",
+                buyFn = function() BuyPetEggRE:FireServer(eggName) end,
+            })
+        end
+        return items
+    end
+    
+    local function scanGear()
+        local items = {}
+        local d = DataSvc:GetData()
+        if not d or not d.GearStock then return items end
+        
+        for gearName, cfg in pairs(GearShop.Gear or {}) do
+            if cfg.LayoutOrder == -1 then continue end
+            local sd = d.GearStock.Stocks[gearName]
+            local stock = sd and sd.Stock or 0
+            local isLocked, lockReason = false, ""
+            
+            if cfg.LevelLocks and not checkLevelLocks(cfg.LevelLocks) then
+                isLocked = true; lockReason = "NPC Level"
+            end
+            if not isLocked then
+                local unlocked, rem = checkRebirth("Gear", gearName)
+                if not unlocked then
+                    isLocked = true
+                    lockReason = string.format("Rebirth %d+ lagi", rem)
+                end
+            end
+            
+            table.insert(items, {
+                key = "Gear::Shop::" .. gearName,
+                shopName = "Gear Shop",
+                itemName = gearName,
+                displayName = gearName,
+                stock = stock,
+                price = cfg.Price or 0,
+                currency = "Sheckles",
+                isLocked = isLocked,
+                isPaused = false,
+                lockReason = lockReason,
+                prefix = "⚙️",
+                buyFn = function() BuyGearRE:FireServer(gearName) end,
+            })
+        end
+        return items
+    end
+    
+    local function scanCosmetics()
+        local items = {}
+        local d = DataSvc:GetData()
+        if not d or not d.CosmeticStock then return items end
+        
+        local cosTab = CosmeticTab.Tabs and CosmeticTab.Tabs["Cosmetics"]
+        if cosTab then
+            local iStocks = d.CosmeticStock.TabStocks["Cosmetics"]
+                and d.CosmeticStock.TabStocks["Cosmetics"].ItemStocks or {}
+            for itemName, si in pairs(iStocks) do
+                local cfg = cosTab.Items and cosTab.Items[itemName]
+                if not cfg then continue end
+                table.insert(items, {
+                    key = "Cosmetics::Cosmetics::" .. itemName,
+                    shopName = "Cosmetic Shop",
+                    itemName = itemName,
+                    displayName = itemName,
+                    stock = si.Stock or 0,
+                    price = cfg.Price or 0,
+                    currency = "Sheckles",
+                    isLocked = false, isPaused = false, lockReason = "",
+                    prefix = "🎨",
+                    buyFn = function() BuyCosmeticRE:FireServer(itemName, "Cosmetics") end,
+                })
+            end
+        end
+        
+        local fTab = CosmeticTab.Tabs and CosmeticTab.Tabs["Fences"]
+        if fTab then
+            local fStocks = d.CosmeticStock.TabStocks["Cosmetics"]
+                and d.CosmeticStock.TabStocks["Cosmetics"].FenceStocks or {}
+            for fenceName, si in pairs(fStocks) do
+                local cfg = fTab.Fences and fTab.Fences[fenceName]
+                if not cfg then continue end
+                table.insert(items, {
+                    key = "Cosmetics::Fences::" .. fenceName,
+                    shopName = "Fence Shop",
+                    itemName = fenceName,
+                    displayName = fenceName,
+                    stock = si.Stock or 0,
+                    price = cfg.Price or 0,
+                    currency = "Sheckles",
+                    isLocked = false, isPaused = false, lockReason = "",
+                    prefix = "🚧",
+                    buyFn = function() BuyFenceRE:FireServer(fenceName, "Fences") end,
+                })
+            end
+        end
+        return items
+    end
+    
+    local function scanMerchant()
+        local items = {}
+        local d = DataSvc:GetData()
+        if not d then return items end
+        
+        local activeM = nil
+        local mStock = d.TravelingMerchantShopStock
+        if mStock and mStock.MerchantType and mStock.MerchantType ~= "" then
+            activeM = mStock.MerchantType
+        end
+        local activeStocks = (mStock and mStock.Stocks) or {}
+        
+        for mType, mInfo in pairs(MerchantData) do
+            if not mInfo.ShopData then continue end
+            for itemName, cfg in pairs(mInfo.ShopData) do
+                if cfg.DisplayInShop == false then continue end
+                local isActive = (mType == activeM)
+                local stock = 0
+                if isActive and activeStocks[itemName] then
+                    stock = activeStocks[itemName].Stock or 0
+                end
+                local isPaused = not isActive
+                local iType = cfg.ItemType or "Item"
+                local prefix = "🛒"
+                if iType == "Seed" then prefix = "🌾"
+                elseif iType == "Seed Pack" then prefix = "📦"
+                elseif iType == "Egg" then prefix = "🥚"
+                elseif iType == "Pet" then prefix = "🐾"
+                elseif iType == "Gear" then prefix = "⚙️"
+                elseif iType == "Crate" then prefix = "🎁"
+                elseif iType == "Cosmetic" then prefix = "🎨" end
+                
+                table.insert(items, {
+                    key = "Merchant::" .. mType .. "::" .. itemName,
+                    shopName = mInfo.Title or mType,
+                    merchantType = mType,
+                    itemName = itemName,
+                    displayName = itemName,
+                    stock = stock,
+                    price = cfg.Price or 0,
+                    currency = cfg.SpecialCurrencyType or "Sheckles",
+                    isLocked = false,
+                    isPaused = isPaused,
+                    lockReason = "",
+                    prefix = isPaused and ("⏸️" .. prefix) or prefix,
+                    buyFn = function() BuyMerchantRE:FireServer(itemName) end,
+                })
+            end
+        end
+        return items
+    end
+    
+    local function scanByTab(tab)
+        if tab == "Seeds" then return scanSeeds() end
+        if tab == "Eggs" then return scanEggs() end
+        if tab == "Gear" then return scanGear() end
+        if tab == "Cosmetics" then return scanCosmetics() end
+        if tab == "Merchant" then return scanMerchant() end
+        return {}
+    end
+
+    -- ==================================================================
+    -- AUTO BUY LOOP
+    -- ==================================================================
+    local autoBuyRunning = false
+    local autoBuyLoopThread = nil
+    
+    local function autoBuyLoop()
+        while autoBuyRunning do
+            task.wait(AutoBuyConfig.checkInterval)
+            if not AutoBuyConfig.autoBuyEnabled then continue end
+            
+            local selCount = 0
+            for _ in pairs(AutoBuyConfig.selected) do selCount = selCount + 1 end
+            if selCount == 0 then continue end
+            
+            local buys = 0
+            for _, tab in ipairs({"Seeds", "Eggs", "Gear", "Cosmetics", "Merchant"}) do
+                if not autoBuyRunning then break end
+                if buys >= AutoBuyConfig.maxBuysPerCycle then break end
+                
+                local items = scanByTab(tab)
+                for _, item in ipairs(items) do
+                    if not autoBuyRunning then break end
+                    if buys >= AutoBuyConfig.maxBuysPerCycle then break end
+                    if not AutoBuyConfig.selected[item.key] then continue end
+                    if item.isLocked or item.isPaused then continue end
+                    if item.stock < AutoBuyConfig.minStock then continue end
+                    
+                    local bal = getPlayerCurrency(item.currency)
+                    if bal >= item.price then
+                        print(string.format("[AutoBuy] 🛒 %s [%s] stock:%s",
+                            item.itemName, item.shopName, fmtNum(item.stock)))
+                        local ok = pcall(item.buyFn)
+                        if ok then
+                            buys = buys + 1
+                            task.wait(AutoBuyConfig.buyDelay)
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- ==================================================================
+    -- GUI: TAB AUTO BUY
+    -- ==================================================================
+    local buyTab = tabFrames["AutoBuy"]
+    
+    local buyScroll = Instance.new("ScrollingFrame")
+    buyScroll.Size = UDim2.new(1, -10, 1, -10)
+    buyScroll.Position = UDim2.new(0, 5, 0, 5)
+    buyScroll.BackgroundTransparency = 1
+    buyScroll.BorderSizePixel = 0
+    buyScroll.ScrollBarThickness = 4
+    buyScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+    buyScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    buyScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    buyScroll.Parent = buyTab
+    
+    local buyLayout = Instance.new("UIListLayout")
+    buyLayout.Padding = UDim.new(0, 6)
+    buyLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    buyLayout.Parent = buyScroll
+
+    -- State
+    local currentBuyTab = "Seeds"
+    local itemButtons = {}
+    local statusLabelAB = nil
+    local renderListFn = nil
+
+    -- ==================================================================
+    -- SECTION 1: CONTROL (START/STOP + STATUS)
+    -- ==================================================================
+    local ControlSection = createSection(buyScroll, "🎮 Auto Buy Control", "autoBuyControl")
+    ControlSection.LayoutOrder = 1
+    ControlSection.Size = UDim2.new(1, -10, 0, 89)
+    
+    local startABBtn = Instance.new("TextButton")
+    startABBtn.Size = UDim2.new(1, -20, 0, 32)
+    startABBtn.Position = UDim2.new(0, 10, 0, 28)
+    startABBtn.BackgroundColor3 = C.success
+    startABBtn.BorderSizePixel = 0
+    startABBtn.Font = Enum.Font.GothamBold
+    startABBtn.Text = "▶️ START AUTO BUY"
+    startABBtn.TextColor3 = C.text
+    startABBtn.TextSize = 10
+    startABBtn.Parent = ControlSection
+    Instance.new("UICorner", startABBtn).CornerRadius = UDim.new(0, 5)
+    
+    statusLabelAB = Instance.new("TextLabel")
+    statusLabelAB.Size = UDim2.new(1, -20, 0, 14)
+    statusLabelAB.Position = UDim2.new(0, 10, 0, 65)
+    statusLabelAB.BackgroundTransparency = 1
+    statusLabelAB.Text = "Status: Idle"
+    statusLabelAB.TextColor3 = C.textDim
+    statusLabelAB.Font = Enum.Font.GothamBold
+    statusLabelAB.TextSize = 9
+    statusLabelAB.TextXAlignment = Enum.TextXAlignment.Left
+    statusLabelAB.Parent = ControlSection
+    
+    startABBtn.MouseButton1Click:Connect(function()
+        if AutoBuyConfig.autoBuyEnabled then
+            AutoBuyConfig.autoBuyEnabled = false
+            autoBuyRunning = false
+            if autoBuyLoopThread then
+                task.cancel(autoBuyLoopThread)
+                autoBuyLoopThread = nil
+            end
+            startABBtn.Text = "▶️ START AUTO BUY"
+            startABBtn.BackgroundColor3 = C.success
+            statusLabelAB.Text = "Status: Stopped"
+            saveAutoBuyConfig()
+        else
+            local cnt = 0
+            for _ in pairs(AutoBuyConfig.selected) do cnt = cnt + 1 end
+            if cnt == 0 then
+                statusLabelAB.Text = "⚠️ Pilih minimal 1 item!"
+                return
+            end
+            AutoBuyConfig.autoBuyEnabled = true
+            autoBuyRunning = true
+            startABBtn.Text = "⏹️ STOP AUTO BUY"
+            startABBtn.BackgroundColor3 = C.danger
+            statusLabelAB.Text = string.format("✅ Running (%d item)", cnt)
+            saveAutoBuyConfig()
+            
+            if autoBuyLoopThread then
+                task.cancel(autoBuyLoopThread)
+                autoBuyLoopThread = nil
+            end
+            autoBuyLoopThread = task.spawn(autoBuyLoop)
+        end
+    end)
+
+    -- ==================================================================
+    -- SECTION 2: TAB SELECTOR + LIST (SEEDS/EGGS/GEAR/COSMETIC/MERCHANT)
+    -- ==================================================================
+    local ListSection = createSection(buyScroll, "📋 Item List", "autoBuyList")
+    ListSection.LayoutOrder = 2
+    ListSection.Size = UDim2.new(1, -10, 0, 400)
+    
+    -- Sub-tab buttons
+    local subTabs = {
+        {"Seeds", "🌱"}, {"Eggs", "🥚"}, {"Gear", "⚙️"},
+        {"Cosmetics", "🎨"}, {"Merchant", "🛒"},
+    }
+    local subTabBtns = {}
+    local subTabBar = Instance.new("Frame")
+    subTabBar.Size = UDim2.new(1, -20, 0, 22)
+    subTabBar.Position = UDim2.new(0, 10, 0, 28)
+    subTabBar.BackgroundTransparency = 1
+    subTabBar.Parent = ListSection
+    
+    local subTabLayout = Instance.new("UIListLayout")
+    subTabLayout.FillDirection = Enum.FillDirection.Horizontal
+    subTabLayout.Padding = UDim.new(0, 3)
+    subTabLayout.Parent = subTabBar
+    
+    local function setBuyTab(name)
+        currentBuyTab = name
+        for n, b in pairs(subTabBtns) do
+            if n == name then
+                b.BackgroundColor3 = C.accent
+                b.TextColor3 = C.text
+            else
+                b.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+                b.TextColor3 = C.textDim
+            end
+        end
+        if renderListFn then pcall(renderListFn) end
+    end
+    
+    for _, st in ipairs(subTabs) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0.2, -3, 1, 0)
+        btn.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+        btn.Text = st[2] .. " " .. st[1]
+        btn.TextColor3 = C.textDim
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 8
+        btn.BorderSizePixel = 0
+        btn.AutoButtonColor = false
+        btn.Parent = subTabBar
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+        btn.MouseButton1Click:Connect(function() setBuyTab(st[1]) end)
+        subTabBtns[st[1]] = btn
+    end
+    
+    -- Search
+    local searchAB = Instance.new("TextBox")
+    searchAB.Size = UDim2.new(1, -20, 0, 22)
+    searchAB.Position = UDim2.new(0, 10, 0, 54)
+    searchAB.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    searchAB.BorderSizePixel = 0
+    searchAB.Font = Enum.Font.Gotham
+    searchAB.PlaceholderText = "🔍 Cari..."
+    searchAB.Text = ""
+    searchAB.TextColor3 = C.text
+    searchAB.TextSize = 9
+    searchAB.ClearTextOnFocus = false
+    searchAB.Parent = ListSection
+    Instance.new("UICorner", searchAB).CornerRadius = UDim.new(0, 4)
+    
+    -- Select all / Clear
+    local selAllAB = Instance.new("TextButton")
+    selAllAB.Size = UDim2.new(0.5, -15, 0, 22)
+    selAllAB.Position = UDim2.new(0, 10, 0, 81)
+    selAllAB.BackgroundColor3 = C.accent
+    selAllAB.BorderSizePixel = 0
+    selAllAB.Font = Enum.Font.GothamBold
+    selAllAB.Text = "✓ Semua di Tab"
+    selAllAB.TextColor3 = C.text
+    selAllAB.TextSize = 8
+    selAllAB.AutoButtonColor = false
+    selAllAB.Parent = ListSection
+    Instance.new("UICorner", selAllAB).CornerRadius = UDim.new(0, 3)
+    
+    local clrAB = Instance.new("TextButton")
+    clrAB.Size = UDim2.new(0.5, -15, 0, 22)
+    clrAB.Position = UDim2.new(0.5, 5, 0, 81)
+    clrAB.BackgroundColor3 = C.danger
+    clrAB.BorderSizePixel = 0
+    clrAB.Font = Enum.Font.GothamBold
+    clrAB.Text = "✕ Clear"
+    clrAB.TextColor3 = C.text
+    clrAB.TextSize = 8
+    clrAB.AutoButtonColor = false
+    clrAB.Parent = ListSection
+    Instance.new("UICorner", clrAB).CornerRadius = UDim.new(0, 3)
+    
+    -- Item list
+    local itemScroll = Instance.new("ScrollingFrame")
+    itemScroll.Size = UDim2.new(1, -20, 0, 260)
+    itemScroll.Position = UDim2.new(0, 10, 0, 108)
+    itemScroll.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+    itemScroll.BorderSizePixel = 0
+    itemScroll.ScrollBarThickness = 4
+    itemScroll.ScrollBarImageColor3 = C.accent
+    itemScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    itemScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    itemScroll.Parent = ListSection
+    Instance.new("UICorner", itemScroll).CornerRadius = UDim.new(0, 4)
+    
+    local itemLayout = Instance.new("UIListLayout")
+    itemLayout.Padding = UDim.new(0, 2)
+    itemLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    itemLayout.Parent = itemScroll
+    
+    local itemPad = Instance.new("UIPadding")
+    itemPad.PaddingLeft = UDim.new(0, 4)
+    itemPad.PaddingRight = UDim.new(0, 4)
+    itemPad.PaddingTop = UDim.new(0, 4)
+    itemPad.Parent = itemScroll
+    
+    local function renderList()
+        for _, b in ipairs(itemButtons) do b:Destroy() end
+        itemButtons = {}
+        
+        local search = searchAB.Text:lower()
+        local items = scanByTab(currentBuyTab)
+        local filtered = {}
+        for _, item in ipairs(items) do
+            if search == "" or item.displayName:lower():find(search, 1, true) then
+                table.insert(filtered, item)
+            end
+        end
+        
+        table.sort(filtered, function(a, b)
+            if a.isPaused ~= b.isPaused then return not a.isPaused end
+            if a.isLocked ~= b.isLocked then return not a.isLocked end
+            local aSel = AutoBuyConfig.selected[a.key] == true
+            local bSel = AutoBuyConfig.selected[b.key] == true
+            if aSel ~= bSel then return aSel end
+            if (a.stock > 0) ~= (b.stock > 0) then return a.stock > 0 end
+            if a.shopName ~= b.shopName then return a.shopName < b.shopName end
+            return a.displayName < b.displayName
+        end)
+        
+        if #filtered == 0 then
+            local ph = Instance.new("TextLabel")
+            ph.Size = UDim2.new(1, -8, 0, 40)
+            ph.BackgroundTransparency = 1
+            ph.Text = "📭 Tidak ada item"
+            ph.TextColor3 = C.textDim
+            ph.Font = Enum.Font.Gotham
+            ph.TextSize = 9
+            ph.Parent = itemScroll
+            table.insert(itemButtons, ph)
+            itemScroll.CanvasSize = UDim2.new(0, 0, 0, 48)
+            return
+        end
+        
+        for i, item in ipairs(filtered) do
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -8, 0, 24)
+            
+            local isSel = AutoBuyConfig.selected[item.key] == true
+            if item.isLocked then
+                btn.BackgroundColor3 = Color3.fromRGB(60, 40, 40)
+            elseif isSel then
+                btn.BackgroundColor3 = Color3.fromRGB(60, 130, 220)  -- BIRU
+            elseif item.isPaused then
+                btn.BackgroundColor3 = Color3.fromRGB(40, 45, 55)
+            else
+                btn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+            end
+            btn.BorderSizePixel = 0
+            btn.Text = ""
+            btn.AutoButtonColor = false
+            btn.LayoutOrder = i
+            btn.Parent = itemScroll
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+            
+            local pad = Instance.new("UIPadding")
+            pad.PaddingLeft = UDim.new(0, 8)
+            pad.Parent = btn
+            
+            -- Icon
+            local icon = Instance.new("TextLabel")
+            icon.Size = UDim2.new(0, 18, 1, 0)
+            icon.BackgroundTransparency = 1
+            if item.isLocked then
+                icon.Text = "🔒"
+                icon.TextColor3 = Color3.fromRGB(120, 80, 80)
+            elseif isSel then
+                icon.Text = "✓"
+                icon.TextColor3 = C.text
+            elseif item.isPaused then
+                icon.Text = "⏸️"
+                icon.TextColor3 = Color3.fromRGB(130, 140, 160)
+            else
+                icon.Text = "○"
+                icon.TextColor3 = C.text
+            end
+            icon.Font = Enum.Font.GothamBold
+            icon.TextSize = 10
+            icon.TextXAlignment = Enum.TextXAlignment.Left
+            icon.Parent = btn
+            
+            -- Name
+            local nameL = Instance.new("TextLabel")
+            nameL.Size = UDim2.new(0.45, 0, 1, 0)
+            nameL.Position = UDim2.new(0, 20, 0, 0)
+            nameL.BackgroundTransparency = 1
+            nameL.Text = item.prefix .. " " .. item.displayName
+            if item.isLocked then
+                nameL.TextColor3 = Color3.fromRGB(120, 80, 80)
+            elseif item.isPaused then
+                nameL.TextColor3 = Color3.fromRGB(130, 140, 160)
+            else
+                nameL.TextColor3 = C.text
+            end
+            nameL.Font = Enum.Font.GothamSemibold
+            nameL.TextSize = 8
+            nameL.TextXAlignment = Enum.TextXAlignment.Left
+            nameL.Parent = btn
+            
+            -- Price
+            local priceL = Instance.new("TextLabel")
+            priceL.Size = UDim2.new(0.22, 0, 1, 0)
+            priceL.Position = UDim2.new(0.65, 0, 0, 0)
+            priceL.BackgroundTransparency = 1
+            local sym = (item.currency == "GardenCoins") and "🌼" or "💵"
+            priceL.Text = string.format("%s %s", sym, fmtNum(item.price))
+            if item.isLocked then
+                priceL.TextColor3 = Color3.fromRGB(120, 80, 80)
+            elseif item.isPaused then
+                priceL.TextColor3 = Color3.fromRGB(130, 140, 160)
+            else
+                priceL.TextColor3 = Color3.fromRGB(255, 200, 0)
+            end
+            priceL.Font = Enum.Font.Gotham
+            priceL.TextSize = 7
+            priceL.TextXAlignment = Enum.TextXAlignment.Right
+            priceL.Parent = btn
+            
+            -- Stock
+            local stockL = Instance.new("TextLabel")
+            stockL.Size = UDim2.new(0.13, 0, 1, 0)
+            stockL.Position = UDim2.new(0.87, 0, 0, 0)
+            stockL.BackgroundTransparency = 1
+            if item.stock > 0 then
+                stockL.Text = "📦" .. fmtNum(item.stock)
+                stockL.TextColor3 = item.isLocked and Color3.fromRGB(120, 80, 80)
+                    or item.isPaused and Color3.fromRGB(130, 140, 160) or C.success
+            else
+                stockL.Text = "❌0"
+                stockL.TextColor3 = item.isLocked and Color3.fromRGB(120, 80, 80)
+                    or item.isPaused and Color3.fromRGB(130, 140, 160) or C.danger
+            end
+            stockL.Font = Enum.Font.GothamBold
+            stockL.TextSize = 7
+            stockL.TextXAlignment = Enum.TextXAlignment.Right
+            stockL.Parent = btn
+            
+            btn.MouseButton1Click:Connect(function()
+                if item.isLocked then
+                    local reason = item.lockReason ~= "" and item.lockReason or "Locked"
+                    if statusLabelAB then statusLabelAB.Text = "🔒 " .. item.displayName .. " — " .. reason end
+                    return
+                end
+                if AutoBuyConfig.selected[item.key] then
+                    AutoBuyConfig.selected[item.key] = nil
+                else
+                    AutoBuyConfig.selected[item.key] = true
+                end
+                saveAutoBuyConfig()
+                renderList()
+            end)
+            
+            table.insert(itemButtons, btn)
+        end
+        
+        itemScroll.CanvasSize = UDim2.new(0, 0, 0, #filtered * 26 + 8)
+    end
+    
+    renderListFn = renderList
+    searchAB:GetPropertyChangedSignal("Text"):Connect(renderList)
+    
+    selAllAB.MouseButton1Click:Connect(function()
+        local items = scanByTab(currentBuyTab)
+        for _, item in ipairs(items) do
+            if not item.isLocked then
+                AutoBuyConfig.selected[item.key] = true
+            end
+        end
+        saveAutoBuyConfig()
+        renderList()
+    end)
+    
+    clrAB.MouseButton1Click:Connect(function()
+        local items = scanByTab(currentBuyTab)
+        for _, item in ipairs(items) do
+            AutoBuyConfig.selected[item.key] = nil
+        end
+        saveAutoBuyConfig()
+        renderList()
+    end)
+    
+    setBuyTab("Seeds")
+
+    -- ==================================================================
+    -- SECTION 3: SETTINGS (DELAY, MAX BUY, MIN STOCK)
+    -- ==================================================================
+    local SettingsSection = createSection(buyScroll, "⚙️ Auto Buy Settings", "autoBuySettings")
+    SettingsSection.LayoutOrder = 3
+    SettingsSection.Size = UDim2.new(1, -10, 0, 180)
+    
+    makeInputRow(SettingsSection, 28, "Check Interval (s):", "checkInterval", true, 1, 30)
+    makeInputRow(SettingsSection, 49, "Buy Delay (s):", "buyDelay", true, 0.1, 5)
+    makeInputRow(SettingsSection, 70, "Max Buys/Cycle:", "maxBuysPerCycle", true, 1, 20)
+    makeInputRow(SettingsSection, 91, "Min Stock:", "minStock", true, 1, 100)
+    
+    -- Override: rebind ke AutoBuyConfig, bukan config
+    -- Caranya: panggil ulang makeInputRow dengan key berbeda
+    -- (biar tidak tabrakan dengan config utama)
+    
+    -- Custom manual input
+    local function makeABInput(yPos, label, key, isNum, min, max)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0.55, -15, 0, 16)
+        lbl.Position = UDim2.new(0, 10, 0, yPos)
+        lbl.Text = label
+        lbl.TextColor3 = C.textDim
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 8
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.BackgroundTransparency = 1
+        lbl.Parent = SettingsSection
+        
+        local input = Instance.new("TextBox")
+        input.Size = UDim2.new(0.45, -15, 0, 20)
+        input.Position = UDim2.new(0.55, 5, 0, yPos)
+        input.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+        input.BorderSizePixel = 0
+        input.Font = Enum.Font.Gotham
+        input.Text = tostring(AutoBuyConfig[key])
+        input.TextColor3 = C.text
+        input.TextSize = 8
+        input.Parent = SettingsSection
+        Instance.new("UICorner", input).CornerRadius = UDim.new(0, 3)
+        
+        input.FocusLost:Connect(function()
+            local n = tonumber(input.Text)
+            if n and (min == nil or n >= min) and (max == nil or n <= max) then
+                AutoBuyConfig[key] = n
+                saveAutoBuyConfig()
+            end
+            input.Text = tostring(AutoBuyConfig[key])
+        end)
+    end
+    
+    -- Hapus section default tadi, ganti pakai custom
+    -- (karena makeInputRow di atas bind ke config global, kita panggil ulang)
+    SettingsSection:ClearAllChildren()
+    
+    local SettingsTitle = Instance.new("TextLabel")
+    SettingsTitle.Size = UDim2.new(1, -20, 0, 16)
+    SettingsTitle.Position = UDim2.new(0, 10, 0, 6)
+    SettingsTitle.Text = "⚙️ Auto Buy Settings"
+    SettingsTitle.TextColor3 = C.text
+    SettingsTitle.Font = Enum.Font.GothamBold
+    SettingsTitle.TextSize = 10
+    SettingsTitle.TextXAlignment = Enum.TextXAlignment.Left
+    SettingsTitle.BackgroundTransparency = 1
+    SettingsTitle.Parent = SettingsSection
+    
+    makeABInput(30, "Check Interval (s):", "checkInterval", true, 1, 30)
+    makeABInput(51, "Buy Delay (s):", "buyDelay", true, 0.1, 5)
+    makeABInput(72, "Max Buys/Cycle:", "maxBuysPerCycle", true, 1, 20)
+    makeABInput(93, "Min Stock:", "minStock", true, 1, 100)
+    makeABInput(114, "Required NPC Level:", "requiredNPCLevel", true, 1, 10)
+    
+    local resetBtn = Instance.new("TextButton")
+    resetBtn.Size = UDim2.new(1, -20, 0, 24)
+    resetBtn.Position = UDim2.new(0, 10, 0, 140)
+    resetBtn.BackgroundColor3 = C.danger
+    resetBtn.BorderSizePixel = 0
+    resetBtn.Font = Enum.Font.GothamBold
+    resetBtn.Text = "🗑️ Reset Selection"
+    resetBtn.TextColor3 = C.text
+    resetBtn.TextSize = 9
+    resetBtn.Parent = SettingsSection
+    Instance.new("UICorner", resetBtn).CornerRadius = UDim.new(0, 4)
+    
+    resetBtn.MouseButton1Click:Connect(function()
+        AutoBuyConfig.selected = {}
+        saveAutoBuyConfig()
+        renderList()
+        if statusLabelAB then statusLabelAB.Text = "✅ Selection direset" end
+    end)
+
+    -- ==================================================================
+    -- SECTION 4: STATISTIK
+    -- ==================================================================
+    local StatsSection = createSection(buyScroll, "📊 Statistik", "autoBuyStats")
+    StatsSection.LayoutOrder = 4
+    StatsSection.Size = UDim2.new(1, -10, 0, 90)
+    
+    local statsLabel = Instance.new("TextLabel")
+    statsLabel.Size = UDim2.new(1, -20, 0, 60)
+    statsLabel.Position = UDim2.new(0, 10, 0, 28)
+    statsLabel.BackgroundTransparency = 1
+    statsLabel.Text = "Loading stats..."
+    statsLabel.TextColor3 = C.text
+    statsLabel.Font = Enum.Font.Code
+    statsLabel.TextSize = 8
+    statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statsLabel.TextYAlignment = Enum.TextYAlignment.Top
+    statsLabel.TextWrapped = true
+    statsLabel.Parent = StatsSection
+    
+    task.spawn(function()
+        while StatsSection and StatsSection.Parent and not isGuiDestroyed do
+            task.wait(2)
+            local total, locked, paused, inStock, sel = 0, 0, 0, 0, 0
+            local byTab = { Seeds = 0, Eggs = 0, Gear = 0, Cosmetics = 0, Merchant = 0 }
+            
+            for _, tabName in ipairs({"Seeds", "Eggs", "Gear", "Cosmetics", "Merchant"}) do
+                local items = scanByTab(tabName)
+                byTab[tabName] = #items
+                for _, item in ipairs(items) do
+                    total = total + 1
+                    if item.isLocked then locked = locked + 1 end
+                    if item.isPaused then paused = paused + 1 end
+                    if item.stock > 0 and not item.isLocked and not item.isPaused then
+                        inStock = inStock + 1
+                    end
+                    if AutoBuyConfig.selected[item.key] then sel = sel + 1 end
+                end
+            end
+            
+            statsLabel.Text = string.format(
+                "Total: %d | 🔒 %d | ⏸️ %d\n📦 Tersedia: %d | ✅ Dipilih: %d\n\n" ..
+                "🌱 Seeds: %d | 🥚 Eggs: %d | ⚙️ Gear: %d\n🎨 Cosmetics: %d | 🛒 Merchant: %d",
+                total, locked, paused, inStock, sel,
+                byTab.Seeds, byTab.Eggs, byTab.Gear,
+                byTab.Cosmetics, byTab.Merchant
+            )
+        end
+    end)
+
+    -- ==================================================================
+    -- SECTION 5: REFRESH INFO
+    -- ==================================================================
+    local InfoSection = createSection(buyScroll, "ℹ️ Info & Refresh", "autoBuyInfo")
+    InfoSection.LayoutOrder = 5
+    InfoSection.Size = UDim2.new(1, -10, 0, 120)
+    
+    local infoLabel = Instance.new("TextLabel")
+    infoLabel.Size = UDim2.new(1, -20, 0, 50)
+    infoLabel.Position = UDim2.new(0, 10, 0, 28)
+    infoLabel.BackgroundTransparency = 1
+    infoLabel.Text = "Auto-refresh:\n🌱 Seeds: 5 menit\n🥚 Eggs: 10 menit\n⚙️ Gear: 5 menit\n🎨 Cosmetics: 10 menit\n🛒 Merchant: 10 menit"
+    infoLabel.TextColor3 = C.textDim
+    infoLabel.Font = Enum.Font.Gotham
+    infoLabel.TextSize = 8
+    infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+    infoLabel.TextYAlignment = Enum.TextYAlignment.Top
+    infoLabel.TextWrapped = true
+    infoLabel.Parent = InfoSection
+    
+    local refreshNowBtn = Instance.new("TextButton")
+    refreshNowBtn.Size = UDim2.new(1, -20, 0, 26)
+    refreshNowBtn.Position = UDim2.new(0, 10, 0, 82)
+    refreshNowBtn.BackgroundColor3 = C.accent
+    refreshNowBtn.BorderSizePixel = 0
+    refreshNowBtn.Font = Enum.Font.GothamBold
+    refreshNowBtn.Text = "🔄 Refresh Sekarang"
+    refreshNowBtn.TextColor3 = C.text
+    refreshNowBtn.TextSize = 9
+    refreshNowBtn.Parent = InfoSection
+    Instance.new("UICorner", refreshNowBtn).CornerRadius = UDim.new(0, 4)
+    
+    refreshNowBtn.MouseButton1Click:Connect(function()
+        pcall(renderList)
+        if statusLabelAB then statusLabelAB.Text = "🔄 Refreshed" end
+    end)
+
+    -- ==================================================================
+    -- AUTO REFRESH: per tab, interval berbeda
+    -- ==================================================================
+    local lastRefreshBuyTab = {}
+    
+    task.spawn(function()
+        while not isGuiDestroyed and buyScroll and buyScroll.Parent do
+            task.wait(1)
+            local now = os.date("*t")
+            if now.sec >= AutoBuyConfig.refreshDelaySeconds then
+                for tabName, interval in pairs(AutoBuyConfig.refreshIntervals) do
+                    local lastMin = lastRefreshBuyTab[tabName]
+                    if now.min % interval == 0 and lastMin ~= now.min then
+                        lastRefreshBuyTab[tabName] = now.min
+                        if currentBuyTab == tabName then
+                            pcall(renderList)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- Initial render
+    task.spawn(function()
+        task.wait(0.5)
+        pcall(renderList)
+    end)
+    
+    print("✅ [AutoBuy Tab] Loaded — 5 sections siap")
+end -- BLOCK 14BARU
+
 -- shared: diisi di BLOCK 14 (TAB FARM: AUTO SHOVEL)
 do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     local farmTab = tabFrames["Farm"]
@@ -8775,665 +9859,3 @@ end)
     end
 end)
 end -- BLOCK 14
-
--- ==================================================================
--- SHARED DECLARATION untuk Auto-Buy
--- (taruh SEBELUM BLOCK 15, di level top file — cukup 3 baris)
--- ==================================================================
-local AB_BuySeedStock, AB_BuyDailySeedShopStock, AB_BuyPetEgg, AB_BuyGearStock,
-    AB_BuyCosmeticItem, AB_BuyCosmeticShopFence, AB_BuyTravelingMerchantShopStock,
-    AB_SeedShopData, AB_DailySeedShopData, AB_PetEggData, AB_GearShopData,
-    AB_CosmeticShopTabData, AB_TravelingMerchantData, AB_NPCLevelHandler,
-    AB_RebirthUnlocksService, AB_formatNumber, AB_getNPCLevel, AB_checkLevelLocks,
-    AB_checkRebirth, AB_getCurrencyAB, AB_scanSeeds, AB_scanEggs, AB_scanGear,
-    AB_scanCosmetics, AB_scanMerchant, AB_autoBuyLoop, AB_renderFns,
-    AB_autoBuyIsRunning, AB_lastRefreshPerSection, AB_createSectionAB
-
--- ==================================================================
--- BLOCK 15A: DEPENDENCIES
--- ==================================================================
-do
-    local function tryRequire(path)
-        local ok, result = pcall(require, path)
-        if ok then return result end
-        warn("❌ Gagal require:", path)
-        return nil
-    end
-    local RS = game:GetService("ReplicatedStorage")
-    local GE = RS:WaitForChild("GameEvents")
-
-    AB_BuySeedStock = GE:WaitForChild("BuySeedStock")
-    AB_BuyDailySeedShopStock = GE:WaitForChild("BuyDailySeedShopStock")
-    AB_BuyPetEgg = GE:WaitForChild("BuyPetEgg")
-    AB_BuyGearStock = GE:WaitForChild("BuyGearStock")
-    AB_BuyCosmeticItem = GE:WaitForChild("BuyCosmeticItem")
-    AB_BuyCosmeticShopFence = GE:WaitForChild("BuyCosmeticShopFence")
-    AB_BuyTravelingMerchantShopStock = GE:WaitForChild("BuyTravelingMerchantShopStock")
-
-    AB_SeedShopData = tryRequire(RS.Data.SeedShopData) or {}
-    AB_DailySeedShopData = tryRequire(RS.Data.DailySeedShopData) or {}
-    AB_PetEggData = tryRequire(RS.Data.PetEggData) or {}
-    AB_GearShopData = tryRequire(RS.Data.GearShopData) or {}
-    AB_CosmeticShopTabData = tryRequire(RS.Data.CosmeticShopTabData) or {}
-    AB_TravelingMerchantData = tryRequire(RS.Data.TravelingMerchant.TravelingMerchantData) or {}
-    AB_NPCLevelHandler = tryRequire(RS.Modules.NPCLevelHandler)
-    AB_RebirthUnlocksService = tryRequire(RS.Modules.RebirthUnlocksSharedService)
-
-    AB_renderFns = {}
-    AB_autoBuyIsRunning = false
-    AB_lastRefreshPerSection = {}
-end
-
--- ==================================================================
--- BLOCK 15B: HELPERS + 5 SCANNERS
--- ==================================================================
-do
-    AB_formatNumber = function(n)
-        if type(n) ~= "number" then return tostring(n) end
-        if n ~= n then return "NaN" end
-        if n == math.huge then return "∞" end
-        if n == -math.huge then return "-∞" end
-        local neg = n < 0
-        n = math.abs(n)
-        if n < 1000 then return (neg and "-" or "") .. tostring(math.floor(n)) end
-        local suffixes = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No",
-            "Dc", "UDc", "DDc", "TDc", "QaDc", "QiDc", "SxDc", "SpDc", "OcDc", "NoDc"}
-        local tier = math.min(math.floor(math.log10(n) / 3), #suffixes - 1)
-        local scaled = n / (10 ^ (tier * 3))
-        local truncated = math.floor(scaled * 10) / 10
-        local str = truncated >= 100 and string.format("%d", math.floor(truncated))
-            or string.format("%.1f", truncated)
-        str = str:gsub("%.0$", "")
-        return (neg and "-" or "") .. str .. suffixes[tier + 1]
-    end
-
-    AB_getNPCLevel = function(npcName)
-        local data = DataService:GetData()
-        if not data or not data.Progress or not data.Progress.NPCPoints then return 0 end
-        local points = data.Progress.NPCPoints[npcName] or 0
-        return NPCLevelData and NPCLevelData:GetLevelFromPoints(npcName, points) or 0
-    end
-
-    AB_checkLevelLocks = function(levelLocks)
-        if not levelLocks then return true end
-        if AB_NPCLevelHandler and AB_NPCLevelHandler.HasRequiredNPCLevels then
-            local ok, result = pcall(function()
-                return AB_NPCLevelHandler:HasRequiredNPCLevels(levelLocks)
-            end)
-            if ok then return result end
-        end
-        for npcName, requiredLevel in pairs(levelLocks) do
-            if AB_getNPCLevel(npcName) < requiredLevel then return false end
-        end
-        return true
-    end
-
-    AB_checkRebirth = function(shopType, itemName)
-        if not AB_RebirthUnlocksService then return true, 0 end
-        local okAB, hasAB = pcall(function()
-            return AB_RebirthUnlocksService:HasBeenAssignedABTest(player)
-        end)
-        if not okAB or not hasAB then return true, 0 end
-        local okU, unlocked = pcall(function()
-            return AB_RebirthUnlocksService:HasUnlockedShopItem(player, shopType, itemName)
-        end)
-        if not okU or unlocked then return true, 0 end
-        local okR, remaining = pcall(function()
-            return AB_RebirthUnlocksService:GetRemainingRebirthsNeededForItem(player, shopType, itemName)
-        end)
-        return false, (okR and remaining) or 0
-    end
-
-    AB_getCurrencyAB = function(currencyType)
-        local data = DataService:GetData()
-        if not data then return 0 end
-        if currencyType == "Sheckles" then return data.Sheckles or 0 end
-        if data.SpecialCurrency and data.SpecialCurrency[currencyType] then
-            return data.SpecialCurrency[currencyType] or 0
-        end
-        return 0
-    end
-
-    AB_scanSeeds = function()
-        local items, seen = {}, {}
-        local data = DataService:GetData()
-        if not data or not data.SeedStocks then return items end
-        local isSamUnlocked = AB_getNPCLevel("Sam") >= 5
-        local function add(seedName, cfg, shopName, currency)
-            local key = shopName .. "::" .. seedName
-            if seen[key] then return end
-            seen[key] = true
-            local stock = 0
-            local shopData = data.SeedStocks[shopName]
-            if shopData and shopData.Stocks and shopData.Stocks[seedName] then
-                stock = shopData.Stocks[seedName].Stock or 0
-            end
-            local isLocked, lockReason = false, ""
-            if currency == "GardenCoins" and not isSamUnlocked then
-                isLocked = true
-                lockReason = string.format("Sam Lv.%d/5", AB_getNPCLevel("Sam"))
-            end
-            if not isLocked then
-                local unlocked, remaining = AB_checkRebirth("Seed", seedName)
-                if not unlocked then
-                    isLocked = true
-                    lockReason = string.format("Rebirth %d+ lagi", remaining)
-                end
-            end
-            table.insert(items, {
-                key = "AB_Seeds::" .. key, shopName = shopName,
-                itemName = seedName, displayName = seedName, stock = stock,
-                price = cfg.Price or 0, currency = currency,
-                isLocked = isLocked, isPaused = false, lockReason = lockReason,
-                prefix = shopName == "Daily Deals" and "🌙"
-                    or (currency == "GardenCoins" and "🌼" or "🏪"),
-                buyFn = function()
-                    if shopName == "Daily Deals" then
-                        AB_BuyDailySeedShopStock:FireServer(seedName)
-                    else
-                        AB_BuySeedStock:FireServer(shopName, seedName)
-                    end
-                end,
-            })
-        end
-        for shopName, shopData in pairs(data.SeedStocks) do
-            if shopData.Stocks then
-                for seedName in pairs(shopData.Stocks) do
-                    local cfg, currency
-                    if shopName == "Daily Deals" then
-                        cfg = AB_DailySeedShopData[seedName]; currency = "Sheckles"
-                    else
-                        cfg = AB_SeedShopData[seedName]
-                        currency = (cfg and cfg.SpecialCurrencyType) or "Sheckles"
-                    end
-                    if cfg then add(seedName, cfg, shopName, currency) end
-                end
-            end
-        end
-        for seedName, cfg in pairs(AB_SeedShopData) do
-            if cfg.DisplayInShop and not seen["Shop::" .. seedName] then
-                add(seedName, cfg, "Shop", cfg.SpecialCurrencyType or "Sheckles")
-            end
-        end
-        for seedName, cfg in pairs(AB_DailySeedShopData) do
-            if not seen["Daily Deals::" .. seedName] then
-                add(seedName, cfg, "Daily Deals", "Sheckles")
-            end
-        end
-        return items
-    end
-
-    AB_scanEggs = function()
-        local items = {}
-        local data = DataService:GetData()
-        if not data or not data.PetEggStock then return items end
-        local stockMap = {}
-        for _, entry in ipairs(data.PetEggStock.Stocks or {}) do
-            stockMap[entry.EggName] = (stockMap[entry.EggName] or 0) + entry.Stock
-        end
-        for eggName, cfg in pairs(AB_PetEggData) do
-            if cfg.DisplayInShop == false then continue end
-            local stock = stockMap[eggName] or 0
-            local isLocked, lockReason = false, ""
-            if cfg.LevelLocks and not AB_checkLevelLocks(cfg.LevelLocks) then
-                isLocked = true
-                local highest, npcName = 0, ""
-                for name, lvl in pairs(cfg.LevelLocks) do
-                    if lvl > highest then highest = lvl; npcName = name end
-                end
-                lockReason = string.format("%s Lv.%d", npcName, highest)
-            end
-            if not isLocked then
-                local unlocked, remaining = AB_checkRebirth("Egg", eggName)
-                if not unlocked then
-                    isLocked = true
-                    lockReason = string.format("Rebirth %d+ lagi", remaining)
-                end
-            end
-            table.insert(items, {
-                key = "AB_Eggs::Shop::" .. eggName, shopName = "Pet Shop",
-                itemName = eggName, displayName = eggName, stock = stock,
-                price = cfg.Price or 0, currency = cfg.SpecialCurrencyType or "Sheckles",
-                isLocked = isLocked, isPaused = false, lockReason = lockReason,
-                prefix = "🥚",
-                buyFn = function() AB_BuyPetEgg:FireServer(eggName) end,
-            })
-        end
-        return items
-    end
-
-    AB_scanGear = function()
-        local items = {}
-        local data = DataService:GetData()
-        if not data or not data.GearStock then return items end
-        for gearName, cfg in pairs(AB_GearShopData.Gear or {}) do
-            if cfg.LayoutOrder == -1 then continue end
-            local stockData = data.GearStock.Stocks[gearName]
-            local stock = stockData and stockData.Stock or 0
-            local isLocked, lockReason = false, ""
-            if cfg.LevelLocks and not AB_checkLevelLocks(cfg.LevelLocks) then
-                isLocked = true; lockReason = "NPC Level"
-            end
-            if not isLocked then
-                local unlocked, remaining = AB_checkRebirth("Gear", gearName)
-                if not unlocked then
-                    isLocked = true
-                    lockReason = string.format("Rebirth %d+ lagi", remaining)
-                end
-            end
-            table.insert(items, {
-                key = "AB_Gear::Shop::" .. gearName, shopName = "Gear Shop",
-                itemName = gearName, displayName = gearName, stock = stock,
-                price = cfg.Price or 0, currency = "Sheckles",
-                isLocked = isLocked, isPaused = false, lockReason = lockReason,
-                prefix = "⚙️",
-                buyFn = function() AB_BuyGearStock:FireServer(gearName) end,
-            })
-        end
-        return items
-    end
-
-    AB_scanCosmetics = function()
-        local items = {}
-        local data = DataService:GetData()
-        if not data or not data.CosmeticStock then return items end
-        local tabData = AB_CosmeticShopTabData.Tabs and AB_CosmeticShopTabData.Tabs["Cosmetics"]
-        if not tabData then return items end
-        local itemStocks = data.CosmeticStock.TabStocks["Cosmetics"]
-            and data.CosmeticStock.TabStocks["Cosmetics"].ItemStocks or {}
-        for itemName, stockInfo in pairs(itemStocks) do
-            local cfg = tabData.Items and tabData.Items[itemName]
-            if not cfg then continue end
-            table.insert(items, {
-                key = "AB_Cosmetics::Cosmetics::" .. itemName,
-                shopName = "Cosmetic Shop", itemName = itemName,
-                displayName = itemName, stock = stockInfo.Stock or 0,
-                price = cfg.Price or 0, currency = "Sheckles",
-                isLocked = false, isPaused = false, lockReason = "",
-                prefix = "🎨",
-                buyFn = function() AB_BuyCosmeticItem:FireServer(itemName, "Cosmetics") end,
-            })
-        end
-        local fenceStocks = data.CosmeticStock.TabStocks["Cosmetics"]
-            and data.CosmeticStock.TabStocks["Cosmetics"].FenceStocks or {}
-        local fenceTab = AB_CosmeticShopTabData.Tabs["Fences"]
-        if fenceTab then
-            for fenceName, stockInfo in pairs(fenceStocks) do
-                local cfg = fenceTab.Fences and fenceTab.Fences[fenceName]
-                if not cfg then continue end
-                table.insert(items, {
-                    key = "AB_Cosmetics::Fences::" .. fenceName,
-                    shopName = "Fence Shop", itemName = fenceName,
-                    displayName = fenceName, stock = stockInfo.Stock or 0,
-                    price = cfg.Price or 0, currency = "Sheckles",
-                    isLocked = false, isPaused = false, lockReason = "",
-                    prefix = "🚧",
-                    buyFn = function() AB_BuyCosmeticShopFence:FireServer(fenceName, "Fences") end,
-                })
-            end
-        end
-        return items
-    end
-
-    AB_scanMerchant = function()
-        local items = {}
-        local data = DataService:GetData()
-        if not data then return items end
-        local activeMerchant = nil
-        local merchantStock = data.TravelingMerchantShopStock
-        if merchantStock and merchantStock.MerchantType and merchantStock.MerchantType ~= "" then
-            activeMerchant = merchantStock.MerchantType
-        end
-        local activeStocks = (merchantStock and merchantStock.Stocks) or {}
-        for merchantType, merchantInfo in pairs(AB_TravelingMerchantData) do
-            if not merchantInfo.ShopData then continue end
-            for itemName, cfg in pairs(merchantInfo.ShopData) do
-                if cfg.DisplayInShop == false then continue end
-                local isActive = (merchantType == activeMerchant)
-                local stock = 0
-                if isActive and activeStocks[itemName] then
-                    stock = activeStocks[itemName].Stock or 0
-                end
-                local isPaused = not isActive
-                local itemType = cfg.ItemType or "Item"
-                local prefix = "🛒"
-                if itemType == "Seed" then prefix = "🌾"
-                elseif itemType == "Seed Pack" then prefix = "📦"
-                elseif itemType == "Egg" then prefix = "🥚"
-                elseif itemType == "Pet" then prefix = "🐾"
-                elseif itemType == "Gear" then prefix = "⚙️"
-                elseif itemType == "Crate" then prefix = "🎁"
-                elseif itemType == "Cosmetic" then prefix = "🎨"
-                end
-                table.insert(items, {
-                    key = "AB_Merchant::" .. merchantType .. "::" .. itemName,
-                    shopName = merchantInfo.Title or merchantType,
-                    merchantType = merchantType, itemName = itemName,
-                    displayName = itemName, stock = stock,
-                    price = cfg.Price or 0,
-                    currency = cfg.SpecialCurrencyType or "Sheckles",
-                    isLocked = false, isPaused = isPaused, lockReason = "",
-                    prefix = isPaused and ("⏸️" .. prefix) or prefix,
-                    buyFn = function() AB_BuyTravelingMerchantShopStock:FireServer(itemName) end,
-                })
-            end
-        end
-        return items
-    end
-end
-
--- ==================================================================
--- BLOCK 15C: MAIN LOOP
--- ==================================================================
-do
-    AB_autoBuyLoop = function()
-        while AB_autoBuyIsRunning and not isGuiDestroyed do
-            task.wait(3)
-            if not config.autoBuyEnabled then continue end
-            local count = 0
-            for _ in pairs(config.autoBuySelected) do count = count + 1 end
-            if count == 0 then continue end
-            local buys, available = 0, 0
-            local scanners = {
-                {AB_scanSeeds, "Seeds"}, {AB_scanEggs, "Eggs"},
-                {AB_scanGear, "Gear"}, {AB_scanCosmetics, "Cosmetics"},
-                {AB_scanMerchant, "Merchant"},
-            }
-            for _, entry in ipairs(scanners) do
-                if not AB_autoBuyIsRunning then break end
-                if buys >= 5 then break end
-                for _, item in ipairs(entry[1]()) do
-                    if not AB_autoBuyIsRunning then break end
-                    if buys >= 5 then break end
-                    if not config.autoBuySelected[item.key] then continue end
-                    if item.isLocked then continue end
-                    if item.isPaused then continue end
-                    if item.stock < 1 then continue end
-                    available = available + 1
-                    if AB_getCurrencyAB(item.currency) >= item.price then
-                        print(string.format("[Auto-Buy] 🛒 %s [%s]", item.itemName, item.shopName))
-                        pcall(item.buyFn)
-                        buys = buys + 1
-                        task.wait(0.8)
-                    end
-                end
-            end
-            if StatusLabel and not isGuiDestroyed then
-                StatusLabel.Text = string.format("🛒 %d/%d | beli:%d", available, count, buys)
-            end
-        end
-    end
-end
-
--- ==================================================================
--- BLOCK 15D: GUI SECTION HELPER
--- ==================================================================
-do
-    AB_createSectionAB = function(parent, title, sectionKey, order, scannerFn, listHeight)
-        local section = createSection(parent, title, sectionKey)
-        section.LayoutOrder = order
-        section.Size = UDim2.new(1, -10, 0, 120 + listHeight)
-
-        local search = Instance.new("TextBox")
-        search.Size = UDim2.new(1, -20, 0, 22)
-        search.Position = UDim2.new(0, 10, 0, 28)
-        search.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
-        search.BorderSizePixel = 0
-        search.Font = Enum.Font.Gotham
-        search.PlaceholderText = "🔍 Cari..."
-        search.Text = ""
-        search.TextColor3 = Color3.fromRGB(255, 255, 255)
-        search.TextSize = 9
-        search.Parent = section
-        Instance.new("UICorner", search).CornerRadius = UDim.new(0, 4)
-
-        local selAll = Instance.new("TextButton")
-        selAll.Size = UDim2.new(0.5, -15, 0, 20)
-        selAll.Position = UDim2.new(0, 10, 0, 55)
-        selAll.BackgroundColor3 = C.accent
-        selAll.BorderSizePixel = 0
-        selAll.Font = Enum.Font.GothamBold
-        selAll.Text = "✓ Semua"
-        selAll.TextColor3 = Color3.fromRGB(255, 255, 255)
-        selAll.TextSize = 8
-        selAll.Parent = section
-        Instance.new("UICorner", selAll).CornerRadius = UDim.new(0, 3)
-
-        local clrBtn = Instance.new("TextButton")
-        clrBtn.Size = UDim2.new(0.5, -15, 0, 20)
-        clrBtn.Position = UDim2.new(0.5, 5, 0, 55)
-        clrBtn.BackgroundColor3 = C.danger
-        clrBtn.BorderSizePixel = 0
-        clrBtn.Font = Enum.Font.GothamBold
-        clrBtn.Text = "✕ Clear"
-        clrBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        clrBtn.TextSize = 8
-        clrBtn.Parent = section
-        Instance.new("UICorner", clrBtn).CornerRadius = UDim.new(0, 3)
-
-        local listFrame = Instance.new("ScrollingFrame")
-        listFrame.Size = UDim2.new(1, -20, 0, listHeight)
-        listFrame.Position = UDim2.new(0, 10, 0, 82)
-        listFrame.BackgroundTransparency = 1
-        listFrame.BorderSizePixel = 0
-        listFrame.ScrollBarThickness = 3
-        listFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-        listFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-        listFrame.Parent = section
-
-        local listLayout = Instance.new("UIListLayout")
-        listLayout.Padding = UDim.new(0, 2)
-        listLayout.Parent = listFrame
-
-        local btns = {}
-        local function render()
-            for _, b in ipairs(btns) do b:Destroy() end
-            btns = {}
-            local searchText = search.Text:lower()
-            local items = scannerFn()
-            local filtered = {}
-            for _, item in ipairs(items) do
-                if searchText == "" or item.displayName:lower():find(searchText, 1, true) then
-                    table.insert(filtered, item)
-                end
-            end
-            table.sort(filtered, function(a, b)
-                if a.isPaused ~= b.isPaused then return not a.isPaused end
-                if a.isLocked ~= b.isLocked then return not a.isLocked end
-                if config.autoBuySelected[a.key] ~= config.autoBuySelected[b.key] then
-                    return config.autoBuySelected[a.key] == true
-                end
-                if (a.stock > 0) ~= (b.stock > 0) then return a.stock > 0 end
-                if a.shopName ~= b.shopName then return a.shopName < b.shopName end
-                return a.displayName < b.displayName
-            end)
-            for i, item in ipairs(filtered) do
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, -8, 0, 24)
-                if item.isLocked then
-                    btn.BackgroundColor3 = C.danger
-                elseif config.autoBuySelected[item.key] then
-                    btn.BackgroundColor3 = Color3.fromRGB(60, 130, 220)
-                elseif item.isPaused then
-                    btn.BackgroundColor3 = Color3.fromRGB(40, 45, 55)
-                else
-                    btn.BackgroundColor3 = Color3.fromRGB(65, 65, 80)
-                end
-                btn.BorderSizePixel = 0
-                btn.Text = ""
-                btn.LayoutOrder = i
-                btn.Parent = listFrame
-                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
-                local pad = Instance.new("UIPadding")
-                pad.PaddingLeft = UDim.new(0, 6)
-                pad.Parent = btn
-
-                local icon = Instance.new("TextLabel")
-                icon.Size = UDim2.new(0, 18, 1, 0)
-                icon.BackgroundTransparency = 1
-                if item.isLocked then icon.Text = "🔒"
-                elseif config.autoBuySelected[item.key] then icon.Text = "✓"
-                elseif item.isPaused then icon.Text = "⏸️"
-                else icon.Text = "○" end
-                icon.TextColor3 = Color3.fromRGB(240, 240, 240)
-                icon.Font = Enum.Font.GothamBold
-                icon.TextSize = 10
-                icon.TextXAlignment = Enum.TextXAlignment.Left
-                icon.Parent = btn
-
-                local nameLbl = Instance.new("TextLabel")
-                nameLbl.Size = UDim2.new(0.55, 0, 1, 0)
-                nameLbl.Position = UDim2.new(0, 20, 0, 0)
-                nameLbl.BackgroundTransparency = 1
-                nameLbl.Text = item.prefix .. " " .. item.displayName
-                nameLbl.TextColor3 = Color3.fromRGB(240, 240, 240)
-                nameLbl.Font = Enum.Font.GothamSemibold
-                nameLbl.TextSize = 8
-                nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-                nameLbl.Parent = btn
-
-                local stockLbl = Instance.new("TextLabel")
-                stockLbl.Size = UDim2.new(0.25, 0, 1, 0)
-                stockLbl.Position = UDim2.new(0.75, 0, 0, 0)
-                stockLbl.BackgroundTransparency = 1
-                if item.stock > 0 then
-                    stockLbl.Text = "📦" .. AB_formatNumber(item.stock)
-                    stockLbl.TextColor3 = Color3.fromRGB(50, 180, 50)
-                else
-                    stockLbl.Text = "❌0"
-                    stockLbl.TextColor3 = Color3.fromRGB(200, 50, 50)
-                end
-                stockLbl.Font = Enum.Font.GothamBold
-                stockLbl.TextSize = 8
-                stockLbl.TextXAlignment = Enum.TextXAlignment.Right
-                stockLbl.Parent = btn
-
-                btn.MouseButton1Click:Connect(function()
-                    if item.isLocked then
-                        StatusLabel.Text = "🔒 " .. item.displayName .. " — " .. (item.lockReason ~= "" and item.lockReason or "Locked")
-                        return
-                    end
-                    if config.autoBuySelected[item.key] then
-                        config.autoBuySelected[item.key] = nil
-                    else
-                        config.autoBuySelected[item.key] = true
-                    end
-                    saveConfig()
-                    render()
-                end)
-                table.insert(btns, btn)
-            end
-        end
-        search:GetPropertyChangedSignal("Text"):Connect(render)
-        selAll.MouseButton1Click:Connect(function()
-            for _, item in ipairs(scannerFn()) do
-                if not item.isLocked then config.autoBuySelected[item.key] = true end
-            end
-            saveConfig(); render()
-        end)
-        clrBtn.MouseButton1Click:Connect(function()
-            for _, item in ipairs(scannerFn()) do
-                config.autoBuySelected[item.key] = nil
-            end
-            saveConfig(); render()
-        end)
-        table.insert(AB_renderFns, render)
-    end
-end
-
--- ==================================================================
--- BLOCK 15E: BUILD SECTIONS + CONTROL + AUTO-REFRESH
--- ==================================================================
-do
-    local abTab = tabFrames["AutoBuy"]
-    local abScroll = Instance.new("ScrollingFrame")
-    abScroll.Size = UDim2.new(1, -10, 1, -10)
-    abScroll.Position = UDim2.new(0, 5, 0, 5)
-    abScroll.BackgroundTransparency = 1
-    abScroll.BorderSizePixel = 0
-    abScroll.ScrollBarThickness = 4
-    abScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-    abScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    abScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    abScroll.Parent = abTab
-
-    local abLayout = Instance.new("UIListLayout")
-    abLayout.Padding = UDim.new(0, 6)
-    abLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    abLayout.Parent = abScroll
-
-    AB_createSectionAB(abScroll, "🌱 Seeds", "abSeeds", 1, AB_scanSeeds, 130)
-    AB_createSectionAB(abScroll, "🥚 Eggs", "abEggs", 2, AB_scanEggs, 100)
-    AB_createSectionAB(abScroll, "⚙️ Gear", "abGear", 3, AB_scanGear, 100)
-    AB_createSectionAB(abScroll, "🎨 Cosmetics", "abCosmetics", 4, AB_scanCosmetics, 100)
-    AB_createSectionAB(abScroll, "🛒 Merchant", "abMerchant", 5, AB_scanMerchant, 150)
-
-    local ctrlSection = createSection(abScroll)
-    ctrlSection.LayoutOrder = 6
-    ctrlSection.Size = UDim2.new(1, -10, 0, 89)
-
-    local abBtn = Instance.new("TextButton")
-    abBtn.Size = UDim2.new(1, -20, 0, 30)
-    abBtn.Position = UDim2.new(0, 10, 0, 10)
-    abBtn.BackgroundColor3 = config.autoBuyEnabled and C.danger or C.success
-    abBtn.BorderSizePixel = 0
-    abBtn.Font = Enum.Font.GothamBold
-    abBtn.Text = config.autoBuyEnabled and "⏹️ STOP AUTO-BUY" or "▶️ START AUTO-BUY"
-    abBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    abBtn.TextSize = 10
-    abBtn.Parent = ctrlSection
-    Instance.new("UICorner", abBtn).CornerRadius = UDim.new(0, 5)
-
-    local abStat = Instance.new("TextLabel")
-    abStat.Size = UDim2.new(1, -20, 0, 14)
-    abStat.Position = UDim2.new(0, 10, 0, 45)
-    abStat.BackgroundTransparency = 1
-    abStat.Text = "Status: Idle"
-    abStat.TextColor3 = Color3.fromRGB(200, 200, 200)
-    abStat.Font = Enum.Font.Gotham
-    abStat.TextSize = 8
-    abStat.TextXAlignment = Enum.TextXAlignment.Left
-    abStat.Parent = ctrlSection
-
-    abBtn.MouseButton1Click:Connect(function()
-        if config.autoBuyEnabled then
-            config.autoBuyEnabled = false
-            AB_autoBuyIsRunning = false
-            abBtn.Text = "▶️ START AUTO-BUY"
-            abBtn.BackgroundColor3 = C.success
-            abStat.Text = "Status: Stopped"
-        else
-            local count = 0
-            for _ in pairs(config.autoBuySelected) do count = count + 1 end
-            if count == 0 then
-                abStat.Text = "⚠️ Pilih minimal 1 item!"
-                return
-            end
-            config.autoBuyEnabled = true
-            AB_autoBuyIsRunning = true
-            abBtn.Text = "⏹️ STOP AUTO-BUY"
-            abBtn.BackgroundColor3 = C.danger
-            abStat.Text = string.format("✅ Running (%d item)", count)
-            saveConfig()
-            task.spawn(AB_autoBuyLoop)
-        end
-    end)
-
-    task.spawn(function()
-        local intervals = { Seeds = 5, Gear = 5, Eggs = 10, Cosmetics = 10, Merchant = 10 }
-        while not isGuiDestroyed do
-            local now = os.date("*t")
-            if now.sec >= 2 then
-                for sectionName, interval in pairs(intervals) do
-                    if now.min % interval == 0 and AB_lastRefreshPerSection[sectionName] ~= now.min then
-                        AB_lastRefreshPerSection[sectionName] = now.min
-                        for _, r in ipairs(AB_renderFns) do pcall(r) end
-                    end
-                end
-            end
-            task.wait(1)
-        end
-    end)
-
-    for _, r in ipairs(AB_renderFns) do pcall(r) end
-end
