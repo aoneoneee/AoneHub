@@ -8776,7 +8776,10 @@ end)
 end)
 end -- BLOCK 14
 
--- shared: deklarasi dependency Auto-Buy (dipakai lintas sub-block)
+-- ==================================================================
+-- SHARED DECLARATION untuk Auto-Buy
+-- (taruh SEBELUM BLOCK 15, di level top file — cukup 3 baris)
+-- ==================================================================
 local AB_BuySeedStock, AB_BuyDailySeedShopStock, AB_BuyPetEgg, AB_BuyGearStock,
     AB_BuyCosmeticItem, AB_BuyCosmeticShopFence, AB_BuyTravelingMerchantShopStock,
     AB_SeedShopData, AB_DailySeedShopData, AB_PetEggData, AB_GearShopData,
@@ -8784,9 +8787,12 @@ local AB_BuySeedStock, AB_BuyDailySeedShopStock, AB_BuyPetEgg, AB_BuyGearStock,
     AB_RebirthUnlocksService, AB_formatNumber, AB_getNPCLevel, AB_checkLevelLocks,
     AB_checkRebirth, AB_getCurrencyAB, AB_scanSeeds, AB_scanEggs, AB_scanGear,
     AB_scanCosmetics, AB_scanMerchant, AB_autoBuyLoop, AB_renderFns,
-    AB_autoBuyIsRunning, AB_lastRefreshPerSection
+    AB_autoBuyIsRunning, AB_lastRefreshPerSection, AB_createSectionAB
 
-do -- BLOCK 15A: AUTO-BUY DEPENDENCIES
+-- ==================================================================
+-- BLOCK 15A: DEPENDENCIES
+-- ==================================================================
+do
     local function tryRequire(path)
         local ok, result = pcall(require, path)
         if ok then return result end
@@ -8818,7 +8824,10 @@ do -- BLOCK 15A: AUTO-BUY DEPENDENCIES
     AB_lastRefreshPerSection = {}
 end
 
-do -- BLOCK 15B: AUTO-BUY HELPERS + SCANNERS
+-- ==================================================================
+-- BLOCK 15B: HELPERS + 5 SCANNERS
+-- ==================================================================
+do
     AB_formatNumber = function(n)
         if type(n) ~= "number" then return tostring(n) end
         if n ~= n then return "NaN" end
@@ -9113,7 +9122,10 @@ do -- BLOCK 15B: AUTO-BUY HELPERS + SCANNERS
     end
 end
 
-do -- BLOCK 15C: AUTO-BUY MAIN LOOP
+-- ==================================================================
+-- BLOCK 15C: MAIN LOOP
+-- ==================================================================
+do
     AB_autoBuyLoop = function()
         while AB_autoBuyIsRunning and not isGuiDestroyed do
             task.wait(3)
@@ -9153,26 +9165,12 @@ do -- BLOCK 15C: AUTO-BUY MAIN LOOP
     end
 end
 
-do -- BLOCK 15D: AUTO-BUY GUI
-    local abTab = tabFrames["AutoBuy"]
-    local abScroll = Instance.new("ScrollingFrame")
-    abScroll.Size = UDim2.new(1, -10, 1, -10)
-    abScroll.Position = UDim2.new(0, 5, 0, 5)
-    abScroll.BackgroundTransparency = 1
-    abScroll.BorderSizePixel = 0
-    abScroll.ScrollBarThickness = 4
-    abScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
-    abScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    abScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    abScroll.Parent = abTab
-
-    local abLayout = Instance.new("UIListLayout")
-    abLayout.Padding = UDim.new(0, 6)
-    abLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    abLayout.Parent = abScroll
-
-    local function createSectionAB(title, sectionKey, order, scannerFn, listHeight)
-        local section = createSection(abScroll, title, sectionKey)
+-- ==================================================================
+-- BLOCK 15D: GUI SECTION HELPER
+-- ==================================================================
+do
+    AB_createSectionAB = function(parent, title, sectionKey, order, scannerFn, listHeight)
+        local section = createSection(parent, title, sectionKey)
         section.LayoutOrder = order
         section.Size = UDim2.new(1, -10, 0, 120 + listHeight)
 
@@ -9341,12 +9339,34 @@ do -- BLOCK 15D: AUTO-BUY GUI
         end)
         table.insert(AB_renderFns, render)
     end
+end
 
-    createSectionAB("🌱 Seeds", "abSeeds", 1, AB_scanSeeds, 130)
-    createSectionAB("🥚 Eggs", "abEggs", 2, AB_scanEggs, 100)
-    createSectionAB("⚙️ Gear", "abGear", 3, AB_scanGear, 100)
-    createSectionAB("🎨 Cosmetics", "abCosmetics", 4, AB_scanCosmetics, 100)
-    createSectionAB("🛒 Merchant", "abMerchant", 5, AB_scanMerchant, 150)
+-- ==================================================================
+-- BLOCK 15E: BUILD SECTIONS + CONTROL + AUTO-REFRESH
+-- ==================================================================
+do
+    local abTab = tabFrames["AutoBuy"]
+    local abScroll = Instance.new("ScrollingFrame")
+    abScroll.Size = UDim2.new(1, -10, 1, -10)
+    abScroll.Position = UDim2.new(0, 5, 0, 5)
+    abScroll.BackgroundTransparency = 1
+    abScroll.BorderSizePixel = 0
+    abScroll.ScrollBarThickness = 4
+    abScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+    abScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    abScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    abScroll.Parent = abTab
+
+    local abLayout = Instance.new("UIListLayout")
+    abLayout.Padding = UDim.new(0, 6)
+    abLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    abLayout.Parent = abScroll
+
+    AB_createSectionAB(abScroll, "🌱 Seeds", "abSeeds", 1, AB_scanSeeds, 130)
+    AB_createSectionAB(abScroll, "🥚 Eggs", "abEggs", 2, AB_scanEggs, 100)
+    AB_createSectionAB(abScroll, "⚙️ Gear", "abGear", 3, AB_scanGear, 100)
+    AB_createSectionAB(abScroll, "🎨 Cosmetics", "abCosmetics", 4, AB_scanCosmetics, 100)
+    AB_createSectionAB(abScroll, "🛒 Merchant", "abMerchant", 5, AB_scanMerchant, 150)
 
     local ctrlSection = createSection(abScroll)
     ctrlSection.LayoutOrder = 6
