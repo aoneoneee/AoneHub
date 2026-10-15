@@ -8868,10 +8868,33 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (2 Sections)
         end
     end)
 
-    task.spawn(function()
+        task.spawn(function()
         task.wait(0.5)
         pcall(renderList)
     end)
+
+    -- ⭐ AUTO-START kalau config sebelumnya enabled
+    if ABCfg.autoBuyEnabled then
+        task.spawn(function()
+            task.wait(2)
+            local cnt = 0
+            for _ in pairs(ABCfg.selected) do cnt = cnt + 1 end
+            if cnt > 0 then
+                AutoBuyBackend.start()
+                startABBtn.Text = "⏹️ STOP AUTO BUY"
+                startABBtn.BackgroundColor3 = C.danger
+                statusLabelAB.Text = string.format("✅ Auto-started (%d item)", cnt)
+                print(string.format("[AutoBuy] 🚀 Auto-started dengan %d item", cnt))
+            else
+                ABCfg.autoBuyEnabled = false
+                startABBtn.Text = "▶️ START AUTO BUY"
+                startABBtn.BackgroundColor3 = C.success
+                statusLabelAB.Text = "Status: Idle (tidak ada item dipilih)"
+                AutoBuyBackend.saveConfig()
+                print("[AutoBuy] ⚠️ Auto-start dibatalkan: tidak ada item dipilih")
+            end
+        end)
+    end
 
     print("✅ [AutoBuy] Frontend loaded — 2 sections")
 end -- BLOCK 14B
