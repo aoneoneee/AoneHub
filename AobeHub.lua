@@ -8386,6 +8386,10 @@ do -- BLOCK 14A: AUTO BUY BACKEND (Config, Scanner, Loop)
                         if ok then
                             buys = buys + 1
                             task.wait(ABCfg.buyDelay)
+                            -- ⭐ Callback ke frontend
+                            if AutoBuyBackend.onBuySuccess then
+                                pcall(AutoBuyBackend.onBuySuccess)
+                            end
                         end
                     end
                 end
@@ -8402,6 +8406,7 @@ do -- BLOCK 14A: AUTO BUY BACKEND (Config, Scanner, Loop)
         fmtNum = fmtNum,
         getPlayerCurrency = getPlayerCurrency,
         getNPCLevel = getNPCLevel,
+        onBuySuccess = nil,
         saveConfig = function()
             config.autoBuySelected = ABCfg.selected
             config.autoBuyEnabled = ABCfg.autoBuyEnabled
@@ -8476,11 +8481,11 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (2 Sections)
     -- ==================================================================
     local ControlSection = createSection(buyScroll)
     ControlSection.LayoutOrder = 2
-    ControlSection.Size = UDim2.new(1, -10, 0, 89)
+    ControlSection.Size = UDim2.new(1, -10, 0, 71)
 
     local startABBtn = Instance.new("TextButton")
     startABBtn.Size = UDim2.new(1, -20, 0, 32)
-    startABBtn.Position = UDim2.new(0, 10, 0, 28)
+    startABBtn.Position = UDim2.new(0, 10, 0, 10)
     startABBtn.BackgroundColor3 = ABCfg.autoBuyEnabled and C.danger or C.success
     startABBtn.BorderSizePixel = 0
     startABBtn.Font = Enum.Font.GothamBold
@@ -8492,7 +8497,7 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (2 Sections)
 
     statusLabelAB = Instance.new("TextLabel")
     statusLabelAB.Size = UDim2.new(1, -20, 0, 14)
-    statusLabelAB.Position = UDim2.new(0, 10, 0, 65)
+    statusLabelAB.Position = UDim2.new(0, 10, 0, 47)
     statusLabelAB.BackgroundTransparency = 1
     statusLabelAB.Text = ABCfg.autoBuyEnabled and "Status: Running" or "Status: Idle"
     statusLabelAB.TextColor3 = C.textDim
@@ -8769,7 +8774,7 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (2 Sections)
             -- Stock
             local stockL = Instance.new("TextLabel")
             stockL.Size = UDim2.new(0.13, 0, 1, 0)
-            stockL.Position = UDim2.new(0.80, 0, 0, 0)
+            stockL.Position = UDim2.new(0.84, 0, 0, 0)
             stockL.BackgroundTransparency = 1
             if item.stock > 0 then
                 stockL.Text = "📦" .. fmtNum(item.stock)
@@ -8809,6 +8814,13 @@ do -- BLOCK 14B: AUTO BUY FRONTEND (2 Sections)
     end
 
     renderListFn = renderList
+
+    -- ⭐ Daftarkan callback refresh setelah beli
+    AutoBuyBackend.onBuySuccess = function()
+        if renderListFn then
+            pcall(renderListFn)
+        end
+    end
     searchAB:GetPropertyChangedSignal("Text"):Connect(renderList)
 
     selAllAB.MouseButton1Click:Connect(function()
