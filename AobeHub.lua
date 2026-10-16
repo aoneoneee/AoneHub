@@ -8919,6 +8919,11 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     farmLayout.SortOrder = Enum.SortOrder.LayoutOrder
     farmLayout.Parent = farmScroll
 
+    _G.AoneHub_registry = _G.AoneHub_registry or {}
+    _G.AoneHub_registry.farmScroll = farmScroll
+    _G.AoneHub_registry.createSection = createSection
+    _G.AoneHub_registry.C = C
+    
     -- ==================================================================
     -- SECTION: AUTO SHOVEL
     -- ==================================================================
@@ -9706,11 +9711,23 @@ end)
         autoCollectSelectedMutations = config.autoCollectSelectedMutations
     end
 end)
+end -- BLOCK 14
 
 -- ==================================================================
--- SECTION: AUTO CRAFTING (Gear & Seed)
+-- BLOCK 15: AUTO CRAFTING (SECTION UNTUK TAB FARM)
+-- ==================================================================
+-- ⭐ Blok terpisah untuk menghindari "Out of local registers"
 -- ==================================================================
 do
+    -- Ambil referensi dari registry global
+    local farmScroll = _G.AoneHub_registry and _G.AoneHub_registry.farmScroll
+    local createSection = _G.AoneHub_registry and _G.AoneHub_registry.createSection
+
+    if not farmScroll or not createSection then
+        warn("[AoneHub] Auto Crafting: farmScroll/createSection tidak tersedia")
+        return
+    end
+
     -- ============================================================
     -- REQUIRE MODULES (isolated)
     -- ============================================================
@@ -9762,7 +9779,7 @@ do
     }
 
     -- ============================================================
-    -- HELPER: CARI WORKBENCH
+    -- HELPER FUNCTIONS
     -- ============================================================
     local function findWB(machineType)
         for _, obj in ipairs(CollectionService:GetTagged("CraftingObject")) do
@@ -9823,9 +9840,6 @@ do
         return result
     end
 
-    -- ============================================================
-    -- HELPER: CARI UUID
-    -- ============================================================
     local function findItemUUID(itemName, itemType)
         local ok, result = pcall(function()
             return InventoryService_local:Find(itemType, function(itemData)
@@ -9891,9 +9905,6 @@ do
         return nil
     end
 
-    -- ============================================================
-    -- PRE-CHECK
-    -- ============================================================
     local function checkInputs(recipe)
         if not recipe.Inputs then return true, {} end
         local missing = {}
@@ -9996,14 +10007,12 @@ do
     end
 
     -- ============================================================
-    -- UI: SECTION FRAME
+    -- UI
     -- ============================================================
-    -- Daftarkan ke section meta AoneHub
     local ACSection = createSection(farmScroll, "Auto Crafting", "autoCrafting")
     ACSection.LayoutOrder = 3
     ACSection.Size = UDim2.new(1, -10, 0, 300)
 
-    -- Container 2 kolom
     local acContainer = Instance.new("Frame")
     acContainer.Size = UDim2.new(1, -20, 0, 264)
     acContainer.Position = UDim2.new(0, 10, 0, 30)
@@ -10022,7 +10031,6 @@ do
         panel.Parent = acContainer
         Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 5)
 
-        -- Header
         local hdr = Instance.new("Frame")
         hdr.Size = UDim2.new(1, 0, 0, 22)
         hdr.BackgroundColor3 = cfg.color
@@ -10049,7 +10057,6 @@ do
         hdrLbl.TextXAlignment = Enum.TextXAlignment.Left
         hdrLbl.Parent = hdr
 
-        -- Status
         local statusLbl = Instance.new("TextLabel")
         statusLbl.Size = UDim2.new(1, -12, 0, 22)
         statusLbl.Position = UDim2.new(0, 6, 0, 26)
@@ -10063,7 +10070,6 @@ do
         statusLbl.TextWrapped = true
         statusLbl.Parent = panel
 
-        -- Search
         local search = Instance.new("TextBox")
         search.Size = UDim2.new(1, -12, 0, 18)
         search.Position = UDim2.new(0, 6, 0, 52)
@@ -10078,7 +10084,6 @@ do
         search.Parent = panel
         Instance.new("UICorner", search).CornerRadius = UDim.new(0, 3)
 
-        -- Item list
         local listFrame = Instance.new("Frame")
         listFrame.Size = UDim2.new(1, -12, 0, 140)
         listFrame.Position = UDim2.new(0, 6, 0, 74)
@@ -10103,7 +10108,6 @@ do
         layout.SortOrder = Enum.SortOrder.LayoutOrder
         layout.Parent = scroll
 
-        -- Start button
         local startBtn = Instance.new("TextButton")
         startBtn.Size = UDim2.new(1, -12, 0, 24)
         startBtn.Position = UDim2.new(0, 6, 1, -30)
@@ -10144,7 +10148,7 @@ do
     end
 
     -- ============================================================
-    -- RENDER ITEM LIST
+    -- RENDER
     -- ============================================================
     local function renderList(key)
         local ref = acPanelRefs[key]
@@ -10178,10 +10182,6 @@ do
         for i, r in ipairs(filtered) do
             local isSel = (st.selectedRecipe == r.id)
             local recipe = r.recipe
-            local outputName = "?"
-            if recipe.Outputs and recipe.Outputs[1] then
-                outputName = recipe.Outputs[1].ItemData.ItemName or "?"
-            end
             local timeSec = recipe.TimeToCraft or 0
             local timeStr = string.format("%dm", math.floor(timeSec / 60))
             local costStr = ""
@@ -10378,7 +10378,7 @@ do
         end
     end)
 
-    -- Auto refresh status idle
+    -- Auto refresh status
     task.spawn(function()
         while ACSection and ACSection.Parent and not isGuiDestroyed do
             task.wait(3)
@@ -10411,5 +10411,4 @@ do
     end)
 
     print("[AoneHub] Auto Crafting section loaded")
-end
-end -- BLOCK 14
+end -- BLOCK 15
