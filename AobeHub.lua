@@ -9714,23 +9714,11 @@ end)
 end -- BLOCK 14
 
 -- ==================================================================
--- BLOCK 15: AUTO CRAFTING (SECTION UNTUK TAB FARM)
+-- BLOCK 15A: AUTO CRAFTING — HELPERS (isolated)
 -- ==================================================================
--- ⭐ Blok terpisah untuk menghindari "Out of local registers"
--- ==================================================================
+local AutoCraft_Helpers
+
 do
-    -- Ambil referensi dari registry global
-    local farmScroll = _G.AoneHub_registry and _G.AoneHub_registry.farmScroll
-    local createSection = _G.AoneHub_registry and _G.AoneHub_registry.createSection
-
-    if not farmScroll or not createSection then
-        warn("[AoneHub] Auto Crafting: farmScroll/createSection tidak tersedia")
-        return
-    end
-
-    -- ============================================================
-    -- REQUIRE MODULES (isolated)
-    -- ============================================================
     local CraftingRecipeRegistry_local = require(
         ReplicatedStorage.Data.CraftingData.CraftingRecipeRegistry
     )
@@ -9749,38 +9737,8 @@ do
         PetBoostRegistry_local = require(ReplicatedStorage.Data.PetRegistry.PetBoostRegistry)
     end)
 
-    -- ============================================================
-    -- CONFIG & STATE
-    -- ============================================================
-    local AC = {
-        MAX_FAILS = 3,
-        POLL_INTERVAL = 2,
-        SLOT_INDEX = 1,
-    }
+    local AC_SLOT_INDEX = 1
 
-    local acState = {
-        gear = { workbench = nil, selectedRecipe = nil, running = false, failCount = 0 },
-        seed = { workbench = nil, selectedRecipe = nil, running = false, failCount = 0 },
-    }
-
-    local WORKBENCH_LIST = {
-        {
-            key = "gear",
-            label = "[GEAR]",
-            machineType = "GearEventWorkbench",
-            color = Color3.fromRGB(120, 180, 255),
-        },
-        {
-            key = "seed",
-            label = "[SEED]",
-            machineType = "SeedEventWorkbench",
-            color = Color3.fromRGB(120, 220, 120),
-        },
-    }
-
-    -- ============================================================
-    -- HELPER FUNCTIONS
-    -- ============================================================
     local function findWB(machineType)
         for _, obj in ipairs(CollectionService:GetTagged("CraftingObject")) do
             if obj:IsA("Model") then
@@ -9803,7 +9761,6 @@ do
         if not ok or not machineData then
             return "empty", nil
         end
-
         local craftingItems = machineData.CraftingItems
         if craftingItems and craftingItems[1] then
             local item = craftingItems[1]
@@ -9880,12 +9837,10 @@ do
     local function resolveItemUUID(itemName, itemType)
         local uuid = findItemUUID(itemName, itemType)
         if uuid then return uuid end
-
         local locations = {}
         local bp = player:FindFirstChild("Backpack")
         if bp then table.insert(locations, bp) end
         if player.Character then table.insert(locations, player.Character) end
-
         for _, container in ipairs(locations) do
             for _, tool in ipairs(container:GetChildren()) do
                 if tool:IsA("Tool") then
@@ -9941,9 +9896,6 @@ do
         return true, nil
     end
 
-    -- ============================================================
-    -- REMOTE CALLS
-    -- ============================================================
     local function setRecipe(wb, recipeId)
         local wbType = wb:GetAttribute("CraftingObjectType")
         if not wbType then return false, "no type" end
@@ -9978,7 +9930,7 @@ do
         local wbType = wb:GetAttribute("CraftingObjectType")
         if not wbType then return false, "no type" end
         local ok, err = pcall(function()
-            CraftingService_local:Claim(wb, wbType, AC.SLOT_INDEX)
+            CraftingService_local:Claim(wb, wbType, AC_SLOT_INDEX)
         end)
         return ok, err
     end
@@ -9989,7 +9941,6 @@ do
         local ok, err = setRecipe(wb, recipeId)
         if not ok then return false, "SetRecipe: " .. tostring(err) end
         task.wait(0.5)
-
         if recipe.Inputs then
             for slotIndex, input in ipairs(recipe.Inputs) do
                 local itemName = input.ItemData and input.ItemData.ItemName
@@ -10000,15 +9951,60 @@ do
                 task.wait(0.4)
             end
         end
-
         local cOk, cErr = craft(wb)
         if not cOk then return false, "Craft: " .. tostring(cErr) end
         return true
     end
 
-    -- ============================================================
-    -- UI
-    -- ============================================================
+    -- ⭐ EKSPOSE ke BLOCK 15B via table
+    AutoCraft_Helpers = {
+        findWB = findWB,
+        getMachineStatus = getMachineStatus,
+        getRecipesForMachine = getRecipesForMachine,
+        checkInputs = checkInputs,
+        checkCost = checkCost,
+        processSubmit = processSubmit,
+        claim = claim,
+        AC_SLOT_INDEX = AC_SLOT_INDEX,
+    }
+end -- BLOCK 15A
+
+-- ==================================================================
+-- BLOCK 15B: AUTO CRAFTING — UI + LOOP (isolated)
+-- ==================================================================
+do
+    local H = AutoCraft_Helpers
+    if not H then
+        warn("[AoneHub] AutoCraft helpers tidak tersedia")
+        return
+    end
+
+    local farmScroll = _G.AoneHub_registry and _G.AoneHub_registry.farmScroll
+    local createSection = _G.AoneHub_registry and _G.AoneHub_registry.createSection
+    local C = _G.AoneHub_registry and _G.AoneHub_registry.C
+
+    if not farmScroll or not createSection or not C then
+        warn("[AoneHub] AutoCraft registry tidak lengkap")
+        return
+    end
+
+    local AC = {
+        MAX_FAILS = 3,
+        POLL_INTERVAL = 2,
+    }
+
+    local acState = {
+        gear = { workbench = nil, selectedRecipe = nil, running = false, failCount = 0 },
+        seed = { workbench = nil, selectedRecipe = nil, running = false, failCount = 0 },
+    }
+
+    local WORKBENCH_LIST = {
+        { key = "gear", label = "[GEAR]", machineType = "GearEventWorkbench",
+          color = Color3.fromRGB(120, 180, 255) },
+        { key = "seed", label = "[SEED]", machineType = "SeedEventWorkbench",
+          color = Color3.fromRGB(120, 220, 120) },
+    }
+
     local ACSection = createSection(farmScroll, "Auto Crafting", "autoCrafting")
     ACSection.LayoutOrder = 3
     ACSection.Size = UDim2.new(1, -10, 0, 300)
@@ -10122,18 +10118,11 @@ do
         Instance.new("UICorner", startBtn).CornerRadius = UDim.new(0, 4)
 
         acPanelRefs[cfg.key] = {
-            panel = panel,
-            statusLbl = statusLbl,
-            search = search,
-            scroll = scroll,
-            startBtn = startBtn,
-            cfg = cfg,
+            panel = panel, statusLbl = statusLbl, search = search,
+            scroll = scroll, startBtn = startBtn, cfg = cfg,
         }
     end
 
-    -- ============================================================
-    -- UI HELPERS
-    -- ============================================================
     local function setStatus(key, text, color)
         local ref = acPanelRefs[key]
         if not ref then return end
@@ -10147,9 +10136,6 @@ do
         end
     end
 
-    -- ============================================================
-    -- RENDER
-    -- ============================================================
     local function renderList(key)
         local ref = acPanelRefs[key]
         if not ref then return end
@@ -10158,7 +10144,7 @@ do
 
         clearChildren(ref.scroll)
 
-        local recipes = getRecipesForMachine(cfg.machineType)
+        local recipes = H.getRecipesForMachine(cfg.machineType)
         local searchText = ref.search.Text:lower()
         local filtered = {}
         for _, r in ipairs(recipes) do
@@ -10219,9 +10205,6 @@ do
         end
     end
 
-    -- ============================================================
-    -- CRAFT LOOP
-    -- ============================================================
     local function runLoop(key)
         local st = acState[key]
         local ref = acPanelRefs[key]
@@ -10229,7 +10212,7 @@ do
 
         task.spawn(function()
             while st.running do
-                st.workbench = findWB(ref.cfg.machineType)
+                st.workbench = H.findWB(ref.cfg.machineType)
 
                 if not st.workbench or not st.workbench.Parent then
                     setStatus(key, "Workbench not found", C.danger)
@@ -10240,44 +10223,41 @@ do
                     if not recipeId then
                         st.running = false
                     else
-                        local recipe = CraftingRecipeRegistry_local.ItemRecipes[recipeId]
+                        local status, info = H.getMachineStatus(st.workbench)
 
-                        if not recipe then
-                            setStatus(key, "Recipe not found", C.danger)
-                            st.running = false
-                        else
-                            local status, info = getMachineStatus(st.workbench)
-
-                            if status == "done" then
-                                setStatus(key, "Claiming...", C.warning)
-                                local cOk, cErr = claim(st.workbench)
-                                if cOk then
-                                    setStatus(key, "Claimed!", C.success)
-                                else
-                                    setStatus(key, "Claim fail: " .. tostring(cErr), C.warning)
-                                end
-                                task.wait(2)
-
-                            elseif status == "waiting" then
-                                local rem = info and info.timeRemaining or 0
-                                local remStr = string.format("%dm%ds",
-                                    math.floor(rem / 60), math.floor(rem % 60))
-                                setStatus(key, "Crafting (" .. remStr .. ")", C.accent)
-                                task.wait(AC.POLL_INTERVAL)
-
-                            elseif status == "empty" then
-                                local hasInputs, missing = checkInputs(recipe)
+                        if status == "done" then
+                            setStatus(key, "Claiming...", C.warning)
+                            local cOk, cErr = H.claim(st.workbench)
+                            if cOk then
+                                setStatus(key, "Claimed!", C.success)
+                            else
+                                setStatus(key, "Claim fail: " .. tostring(cErr), C.warning)
+                            end
+                            task.wait(2)
+                        elseif status == "waiting" then
+                            local rem = info and info.timeRemaining or 0
+                            local remStr = string.format("%dm%ds",
+                                math.floor(rem / 60), math.floor(rem % 60))
+                            setStatus(key, "Crafting (" .. remStr .. ")", C.accent)
+                            task.wait(AC.POLL_INTERVAL)
+                        elseif status == "empty" then
+                            local recipe = require(ReplicatedStorage.Data.CraftingData.CraftingRecipeRegistry).ItemRecipes[recipeId]
+                            if not recipe then
+                                setStatus(key, "Recipe not found", C.danger)
+                                st.running = false
+                            else
+                                local hasInputs, missing = H.checkInputs(recipe)
                                 if not hasInputs then
                                     setStatus(key, "Missing: " .. table.concat(missing, ", "), C.danger)
                                     st.running = false
                                 else
-                                    local hasCost, costErr = checkCost(recipe)
+                                    local hasCost, costErr = H.checkCost(recipe)
                                     if not hasCost then
                                         setStatus(key, tostring(costErr), C.danger)
                                         st.running = false
                                     else
                                         setStatus(key, "Submit " .. recipeId, C.text)
-                                        local ok, err = processSubmit(st.workbench, recipeId)
+                                        local ok, err = H.processSubmit(st.workbench, recipeId)
                                         if ok then
                                             st.failCount = 0
                                             setStatus(key, recipeId .. " sent", C.success)
@@ -10311,9 +10291,6 @@ do
         end)
     end
 
-    -- ============================================================
-    -- START BUTTON
-    -- ============================================================
     for _, cfg in ipairs(WORKBENCH_LIST) do
         local key = cfg.key
         local ref = acPanelRefs[key]
@@ -10328,8 +10305,7 @@ do
                 setStatus(key, "Stopped", C.textDim)
                 return
             end
-
-            st.workbench = findWB(cfg.machineType)
+            st.workbench = H.findWB(cfg.machineType)
             if not st.workbench then
                 setStatus(key, "Workbench not found", C.warning)
                 return
@@ -10338,7 +10314,6 @@ do
                 setStatus(key, "Select recipe first!", C.warning)
                 return
             end
-
             st.running = true
             st.failCount = 0
             ref.startBtn.Text = "STOP"
@@ -10351,17 +10326,14 @@ do
         end)
     end
 
-    -- ============================================================
-    -- INIT
-    -- ============================================================
     task.spawn(function()
         task.wait(0.5)
         for _, cfg in ipairs(WORKBENCH_LIST) do
             renderList(cfg.key)
-            local wb = findWB(cfg.machineType)
+            local wb = H.findWB(cfg.machineType)
             if wb then
                 acState[cfg.key].workbench = wb
-                local status, info = getMachineStatus(wb)
+                local status, info = H.getMachineStatus(wb)
                 if status == "waiting" and info then
                     local rem = info.timeRemaining or 0
                     local remStr = string.format("%dm%ds",
@@ -10378,17 +10350,16 @@ do
         end
     end)
 
-    -- Auto refresh status
     task.spawn(function()
         while ACSection and ACSection.Parent and not isGuiDestroyed do
             task.wait(3)
             for _, cfg in ipairs(WORKBENCH_LIST) do
                 local st = acState[cfg.key]
                 if not st.running then
-                    local wb = findWB(cfg.machineType)
+                    local wb = H.findWB(cfg.machineType)
                     if wb then
                         st.workbench = wb
-                        local status, info = getMachineStatus(wb)
+                        local status, info = H.getMachineStatus(wb)
                         if status == "waiting" and info then
                             local rem = info.timeRemaining or 0
                             local remStr = string.format("%dm%ds",
@@ -10411,4 +10382,4 @@ do
     end)
 
     print("[AoneHub] Auto Crafting section loaded")
-end -- BLOCK 15
+end -- BLOCK 15B
