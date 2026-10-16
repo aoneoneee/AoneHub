@@ -9706,4 +9706,710 @@ end)
         autoCollectSelectedMutations = config.autoCollectSelectedMutations
     end
 end)
+
+-- ==================================================================
+-- SECTION: AUTO CRAFTING (Gear & Seed)
+-- ==================================================================
+do
+    -- ============================================================
+    -- REQUIRE MODULES (isolated)
+    -- ============================================================
+    local CraftingRecipeRegistry_local = require(
+        ReplicatedStorage.Data.CraftingData.CraftingRecipeRegistry
+    )
+    local CraftingService_local = require(
+        ReplicatedStorage.Modules.CraftingService.CraftingGlobalObjectService
+    )
+    local InventoryService_local = require(ReplicatedStorage.Modules.InventoryService)
+
+    local DataService_local = nil
+    pcall(function()
+        DataService_local = require(ReplicatedStorage.Modules.DataService)
+    end)
+
+    local PetBoostRegistry_local = nil
+    pcall(function()
+        PetBoostRegistry_local = require(ReplicatedStorage.Data.PetRegistry.PetBoostRegistry)
+    end)
+
+    -- ============================================================
+    -- CONFIG & STATE
+    -- ============================================================
+    local AC = {
+        MAX_FAILS = 3,
+        POLL_INTERVAL = 2,
+        SLOT_INDEX = 1,
+    }
+
+    local acState = {
+        gear = { workbench = nil, selectedRecipe = nil, running = false, failCount = 0 },
+        seed = { workbench = nil, selectedRecipe = nil, running = false, failCount = 0 },
+    }
+
+    local WORKBENCH_LIST = {
+        {
+            key = "gear",
+            label = "[GEAR]",
+            machineType = "GearEventWorkbench",
+            color = Color3.fromRGB(120, 180, 255),
+        },
+        {
+            key = "seed",
+            label = "[SEED]",
+            machineType = "SeedEventWorkbench",
+            color = Color3.fromRGB(120, 220, 120),
+        },
+    }
+
+    -- ============================================================
+    -- HELPER: CARI WORKBENCH
+    -- ============================================================
+    local function findWB(machineType)
+        for _, obj in ipairs(CollectionService:GetTagged("CraftingObject")) do
+            if obj:IsA("Model") then
+                if obj:GetAttribute("CraftingObjectType") == machineType then
+                    return obj
+                end
+            end
+        end
+        return nil
+    end
+
+    local function getMachineStatus(workbench)
+        if not workbench or not workbench.Parent then
+            return "invalid", nil
+        end
+        local ok, machineData = pcall(function()
+            local wbType = workbench:GetAttribute("CraftingObjectType")
+            return CraftingService_local:GetIndividualCraftingMachineData(workbench, wbType)
+        end)
+        if not ok or not machineData then
+            return "empty", nil
+        end
+
+        local craftingItems = machineData.CraftingItems
+        if craftingItems and craftingItems[1] then
+            local item = craftingItems[1]
+            if item.IsDone then
+                return "done", { recipeId = item.RecipeId, timeRemaining = 0 }
+            else
+                return "waiting", {
+                    recipeId = item.RecipeId,
+                    timeRemaining = item.TimeRemaining or 0,
+                }
+            end
+        end
+        return "empty", { recipeId = machineData.RecipeId }
+    end
+
+    local function getRecipesForMachine(machineType)
+        local result = {}
+        for recipeName, recipe in pairs(CraftingRecipeRegistry_local.ItemRecipes) do
+            if recipe.MachineTypes then
+                for _, mt in ipairs(recipe.MachineTypes) do
+                    if mt == machineType then
+                        table.insert(result, { id = recipeName, recipe = recipe })
+                        break
+                    end
+                end
+            end
+        end
+        table.sort(result, function(a, b)
+            local ao = a.recipe.LayoutOrder or 9999
+            local bo = b.recipe.LayoutOrder or 9999
+            if ao ~= bo then return ao < bo end
+            return a.id < b.id
+        end)
+        return result
+    end
+
+    -- ============================================================
+    -- HELPER: CARI UUID
+    -- ============================================================
+    local function findItemUUID(itemName, itemType)
+        local ok, result = pcall(function()
+            return InventoryService_local:Find(itemType, function(itemData)
+                local displayName
+                if itemType == "PetEgg" then
+                    displayName = itemData.EggName
+                elseif itemType == "CosmeticCrate" then
+                    displayName = itemData.CrateType
+                elseif itemType == "SprayBottle" then
+                    displayName = itemData.SprayType
+                elseif itemType == "PetBoost" then
+                    local size = itemData.PetBoostSize
+                    local boostType = itemData.PetBoostType
+                    local boostName = PetBoostRegistry_local
+                        and PetBoostRegistry_local.BoostTypeToPetModelName
+                        and PetBoostRegistry_local.BoostTypeToPetModelName[boostType]
+                        or ""
+                    displayName = string.format("%s %s", tostring(size), tostring(boostName))
+                elseif itemType == "Seed Pack" then
+                    displayName = itemData.Type
+                elseif itemType == "PetShard" then
+                    displayName = itemData.ShardType
+                else
+                    displayName = itemData.ItemName or itemData.ITEM_TYPE or itemType
+                end
+                return displayName == itemName
+            end)
+        end)
+        if not ok or not result then return nil end
+        for uuid, itemData in pairs(result) do
+            if not (itemData.IsFavorite or itemData.Favorited) then
+                return uuid
+            end
+        end
+        return nil
+    end
+
+    local function resolveItemUUID(itemName, itemType)
+        local uuid = findItemUUID(itemName, itemType)
+        if uuid then return uuid end
+
+        local locations = {}
+        local bp = player:FindFirstChild("Backpack")
+        if bp then table.insert(locations, bp) end
+        if player.Character then table.insert(locations, player.Character) end
+
+        for _, container in ipairs(locations) do
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") then
+                    local name = tool:GetAttribute("ItemName")
+                        or tool:GetAttribute("EggName")
+                        or tool:GetAttribute("CrateType")
+                        or tool:GetAttribute("SprayType")
+                        or tool.Name
+                    if name == itemName then
+                        local toolUUID = tool:GetAttribute("ITEM_UUID")
+                            or tool:GetAttribute("PET_UUID")
+                        if toolUUID then return toolUUID end
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    -- ============================================================
+    -- PRE-CHECK
+    -- ============================================================
+    local function checkInputs(recipe)
+        if not recipe.Inputs then return true, {} end
+        local missing = {}
+        for idx, input in ipairs(recipe.Inputs) do
+            local itemName = input.ItemData and input.ItemData.ItemName
+            local itemType = input.ItemType
+            if not itemName then
+                table.insert(missing, "[Input " .. idx .. "]")
+            else
+                if not resolveItemUUID(itemName, itemType) then
+                    table.insert(missing, string.format("%s (%s)", itemName, itemType))
+                end
+            end
+        end
+        return (#missing == 0), missing
+    end
+
+    local function checkCost(recipe)
+        if not recipe.Cost then return true, nil end
+        if not DataService_local then return true, nil end
+        local ok, data = pcall(function() return DataService_local:GetData() end)
+        if not ok or not data then return true, nil end
+        local cType = recipe.Cost.CurrencyType or "Sheckles"
+        local amount = recipe.Cost.Amount or 0
+        local balance = 0
+        if cType == "Sheckles" then
+            balance = data.Sheckles or 0
+        elseif data.SpecialCurrency then
+            balance = data.SpecialCurrency[cType] or 0
+        end
+        if balance < amount then
+            return false, string.format("%s kurang (%s/%s)", cType, tostring(balance), tostring(amount))
+        end
+        return true, nil
+    end
+
+    -- ============================================================
+    -- REMOTE CALLS
+    -- ============================================================
+    local function setRecipe(wb, recipeId)
+        local wbType = wb:GetAttribute("CraftingObjectType")
+        if not wbType then return false, "no type" end
+        local ok, err = pcall(function()
+            CraftingService_local:SetRecipe(wb, wbType, recipeId)
+        end)
+        return ok, err
+    end
+
+    local function inputItem(wb, slotIndex, itemName, itemType)
+        local wbType = wb:GetAttribute("CraftingObjectType")
+        if not wbType then return false, "no type" end
+        local uuid = resolveItemUUID(itemName, itemType)
+        if not uuid then return false, "UUID not found: " .. tostring(itemName) end
+        local payload = { ItemType = itemType, ItemData = { UUID = uuid } }
+        local ok, err = pcall(function()
+            CraftingService_local:InputItem(wb, wbType, slotIndex, payload)
+        end)
+        return ok, err
+    end
+
+    local function craft(wb)
+        local wbType = wb:GetAttribute("CraftingObjectType")
+        if not wbType then return false, "no type" end
+        local ok, err = pcall(function()
+            CraftingService_local:Craft(wb, wbType)
+        end)
+        return ok, err
+    end
+
+    local function claim(wb)
+        local wbType = wb:GetAttribute("CraftingObjectType")
+        if not wbType then return false, "no type" end
+        local ok, err = pcall(function()
+            CraftingService_local:Claim(wb, wbType, AC.SLOT_INDEX)
+        end)
+        return ok, err
+    end
+
+    local function processSubmit(wb, recipeId)
+        local recipe = CraftingRecipeRegistry_local.ItemRecipes[recipeId]
+        if not recipe then return false, "recipe not found" end
+        local ok, err = setRecipe(wb, recipeId)
+        if not ok then return false, "SetRecipe: " .. tostring(err) end
+        task.wait(0.5)
+
+        if recipe.Inputs then
+            for slotIndex, input in ipairs(recipe.Inputs) do
+                local itemName = input.ItemData and input.ItemData.ItemName
+                local itemType = input.ItemType
+                if not itemName then return false, "input invalid" end
+                local iOk, iErr = inputItem(wb, slotIndex, itemName, itemType)
+                if not iOk then return false, "Input " .. itemName .. ": " .. tostring(iErr) end
+                task.wait(0.4)
+            end
+        end
+
+        local cOk, cErr = craft(wb)
+        if not cOk then return false, "Craft: " .. tostring(cErr) end
+        return true
+    end
+
+    -- ============================================================
+    -- UI: SECTION FRAME
+    -- ============================================================
+    -- Daftarkan ke section meta AoneHub
+    local ACSection = createSection(farmScroll, "Auto Crafting", "autoCrafting")
+    ACSection.LayoutOrder = 3
+    ACSection.Size = UDim2.new(1, -10, 0, 300)
+
+    -- Container 2 kolom
+    local acContainer = Instance.new("Frame")
+    acContainer.Size = UDim2.new(1, -20, 0, 264)
+    acContainer.Position = UDim2.new(0, 10, 0, 30)
+    acContainer.BackgroundTransparency = 1
+    acContainer.Parent = ACSection
+
+    local acPanelRefs = {}
+
+    for i, cfg in ipairs(WORKBENCH_LIST) do
+        local panel = Instance.new("Frame")
+        panel.Name = "ACPanel_" .. cfg.key
+        panel.Size = UDim2.new(0.5, -5, 1, 0)
+        panel.Position = UDim2.new((i-1) * 0.5, (i-1) * 10, 0, 0)
+        panel.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+        panel.BorderSizePixel = 0
+        panel.Parent = acContainer
+        Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 5)
+
+        -- Header
+        local hdr = Instance.new("Frame")
+        hdr.Size = UDim2.new(1, 0, 0, 22)
+        hdr.BackgroundColor3 = cfg.color
+        hdr.BackgroundTransparency = 0.7
+        hdr.BorderSizePixel = 0
+        hdr.Parent = panel
+        Instance.new("UICorner", hdr).CornerRadius = UDim.new(0, 5)
+        local hdrFill = Instance.new("Frame")
+        hdrFill.Size = UDim2.new(1, 0, 0.5, 0)
+        hdrFill.Position = UDim2.new(0, 0, 0.5, 0)
+        hdrFill.BackgroundColor3 = cfg.color
+        hdrFill.BackgroundTransparency = 0.7
+        hdrFill.BorderSizePixel = 0
+        hdrFill.Parent = hdr
+
+        local hdrLbl = Instance.new("TextLabel")
+        hdrLbl.Size = UDim2.new(1, -10, 1, 0)
+        hdrLbl.Position = UDim2.new(0, 6, 0, 0)
+        hdrLbl.BackgroundTransparency = 1
+        hdrLbl.Text = cfg.label
+        hdrLbl.TextColor3 = C.text
+        hdrLbl.Font = Enum.Font.GothamBold
+        hdrLbl.TextSize = 9
+        hdrLbl.TextXAlignment = Enum.TextXAlignment.Left
+        hdrLbl.Parent = hdr
+
+        -- Status
+        local statusLbl = Instance.new("TextLabel")
+        statusLbl.Size = UDim2.new(1, -12, 0, 22)
+        statusLbl.Position = UDim2.new(0, 6, 0, 26)
+        statusLbl.BackgroundTransparency = 1
+        statusLbl.Text = "Status: Idle"
+        statusLbl.TextColor3 = C.textDim
+        statusLbl.Font = Enum.Font.Gotham
+        statusLbl.TextSize = 7
+        statusLbl.TextXAlignment = Enum.TextXAlignment.Left
+        statusLbl.TextYAlignment = Enum.TextYAlignment.Top
+        statusLbl.TextWrapped = true
+        statusLbl.Parent = panel
+
+        -- Search
+        local search = Instance.new("TextBox")
+        search.Size = UDim2.new(1, -12, 0, 18)
+        search.Position = UDim2.new(0, 6, 0, 52)
+        search.BackgroundColor3 = C.input
+        search.BorderSizePixel = 0
+        search.Font = Enum.Font.Gotham
+        search.PlaceholderText = "Search..."
+        search.Text = ""
+        search.TextColor3 = C.text
+        search.TextSize = 8
+        search.ClearTextOnFocus = false
+        search.Parent = panel
+        Instance.new("UICorner", search).CornerRadius = UDim.new(0, 3)
+
+        -- Item list
+        local listFrame = Instance.new("Frame")
+        listFrame.Size = UDim2.new(1, -12, 0, 140)
+        listFrame.Position = UDim2.new(0, 6, 0, 74)
+        listFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+        listFrame.BorderSizePixel = 0
+        listFrame.Parent = panel
+        Instance.new("UICorner", listFrame).CornerRadius = UDim.new(0, 3)
+
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.Size = UDim2.new(1, -4, 1, -4)
+        scroll.Position = UDim2.new(0, 2, 0, 2)
+        scroll.BackgroundTransparency = 1
+        scroll.BorderSizePixel = 0
+        scroll.ScrollBarThickness = 3
+        scroll.ScrollBarImageColor3 = C.accent
+        scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+        scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scroll.Parent = listFrame
+
+        local layout = Instance.new("UIListLayout")
+        layout.Padding = UDim.new(0, 2)
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Parent = scroll
+
+        -- Start button
+        local startBtn = Instance.new("TextButton")
+        startBtn.Size = UDim2.new(1, -12, 0, 24)
+        startBtn.Position = UDim2.new(0, 6, 1, -30)
+        startBtn.BackgroundColor3 = C.success
+        startBtn.BorderSizePixel = 0
+        startBtn.Font = Enum.Font.GothamBold
+        startBtn.Text = "START"
+        startBtn.TextColor3 = C.text
+        startBtn.TextSize = 9
+        startBtn.AutoButtonColor = false
+        startBtn.Parent = panel
+        Instance.new("UICorner", startBtn).CornerRadius = UDim.new(0, 4)
+
+        acPanelRefs[cfg.key] = {
+            panel = panel,
+            statusLbl = statusLbl,
+            search = search,
+            scroll = scroll,
+            startBtn = startBtn,
+            cfg = cfg,
+        }
+    end
+
+    -- ============================================================
+    -- UI HELPERS
+    -- ============================================================
+    local function setStatus(key, text, color)
+        local ref = acPanelRefs[key]
+        if not ref then return end
+        ref.statusLbl.Text = "Status: " .. text
+        ref.statusLbl.TextColor3 = color or C.text
+    end
+
+    local function clearChildren(parent)
+        for _, c in ipairs(parent:GetChildren()) do
+            if c:IsA("GuiObject") then c:Destroy() end
+        end
+    end
+
+    -- ============================================================
+    -- RENDER ITEM LIST
+    -- ============================================================
+    local function renderList(key)
+        local ref = acPanelRefs[key]
+        if not ref then return end
+        local st = acState[key]
+        local cfg = ref.cfg
+
+        clearChildren(ref.scroll)
+
+        local recipes = getRecipesForMachine(cfg.machineType)
+        local searchText = ref.search.Text:lower()
+        local filtered = {}
+        for _, r in ipairs(recipes) do
+            if searchText == "" or r.id:lower():find(searchText, 1, true) then
+                table.insert(filtered, r)
+            end
+        end
+
+        if #filtered == 0 then
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(1, 0, 0, 24)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = "No recipe"
+            lbl.TextColor3 = C.textDim
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 8
+            lbl.Parent = ref.scroll
+            return
+        end
+
+        for i, r in ipairs(filtered) do
+            local isSel = (st.selectedRecipe == r.id)
+            local recipe = r.recipe
+            local outputName = "?"
+            if recipe.Outputs and recipe.Outputs[1] then
+                outputName = recipe.Outputs[1].ItemData.ItemName or "?"
+            end
+            local timeSec = recipe.TimeToCraft or 0
+            local timeStr = string.format("%dm", math.floor(timeSec / 60))
+            local costStr = ""
+            if recipe.Cost then
+                costStr = string.format(" | $%s", tostring(recipe.Cost.Amount))
+            end
+
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -4, 0, 22)
+            btn.BackgroundColor3 = isSel and C.itemSel or C.itemRow
+            btn.BorderSizePixel = 0
+            btn.Font = Enum.Font.Gotham
+            btn.Text = string.format("%s %s%s (%s)",
+                isSel and "[x]" or "[ ]", r.id, costStr, timeStr)
+            btn.TextColor3 = C.text
+            btn.TextSize = 7
+            btn.TextXAlignment = Enum.TextXAlignment.Left
+            btn.TextTruncate = Enum.TextTruncate.AtEnd
+            btn.LayoutOrder = i
+            btn.AutoButtonColor = false
+            btn.Parent = ref.scroll
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+            local pad = Instance.new("UIPadding")
+            pad.PaddingLeft = UDim.new(0, 4)
+            pad.Parent = btn
+
+            btn.MouseButton1Click:Connect(function()
+                if st.selectedRecipe == r.id then
+                    st.selectedRecipe = nil
+                else
+                    st.selectedRecipe = r.id
+                end
+                renderList(key)
+            end)
+        end
+    end
+
+    -- ============================================================
+    -- CRAFT LOOP
+    -- ============================================================
+    local function runLoop(key)
+        local st = acState[key]
+        local ref = acPanelRefs[key]
+        if not ref then return end
+
+        task.spawn(function()
+            while st.running do
+                st.workbench = findWB(ref.cfg.machineType)
+
+                if not st.workbench or not st.workbench.Parent then
+                    setStatus(key, "Workbench not found", C.danger)
+                    task.wait(2)
+                else
+                    local recipeId = st.selectedRecipe
+
+                    if not recipeId then
+                        st.running = false
+                    else
+                        local recipe = CraftingRecipeRegistry_local.ItemRecipes[recipeId]
+
+                        if not recipe then
+                            setStatus(key, "Recipe not found", C.danger)
+                            st.running = false
+                        else
+                            local status, info = getMachineStatus(st.workbench)
+
+                            if status == "done" then
+                                setStatus(key, "Claiming...", C.warning)
+                                local cOk, cErr = claim(st.workbench)
+                                if cOk then
+                                    setStatus(key, "Claimed!", C.success)
+                                else
+                                    setStatus(key, "Claim fail: " .. tostring(cErr), C.warning)
+                                end
+                                task.wait(2)
+
+                            elseif status == "waiting" then
+                                local rem = info and info.timeRemaining or 0
+                                local remStr = string.format("%dm%ds",
+                                    math.floor(rem / 60), math.floor(rem % 60))
+                                setStatus(key, "Crafting (" .. remStr .. ")", C.accent)
+                                task.wait(AC.POLL_INTERVAL)
+
+                            elseif status == "empty" then
+                                local hasInputs, missing = checkInputs(recipe)
+                                if not hasInputs then
+                                    setStatus(key, "Missing: " .. table.concat(missing, ", "), C.danger)
+                                    st.running = false
+                                else
+                                    local hasCost, costErr = checkCost(recipe)
+                                    if not hasCost then
+                                        setStatus(key, tostring(costErr), C.danger)
+                                        st.running = false
+                                    else
+                                        setStatus(key, "Submit " .. recipeId, C.text)
+                                        local ok, err = processSubmit(st.workbench, recipeId)
+                                        if ok then
+                                            st.failCount = 0
+                                            setStatus(key, recipeId .. " sent", C.success)
+                                        else
+                                            st.failCount = st.failCount + 1
+                                            setStatus(key, string.format("(%d/%d) %s",
+                                                st.failCount, AC.MAX_FAILS, tostring(err)), C.warning)
+                                            if st.failCount >= AC.MAX_FAILS then
+                                                setStatus(key, "Failed " .. AC.MAX_FAILS .. "x", C.danger)
+                                                st.running = false
+                                            else
+                                                task.wait(3)
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+                task.wait(0.5)
+            end
+
+            st.running = false
+            st.failCount = 0
+            if ref.startBtn and ref.startBtn.Parent then
+                ref.startBtn.Text = "START"
+                ref.startBtn.BackgroundColor3 = C.success
+            end
+            setStatus(key, "Idle", C.textDim)
+        end)
+    end
+
+    -- ============================================================
+    -- START BUTTON
+    -- ============================================================
+    for _, cfg in ipairs(WORKBENCH_LIST) do
+        local key = cfg.key
+        local ref = acPanelRefs[key]
+        local st = acState[key]
+
+        ref.startBtn.MouseButton1Click:Connect(function()
+            if st.running then
+                st.running = false
+                st.failCount = 0
+                ref.startBtn.Text = "START"
+                ref.startBtn.BackgroundColor3 = C.success
+                setStatus(key, "Stopped", C.textDim)
+                return
+            end
+
+            st.workbench = findWB(cfg.machineType)
+            if not st.workbench then
+                setStatus(key, "Workbench not found", C.warning)
+                return
+            end
+            if not st.selectedRecipe then
+                setStatus(key, "Select recipe first!", C.warning)
+                return
+            end
+
+            st.running = true
+            st.failCount = 0
+            ref.startBtn.Text = "STOP"
+            ref.startBtn.BackgroundColor3 = C.danger
+            runLoop(key)
+        end)
+
+        ref.search:GetPropertyChangedSignal("Text"):Connect(function()
+            renderList(key)
+        end)
+    end
+
+    -- ============================================================
+    -- INIT
+    -- ============================================================
+    task.spawn(function()
+        task.wait(0.5)
+        for _, cfg in ipairs(WORKBENCH_LIST) do
+            renderList(cfg.key)
+            local wb = findWB(cfg.machineType)
+            if wb then
+                acState[cfg.key].workbench = wb
+                local status, info = getMachineStatus(wb)
+                if status == "waiting" and info then
+                    local rem = info.timeRemaining or 0
+                    local remStr = string.format("%dm%ds",
+                        math.floor(rem / 60), math.floor(rem % 60))
+                    setStatus(cfg.key, "Crafting (" .. remStr .. ")", C.accent)
+                elseif status == "done" then
+                    setStatus(cfg.key, "Ready to claim", C.warning)
+                else
+                    setStatus(cfg.key, "Ready", C.success)
+                end
+            else
+                setStatus(cfg.key, "Workbench not found", C.warning)
+            end
+        end
+    end)
+
+    -- Auto refresh status idle
+    task.spawn(function()
+        while ACSection and ACSection.Parent and not isGuiDestroyed do
+            task.wait(3)
+            for _, cfg in ipairs(WORKBENCH_LIST) do
+                local st = acState[cfg.key]
+                if not st.running then
+                    local wb = findWB(cfg.machineType)
+                    if wb then
+                        st.workbench = wb
+                        local status, info = getMachineStatus(wb)
+                        if status == "waiting" and info then
+                            local rem = info.timeRemaining or 0
+                            local remStr = string.format("%dm%ds",
+                                math.floor(rem / 60), math.floor(rem % 60))
+                            setStatus(cfg.key, "Crafting (" .. remStr .. ")", C.accent)
+                        elseif status == "done" then
+                            setStatus(cfg.key, "Ready to claim", C.warning)
+                        elseif status == "empty" and st.workbench then
+                            setStatus(cfg.key, "Ready", C.success)
+                        end
+                    else
+                        if st.workbench then
+                            setStatus(cfg.key, "Workbench gone", C.warning)
+                            st.workbench = nil
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    print("[AoneHub] Auto Crafting section loaded")
+end
 end -- BLOCK 14
