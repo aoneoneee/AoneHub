@@ -9974,19 +9974,31 @@ end -- BLOCK 15A
 -- ==================================================================
 do
     local H = AutoCraft_Helpers
-    if not H then
-        warn("[AoneHub] AutoCraft helpers tidak tersedia")
-        return
-    end
+    if not H then return end
 
     local farmScroll = _G.AoneHub_registry and _G.AoneHub_registry.farmScroll
     local createSection = _G.AoneHub_registry and _G.AoneHub_registry.createSection
-    local C = _G.AoneHub_registry and _G.AoneHub_registry.C
 
-    if not farmScroll or not createSection or not C then
+    if not farmScroll or not createSection then
         warn("[AoneHub] AutoCraft registry tidak lengkap")
         return
     end
+
+    -- ⭐ C lokal untuk Auto Crafting section
+    local C = {
+        bg        = Color3.fromRGB(28, 28, 35),
+        header    = Color3.fromRGB(18, 18, 24),
+        accent    = Color3.fromRGB(80, 120, 200),
+        success   = Color3.fromRGB(50, 180, 50),
+        danger    = Color3.fromRGB(200, 50, 50),
+        warning   = Color3.fromRGB(255, 200, 0),
+        text      = Color3.fromRGB(240, 240, 240),
+        textDim   = Color3.fromRGB(150, 150, 160),
+        input     = Color3.fromRGB(55, 55, 70),
+        section   = Color3.fromRGB(38, 38, 48),
+        itemRow   = Color3.fromRGB(45, 45, 58),
+        itemSel   = Color3.fromRGB(60, 130, 220),
+    }
 
     local AC = {
         MAX_FAILS = 3,
