@@ -10552,3 +10552,823 @@ do
 
     print("[AoneHub] Auto Crafting section loaded")
 end -- BLOCK 15B
+
+-- ==================================================================
+-- BLOCK 16A: AUTO MUTATION - STATE & HELPERS
+-- ==================================================================
+local AutoMutation_Shared = nil
+
+do 
+    local DataService = DataService -- Ambil dari AoneHub utama
+    local PetsService = PetsService
+    local PetsServiceRE = ReplicatedStorage.GameEvents:WaitForChild("PetsService")
+    local PetMutationRE = ReplicatedStorage.GameEvents:WaitForChild("PetMutationMachineService_RE")
+    
+    local PetMutationMachineData = nil
+    pcall(function() PetMutationMachineData = require(ReplicatedStorage.Data.PetMutationMachineData) end)
+    local PetMutationRegistry = nil
+    pcall(function() PetMutationRegistry = require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry) end)
+    local PetRegistry = nil
+    pcall(function() PetRegistry = require(ReplicatedStorage.Data.PetRegistry) end)
+
+    local AONEHUB_CONFIG_PATH = "AoneHub/AoneHub_Gag1.json"
+    local cachedAoneHubConfig = nil
+
+    local function loadAoneHubConfig(forceRefresh)
+        if cachedAoneHubConfig and not forceRefresh then return cachedAoneHubConfig end
+        local ok, raw = pcall(readfile, AONEHUB_CONFIG_PATH)
+        if not ok or not raw then return nil end
+        local ok2, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+        if not ok2 or type(decoded) ~= "table" then return nil end
+        cachedAoneHubConfig = decoded
+        return decoded
+    end
+
+    local function refreshAoneHubConfig()
+        cachedAoneHubConfig = nil
+        return loadAoneHubConfig(true)
+    end
+
+    local function getPresetNamesFromAoneHub()
+        local config = loadAoneHubConfig()
+        if not config or not config.teamPresets then return {} end
+        local names = {}
+        for name, _ in pairs(config.teamPresets) do table.insert(names, name) end
+        table.sort(names)
+        return names
+    end
+
+    local function getPresetUUIDs(presetName)
+        if not presetName then return {} end
+        local config = loadAoneHubConfig()
+        if not config or not config.teamPresets then return {} end
+        local preset = config.teamPresets[presetName]
+        if not preset or not preset.pets then return {} end
+        local uuids = {}
+        for _, petInfo in ipairs(preset.pets) do
+            if petInfo.UUID then table.insert(uuids, petInfo.UUID) end
+        end
+        return uuids
+    end
+
+    -- State Auto Mutation
+    local state = {
+        selectedPetTypes = {},
+        unwantedMutations = {},
+        levelingPreset = nil,
+        machinePreset = nil,
+        claimPreset = nil,
+        levelingSlot = 1,
+        machineSlot = 2,
+        claimSlot = 3,
+        minLevel = 50,
+        isRunning = false,
+        currentPhase = "idle",
+        lastLoadoutSlot = nil,
+    }
+
+    -- Load state dari config AoneHub (jika ada)
+    local config = loadAoneHubConfig()
+    if config and config.autoMutationState then
+        for k, v in pairs(config.autoMutationState) do
+            if state[k] ~= nil then state[k] = v end
+        end
+    end
+
+    -- Helper Data
+    local function getPetInventory()
+        local data = DataService:GetData()
+        if not data or not data.PetsData then return {} end
+        return data.PetsData.PetInventory.Data or {}
+    end
+    
+    local function getPetData(uuid) return getPetInventory()[uuid] end
+    local function getPetType(uuid) local p = getPetData(uuid); return p and (p.PetType or (p.PetData and p.PetData.PetType)) or "Unknown" end
+    local function getPetLevel(uuid) local p = getPetData(uuid); return p and (p.Level or (p.PetData and p.PetData.Level)) or 0 end
+    local function isPetFavorited(uuid) local p = getPetData(uuid); return p and (p.IsFavorite or (p.PetData and p.PetData.IsFavorite)) or false end
+    
+    local function getPetMutation(uuid)
+        local p = getPetData(uuid)
+        if not p then return nil end
+        local mt = p.MutationType or (p.PetData and p.PetData.MutationType)
+        if not mt or mt == "None" or mt == "Normal" or mt == "m" then return nil end
+        if PetMutationRegistry and PetMutationRegistry.EnumToPetMutation then
+            return PetMutationRegistry.EnumToPetMutation[mt] or mt
+        end
+        return mt
+    end
+
+    local function getEquippedPets()
+        local data = DataService:GetData()
+        return (data and data.PetsData and data.PetsData.EquippedPets) or {}
+    end
+
+    local function getMachineData()
+        local data = DataService:GetData()
+        return data and data.PetMutationMachine
+    end
+
+    -- Ekpos ke blok berikutnya
+    AutoMutation_Shared = {
+        state = state,
+        loadAoneHubConfig = loadAoneHubConfig,
+        refreshAoneHubConfig = refreshAoneHubConfig,
+        getPresetNamesFromAoneHub = getPresetNamesFromAoneHub,
+        getPresetUUIDs = getPresetUUIDs,
+        getPetInventory = getPetInventory,
+        getPetType = getPetType,
+        getPetLevel = getPetLevel,
+        isPetFavorited = isPetFavorited,
+        getPetMutation = getPetMutation,
+        getEquippedPets = getEquippedPets,
+        getMachineData = getMachineData,
+        DataService = DataService,
+        PetsService = PetsService,
+        PetsServiceRE = PetsServiceRE,
+        PetMutationRE = PetMutationRE,
+    }
+end
+
+-- ==================================================================
+-- BLOCK 16B: AUTO MUTATION - CORE LOGIC
+-- ==================================================================
+local AutoMutation_Logic = nil
+
+do
+    local S = AutoMutation_Shared
+    if not S then return end
+
+    local state = S.state
+    local DataService = S.DataService
+    local PetsService = S.PetsService
+    local PetsServiceRE = S.PetsServiceRE
+    local PetMutationRE = S.PetMutationRE
+
+    local function setLog(text)
+        if _G.AoneHub_AM_SetLog then _G.AoneHub_AM_SetLog(text) end
+        print("[AutoMutation]", text)
+    end
+    local function setStatus(text)
+        if _G.AoneHub_AM_SetStatus then _G.AoneHub_AM_SetStatus(text) end
+    end
+
+    local function verifyEquippedMatchesPreset(presetName)
+        if not presetName then return true, {}, {} end
+        local expected = S.getPresetUUIDs(presetName)
+        local equipped = S.getEquippedPets()
+        if #expected == 0 then return true, {}, {} end
+        local expSet, eqSet = {}, {}
+        for _, u in ipairs(expected) do expSet[u] = true end
+        for _, u in ipairs(equipped) do eqSet[u] = true end
+        
+        local toUnequip, toEquip = {}, {}
+        for _, u in ipairs(equipped) do if not expSet[u] then table.insert(toUnequip, u) end end
+        for _, u in ipairs(expected) do if not eqSet[u] then table.insert(toEquip, u) end end
+        return (#toUnequip == 0 and #toEquip == 0), toUnequip, toEquip
+    end
+
+    local function fixEquippedToMatchPreset(presetName)
+        local isMatch, toUnequip, toEquip = verifyEquippedMatchesPreset(presetName)
+        if isMatch then return true end
+        for _, uuid in ipairs(toUnequip) do pcall(function() PetsService:UnequipPet(uuid) end); task.wait(0.4) end
+        for _, uuid in ipairs(toEquip) do 
+            if S.getPetData(uuid) then pcall(function() PetsService:EquipPet(uuid, CFrame.new(0,10,0)) end); task.wait(0.4) end
+        end
+        task.wait(1)
+        return (verifyEquippedMatchesPreset(presetName))
+    end
+
+    local function swapLoadout(slotNumber, presetName)
+        if not slotNumber then return false end
+        if state.lastLoadoutSlot == slotNumber then
+            if presetName then
+                local isMatch = verifyEquippedMatchesPreset(presetName)
+                if isMatch then return true end
+                return fixEquippedToMatchPreset(presetName)
+            end
+            return true
+        end
+        pcall(function() PetsServiceRE:FireServer("SwapPetLoadout", slotNumber) end)
+        task.wait(6)
+        state.lastLoadoutSlot = slotNumber
+        if presetName then
+            local isMatch = verifyEquippedMatchesPreset(presetName)
+            if isMatch then setLog("OK "..presetName) return true end
+            setLog("Fixing "..presetName)
+            return fixEquippedToMatchPreset(presetName)
+        end
+        return true
+    end
+
+    local function equipPresetBySlot(slotNumber, presetName)
+        if not slotNumber then return false end
+        return swapLoadout(slotNumber, presetName)
+    end
+
+    local function unequipAllPets()
+        local equipped = S.getEquippedPets()
+        for _, uuid in ipairs(equipped) do pcall(function() PetsService:UnequipPet(uuid) end); task.wait(0.4) end
+        state.lastLoadoutSlot = nil
+    end
+
+    local function fireSubmit() return pcall(function() PetMutationRE:FireServer("SubmitHeldPet") end) end
+    local function fireStart() return pcall(function() PetMutationRE:FireServer("StartMachine") end) end
+    local function fireClaim() return pcall(function() PetMutationRE:FireServer("ClaimMutatedPet") end) end
+
+    local function findPetToolByUUID(uuid)
+        local targetType = S.getPetType(uuid)
+        local mutation = S.getPetMutation(uuid)
+        local expectedName = mutation and (mutation .. " " .. targetType) or targetType
+        local locations = {}
+        local bp = player:FindFirstChild("Backpack")
+        if bp then table.insert(locations, bp) end
+        if player.Character then table.insert(locations, player.Character) end
+        for _, container in ipairs(locations) do
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "Pet" then
+                    local toolName = tool.Name
+                    if toolName == expectedName or toolName == targetType or tool:GetAttribute("PET_UUID") == uuid then
+                        return tool
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    local function submitPet(petUUID)
+        local petType = S.getPetType(petUUID)
+        if table.find(S.getEquippedPets(), petUUID) then
+            setStatus("Unequip "..petType)
+            pcall(function() PetsService:UnequipPet(petUUID) end)
+            task.wait(2)
+        end
+        setStatus("Cari tool "..petType)
+        local waitStart = os.clock()
+        local tool = nil
+        while (os.clock() - waitStart) < 10 do
+            tool = findPetToolByUUID(petUUID)
+            if tool then break end
+            task.wait(0.5)
+        end
+        if not tool then setStatus("Tool tidak ada") return false end
+        
+        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return false end
+        pcall(function() humanoid:EquipTool(tool) end)
+        task.wait(1)
+        return fireSubmit()
+    end
+
+    local function getMutationStatus(uuid)
+        local mutation = S.getPetMutation(uuid)
+        if not mutation then return "none" end
+        if state.unwantedMutations[mutation] then return "unwanted" end
+        return "desired"
+    end
+
+    local function getTargetPets()
+        local inv = S.getPetInventory()
+        local result = {}
+        for uuid, _ in pairs(inv) do
+            local petType = S.getPetType(uuid)
+            if state.selectedPetTypes[petType] and not S.isPetFavorited(uuid) then
+                table.insert(result, uuid)
+            end
+        end
+        return result
+    end
+
+    local function getPetsNeedingLevel()
+        local result = {}
+        for _, uuid in ipairs(getTargetPets()) do
+            if S.getPetLevel(uuid) < state.minLevel and getMutationStatus(uuid) ~= "desired" then
+                table.insert(result, uuid)
+            end
+        end
+        return result
+    end
+
+    local function getPetsReadyForSubmit()
+        local result = {}
+        for _, uuid in ipairs(getTargetPets()) do
+            if S.getPetLevel(uuid) >= state.minLevel and getMutationStatus(uuid) ~= "desired" then
+                table.insert(result, uuid)
+            end
+        end
+        return result
+    end
+
+    local function isMachineBusy()
+        local m = S.getMachineData()
+        if not m then return false end
+        return (m.SubmittedPet ~= nil or m.IsRunning == true or (m.TimeLeft and m.TimeLeft > 0) or m.PetReady == true)
+    end
+
+    local function runLoop()
+        task.spawn(function()
+            local failCount = 0
+            while state.isRunning do
+                task.wait(2)
+                if not state.isRunning then break end
+                
+                local machineData = S.getMachineData()
+                local machineBusy = isMachineBusy()
+
+                if not machineBusy and #getTargetPets() > 0 then
+                    local allDone = true
+                    for _, u in ipairs(getTargetPets()) do if getMutationStatus(u) ~= "desired" then allDone = false break end end
+                    if allDone then setStatus("All Done!") state.isRunning = false break end
+                end
+
+                if not machineData then
+                    failCount = failCount + 1
+                    if failCount >= 3 then state.isRunning = false break end
+                else
+                    failCount = 0
+                    if machineData.PetReady then
+                        setStatus("Claiming...")
+                        if state.claimPreset then equipPresetBySlot(state.claimSlot, state.claimPreset) end
+                        fireClaim()
+                        task.wait(3)
+                        if _G.AoneHub_AM_RenderTargetList then _G.AoneHub_AM_RenderTargetList() end
+                        if state.machinePreset then equipPresetBySlot(state.machineSlot, state.machinePreset) end
+                        task.wait(1)
+                    elseif machineData.IsRunning or (machineData.TimeLeft and machineData.TimeLeft > 0) then
+                        local t = machineData.TimeLeft or 0
+                        setStatus(string.format("Running (%dm%ds)", math.floor(t/60), t%60))
+                        if state.machinePreset then equipPresetBySlot(state.machineSlot, state.machinePreset) end
+                    elseif machineData.SubmittedPet and not machineData.IsRunning then
+                        setStatus("Starting...")
+                        if state.machinePreset then equipPresetBySlot(state.machineSlot, state.machinePreset) end
+                        fireStart()
+                        task.wait(3)
+                    else
+                        local ready = getPetsReadyForSubmit()
+                        if #ready > 0 then
+                            setStatus("Submit "..S.getPetType(ready[1]))
+                            if submitPet(ready[1]) then
+                                task.wait(3)
+                                if _G.AoneHub_AM_RenderTargetList then _G.AoneHub_AM_RenderTargetList() end
+                                if state.machinePreset then equipPresetBySlot(state.machineSlot, state.machinePreset) end
+                            else task.wait(2) end
+                        else
+                            local needLvl = getPetsNeedingLevel()
+                            if #needLvl > 0 then
+                                setStatus("Leveling "..#needLvl.." pet...")
+                                if state.levelingPreset then equipPresetBySlot(state.levelingSlot, state.levelingPreset) end
+                                local slots = 8 - #S.getEquippedPets()
+                                local eqList = {}
+                                for i = 1, math.min(slots, #needLvl) do
+                                    pcall(function() PetsService:EquipPet(needLvl[i], CFrame.new(0,10,0)) end)
+                                    table.insert(eqList, needLvl[i])
+                                    task.wait(0.5)
+                                end
+                                -- Wait Level
+                                local tStart = os.clock()
+                                while state.isRunning and (os.clock() - tStart) < 900 do
+                                    local allDone = true
+                                    for _, u in ipairs(eqList) do if S.getPetLevel(u) < state.minLevel then allDone = false break end end
+                                    if allDone then break end
+                                    task.wait(2)
+                                end
+                            else
+                                setStatus("Menunggu...")
+                                task.wait(5)
+                            end
+                        end
+                    end
+                end
+            end
+            setStatus("Stopped")
+        end)
+    end
+
+    AutoMutation_Logic = {
+        runLoop = runLoop,
+        getPresetNames = S.getPresetNamesFromAoneHub,
+        saveState = function()
+            local config = S.loadAoneHubConfig(true)
+            if config then
+                config.autoMutationState = state
+                -- Save ke file JSON AoneHub
+                local s, json = pcall(HttpService.JSONEncode, HttpService, config)
+                if s then pcall(writefile, "AoneHub/AoneHub_Gag1.json", json) end
+            end
+        end
+    }
+end
+
+-- ==================================================================
+-- BLOCK 16C: AUTO MUTATION - UI
+-- ==================================================================
+do
+    local S = AutoMutation_Shared
+    local L = AutoMutation_Logic
+    if not S or not L then return end
+    
+    local state = S.state
+    local mutationTab = tabFrames["Mutation"]
+    if not mutationTab then return end
+
+    -- Gunakan fungsi createSection yang sudah ada di AoneHub
+    local amScroll = Instance.new("ScrollingFrame")
+    amScroll.Size = UDim2.new(1, -10, 1, -10)
+    amScroll.Position = UDim2.new(0, 5, 0, 5)
+    amScroll.BackgroundTransparency = 1
+    amScroll.BorderSizePixel = 0
+    amScroll.ScrollBarThickness = 4
+    amScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    amScroll.Parent = mutationTab
+
+    local amLayout = Instance.new("UIListLayout")
+    amLayout.Padding = UDim.new(0, 6)
+    amLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    amLayout.Parent = amScroll
+
+    -- ============================================================
+    -- SECTION 1: CONFIG (Min Level)
+    -- ============================================================
+    local cfgSection = createSection(amScroll, "⚙️ Configuration", "amConfig")
+    cfgSection.LayoutOrder = 1
+    cfgSection.Size = UDim2.new(1, -10, 0, 80)
+    
+    local minLvlLbl = Instance.new("TextLabel")
+    minLvlLbl.Size = UDim2.new(0.5, -15, 0, 16)
+    minLvlLbl.Position = UDim2.new(0, 10, 0, 28)
+    minLvlLbl.BackgroundTransparency = 1
+    minLvlLbl.Text = "Minimum Level Target:"
+    minLvlLbl.TextColor3 = C.textDim
+    minLvlLbl.Font = Enum.Font.Gotham
+    minLvlLbl.TextSize = 9
+    minLvlLbl.TextXAlignment = Enum.TextXAlignment.Left
+    minLvlLbl.Parent = cfgSection
+
+    local minLvlBox = Instance.new("TextBox")
+    minLvlBox.Size = UDim2.new(0.5, -15, 0, 20)
+    minLvlBox.Position = UDim2.new(0.5, 5, 0, 26)
+    minLvlBox.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    minLvlBox.BorderSizePixel = 0
+    minLvlBox.Font = Enum.Font.GothamBold
+    minLvlBox.Text = tostring(state.minLevel)
+    minLvlBox.TextColor3 = C.text
+    minLvlBox.TextSize = 9
+    minLvlBox.Parent = cfgSection
+    Instance.new("UICorner", minLvlBox).CornerRadius = UDim.new(0, 3)
+    
+    minLvlBox.FocusLost:Connect(function()
+        local n = tonumber(minLvlBox.Text)
+        if n and n >= 1 and n <= 9999 then
+            state.minLevel = math.floor(n)
+            L.saveState()
+        else
+            minLvlBox.Text = tostring(state.minLevel)
+        end
+    end)
+
+    -- ============================================================
+    -- SECTION 2: PET TARGET
+    -- ============================================================
+    local targetSection = createSection(amScroll, "🎯 Pet Target", "amTarget")
+    targetSection.LayoutOrder = 2
+    targetSection.Size = UDim2.new(1, -10, 0, 170)
+
+    local targetSearch = Instance.new("TextBox")
+    targetSearch.Size = UDim2.new(1, -75, 0, 20)
+    targetSearch.Position = UDim2.new(0, 10, 0, 28)
+    targetSearch.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    targetSearch.BorderSizePixel = 0
+    targetSearch.Font = Enum.Font.Gotham
+    targetSearch.PlaceholderText = "Cari pet..."
+    targetSearch.TextColor3 = C.text
+    targetSearch.TextSize = 9
+    targetSearch.Parent = targetSection
+    Instance.new("UICorner", targetSearch).CornerRadius = UDim.new(0, 4)
+
+    local targetAllBtn = Instance.new("TextButton")
+    targetAllBtn.Size = UDim2.new(0, 25, 0, 20)
+    targetAllBtn.Position = UDim2.new(1, -60, 0, 28)
+    targetAllBtn.BackgroundColor3 = C.accent
+    targetAllBtn.Text = "All"
+    targetAllBtn.TextColor3 = C.text
+    targetAllBtn.TextSize = 8
+    targetAllBtn.Font = Enum.Font.GothamBold
+    targetAllBtn.Parent = targetSection
+    Instance.new("UICorner", targetAllBtn).CornerRadius = UDim.new(0, 3)
+
+    local targetClrBtn = Instance.new("TextButton")
+    targetClrBtn.Size = UDim2.new(0, 25, 0, 20)
+    targetClrBtn.Position = UDim2.new(1, -30, 0, 28)
+    targetClrBtn.BackgroundColor3 = C.danger
+    targetClrBtn.Text = "Clr"
+    targetClrBtn.TextColor3 = C.text
+    targetClrBtn.TextSize = 8
+    targetClrBtn.Font = Enum.Font.GothamBold
+    targetClrBtn.Parent = targetSection
+    Instance.new("UICorner", targetClrBtn).CornerRadius = UDim.new(0, 3)
+
+    local targetList = Instance.new("ScrollingFrame")
+    targetList.Size = UDim2.new(1, -20, 0, 105)
+    targetList.Position = UDim2.new(0, 10, 0, 55)
+    targetList.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+    targetList.BorderSizePixel = 0
+    targetList.ScrollBarThickness = 3
+    targetList.Parent = targetSection
+    Instance.new("UICorner", targetList).CornerRadius = UDim.new(0, 4)
+    local tLayout = Instance.new("UIListLayout")
+    tLayout.Padding = UDim.new(0, 2)
+    tLayout.Parent = targetList
+
+    -- ============================================================
+    -- SECTION 3: UNWANTED MUTATION
+    -- ============================================================
+    local unwantedSection = createSection(amScroll, "❌ Unwanted Mutation", "amUnwanted")
+    unwantedSection.LayoutOrder = 3
+    unwantedSection.Size = UDim2.new(1, -10, 0, 170)
+
+    local unwantedSearch = Instance.new("TextBox")
+    unwantedSearch.Size = UDim2.new(1, -75, 0, 20)
+    unwantedSearch.Position = UDim2.new(0, 10, 0, 28)
+    unwantedSearch.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+    unwantedSearch.BorderSizePixel = 0
+    unwantedSearch.Font = Enum.Font.Gotham
+    unwantedSearch.PlaceholderText = "Cari mutasi..."
+    unwantedSearch.TextColor3 = C.text
+    unwantedSearch.TextSize = 9
+    unwantedSearch.Parent = unwantedSection
+    Instance.new("UICorner", unwantedSearch).CornerRadius = UDim.new(0, 4)
+
+    local unwantedAllBtn = Instance.new("TextButton")
+    unwantedAllBtn.Size = UDim2.new(0, 25, 0, 20)
+    unwantedAllBtn.Position = UDim2.new(1, -60, 0, 28)
+    unwantedAllBtn.BackgroundColor3 = C.accent
+    unwantedAllBtn.Text = "All"
+    unwantedAllBtn.TextColor3 = C.text
+    unwantedAllBtn.TextSize = 8
+    unwantedAllBtn.Font = Enum.Font.GothamBold
+    unwantedAllBtn.Parent = unwantedSection
+    Instance.new("UICorner", unwantedAllBtn).CornerRadius = UDim.new(0, 3)
+
+    local unwantedClrBtn = Instance.new("TextButton")
+    unwantedClrBtn.Size = UDim2.new(0, 25, 0, 20)
+    unwantedClrBtn.Position = UDim2.new(1, -30, 0, 28)
+    unwantedClrBtn.BackgroundColor3 = C.danger
+    unwantedClrBtn.Text = "Clr"
+    unwantedClrBtn.TextColor3 = C.text
+    unwantedClrBtn.TextSize = 8
+    unwantedClrBtn.Font = Enum.Font.GothamBold
+    unwantedClrBtn.Parent = unwantedSection
+    Instance.new("UICorner", unwantedClrBtn).CornerRadius = UDim.new(0, 3)
+
+    local unwantedList = Instance.new("ScrollingFrame")
+    unwantedList.Size = UDim2.new(1, -20, 0, 105)
+    unwantedList.Position = UDim2.new(0, 10, 0, 55)
+    unwantedList.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+    unwantedList.BorderSizePixel = 0
+    unwantedList.ScrollBarThickness = 3
+    unwantedList.Parent = unwantedSection
+    Instance.new("UICorner", unwantedList).CornerRadius = UDim.new(0, 4)
+    local uLayout = Instance.new("UIListLayout")
+    uLayout.Padding = UDim.new(0, 2)
+    uLayout.Parent = unwantedList
+
+    -- ============================================================
+    -- SECTION 4: PRESET & CONTROL
+    -- ============================================================
+    local presetSection = createSection(amScroll, "⚙️ Preset & Kontrol", "amPreset")
+    presetSection.LayoutOrder = 4
+    presetSection.Size = UDim2.new(1, -10, 0, 200)
+
+    local function createPresetRow(yPos, label, presetKey, slotKey)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, -20, 0, 12)
+        lbl.Position = UDim2.new(0, 10, 0, yPos)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = label
+        lbl.TextColor3 = C.textDim
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 8
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = presetSection
+
+        local presetBtn = Instance.new("TextButton")
+        presetBtn.Size = UDim2.new(0.72, -15, 0, 20)
+        presetBtn.Position = UDim2.new(0, 10, 0, yPos + 14)
+        presetBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
+        presetBtn.BorderSizePixel = 0
+        presetBtn.Font = Enum.Font.Gotham
+        presetBtn.Text = state[presetKey] and state[presetKey] or "Pilih preset..."
+        presetBtn.TextColor3 = C.text
+        presetBtn.TextSize = 8
+        presetBtn.TextXAlignment = Enum.TextXAlignment.Left
+        presetBtn.AutoButtonColor = false
+        presetBtn.ZIndex = 5
+        presetBtn.Parent = presetSection
+        Instance.new("UICorner", presetBtn).CornerRadius = UDim.new(0, 3)
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 6)
+        pad.Parent = presetBtn
+
+        presetBtn.MouseButton1Click:Connect(function()
+            local names = S.getPresetNamesFromAoneHub()
+            if #names == 0 then presetBtn.Text = "No preset" task.wait(1) return end
+            local isClaim = (presetKey == "claimPreset")
+            local list = {}
+            if isClaim then table.insert(list, "") end
+            for _, n in ipairs(names) do table.insert(list, n) end
+
+            local currentIdx = nil
+            if state[presetKey] and state[presetKey] ~= "" then
+                for i, n in ipairs(list) do if n == state[presetKey] then currentIdx = i break end end
+            end
+            local nextIdx = currentIdx and (currentIdx + 1) or (isClaim and 2 or 1)
+            if nextIdx > #list then nextIdx = 1 end
+            local nextName = list[nextIdx]
+            if nextName == "" then
+                state[presetKey] = nil
+                presetBtn.Text = "Pilih preset..."
+            else
+                state[presetKey] = nextName
+                presetBtn.Text = nextName
+            end
+            L.saveState()
+        end)
+
+        local slotBtn = Instance.new("TextButton")
+        slotBtn.Size = UDim2.new(0.28, -15, 0, 20)
+        slotBtn.Position = UDim2.new(0.72, 5, 0, yPos + 14)
+        slotBtn.BackgroundColor3 = C.accent
+        slotBtn.BorderSizePixel = 0
+        slotBtn.Font = Enum.Font.GothamBold
+        slotBtn.Text = "Slot " .. tostring(state[slotKey])
+        slotBtn.TextColor3 = C.text
+        slotBtn.TextSize = 8
+        slotBtn.AutoButtonColor = false
+        slotBtn.ZIndex = 5
+        slotBtn.Parent = presetSection
+        Instance.new("UICorner", slotBtn).CornerRadius = UDim.new(0, 3)
+
+        slotBtn.MouseButton1Click:Connect(function()
+            local next = (state[slotKey] or 1) + 1
+            if next > 3 then next = 1 end
+            state[slotKey] = next
+            slotBtn.Text = "Slot " .. tostring(next)
+            L.saveState()
+        end)
+    end
+
+    createPresetRow(28, "Tim Leveling (wajib)", "levelingPreset", "levelingSlot")
+    createPresetRow(68, "Tim Machine (wajib)", "machinePreset", "machineSlot")
+    createPresetRow(108, "Tim Claim (opsional)", "claimPreset", "claimSlot")
+
+    local startAMBtn = Instance.new("TextButton")
+    startAMBtn.Size = UDim2.new(1, -20, 0, 26)
+    startAMBtn.Position = UDim2.new(0, 10, 0, 150)
+    startAMBtn.BackgroundColor3 = C.success
+    startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
+    startAMBtn.TextColor3 = C.text
+    startAMBtn.Font = Enum.Font.GothamBold
+    startAMBtn.TextSize = 9
+    startAMBtn.Parent = presetSection
+    Instance.new("UICorner", startAMBtn).CornerRadius = UDim.new(0, 4)
+
+    local amStatusLbl = Instance.new("TextLabel")
+    amStatusLbl.Size = UDim2.new(1, -20, 0, 14)
+    amStatusLbl.Position = UDim2.new(0, 10, 0, 180)
+    amStatusLbl.BackgroundTransparency = 1
+    amStatusLbl.Text = "Status: Idle"
+    amStatusLbl.TextColor3 = C.textDim
+    amStatusLbl.Font = Enum.Font.GothamBold
+    amStatusLbl.TextSize = 8
+    amStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+    amStatusLbl.Parent = presetSection
+
+    -- Ekspos callback ke blok logic
+    _G.AoneHub_AM_SetStatus = function(txt) amStatusLbl.Text = "Status: " .. txt end
+    _G.AoneHub_AM_SetLog = function(txt) print("[AutoMutation]", txt) end
+
+    -- ============================================================
+    -- RENDER LISTS
+    -- ============================================================
+    local function renderTargetList()
+        for _, c in ipairs(targetList:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+        local items = {}
+        for p, _ in pairs(S.getPetInventory()) do
+            local pType = S.getPetType(p)
+            items[pType] = (items[pType] or 0) + 1
+        end
+        
+        local list = {}
+        for pType, count in pairs(items) do
+            if targetSearch.Text == "" or pType:lower():find(targetSearch.Text:lower()) then
+                table.insert(list, {name=pType, count=count})
+            end
+        end
+        table.sort(list, function(a,b) 
+            local aSel = state.selectedPetTypes[a.name] and 1 or 0
+            local bSel = state.selectedPetTypes[b.name] and 1 or 0
+            if aSel ~= bSel then return aSel > bSel end
+            return a.name < b.name 
+        end)
+        
+        for i, item in ipairs(list) do
+            local isSel = state.selectedPetTypes[item.name]
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -4, 0, 18)
+            btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55,55,70)
+            btn.Text = string.format("%s %s (x%d)", isSel and "+" or "o", item.name, item.count)
+            btn.TextColor3 = C.text
+            btn.TextSize = 8
+            btn.TextXAlignment = Enum.TextXAlignment.Left
+            btn.LayoutOrder = i
+            btn.Parent = targetList
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 2)
+            btn.MouseButton1Click:Connect(function()
+                state.selectedPetTypes[item.name] = not isSel and true or nil
+                L.saveState()
+                renderTargetList()
+            end)
+        end
+    end
+
+    local function renderUnwantedList()
+        for _, c in ipairs(unwantedList:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+        local list = {}
+        local allMut = S.getPetMutation("") -- placeholder
+        -- Ambil semua mutasi dari registry yang di-load
+        if S.PetMutationRegistry and S.PetMutationRegistry.PetMutationRegistry then
+            for name, _ in pairs(S.PetMutationRegistry.PetMutationRegistry) do
+                if name ~= "Normal" and name ~= "Rideable" then
+                    if unwantedSearch.Text == "" or name:lower():find(unwantedSearch.Text:lower()) then
+                        table.insert(list, name)
+                    end
+                end
+            end
+        end
+        
+        table.sort(list, function(a,b) 
+            local aSel = state.unwantedMutations[a] and 1 or 0
+            local bSel = state.unwantedMutations[b] and 1 or 0
+            if aSel ~= bSel then return aSel < bSel end -- Selected di bawah
+            return a < b 
+        end)
+        
+        for i, name in ipairs(list) do
+            local isSel = state.unwantedMutations[name]
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -4, 0, 18)
+            btn.BackgroundColor3 = isSel and C.danger or Color3.fromRGB(55,55,70)
+            btn.Text = string.format("%s %s", isSel and "+" or "o", name)
+            btn.TextColor3 = C.text
+            btn.TextSize = 8
+            btn.TextXAlignment = Enum.TextXAlignment.Left
+            btn.LayoutOrder = i
+            btn.Parent = unwantedList
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 2)
+            btn.MouseButton1Click:Connect(function()
+                state.unwantedMutations[name] = not isSel and true or nil
+                L.saveState()
+                renderUnwantedList()
+            end)
+        end
+    end
+
+    targetSearch:GetPropertyChangedSignal("Text"):Connect(renderTargetList)
+    unwantedSearch:GetPropertyChangedSignal("Text"):Connect(renderUnwantedList)
+    
+    targetAllBtn.MouseButton1Click:Connect(function() for p, _ in pairs(S.getPetInventory()) do state.selectedPetTypes[S.getPetType(p)] = true end L.saveState() renderTargetList() end)
+    targetClrBtn.MouseButton1Click:Connect(function() state.selectedPetTypes = {} L.saveState() renderTargetList() end)
+    unwantedAllBtn.MouseButton1Click:Connect(function() for m, _ in pairs(S.PetMutationRegistry.PetMutationRegistry) do state.unwantedMutations[m] = true end L.saveState() renderUnwantedList() end)
+    unwantedClrBtn.MouseButton1Click:Connect(function() state.unwantedMutations = {} L.saveState() renderUnwantedList() end)
+
+    _G.AoneHub_AM_RenderTargetList = renderTargetList
+
+    -- ============================================================
+    -- START BUTTON
+    -- ============================================================
+    startAMBtn.MouseButton1Click:Connect(function()
+        if state.isRunning then
+            state.isRunning = false
+            startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
+            startAMBtn.BackgroundColor3 = C.success
+            amStatusLbl.Text = "Status: Stopped"
+            return
+        end
+
+        if not state.levelingPreset then return amStatusLbl.Text = "Pilih preset Leveling!" end
+        if not state.machinePreset then return amStatusLbl.Text = "Pilih preset Machine!" end
+
+        state.isRunning = true
+        startAMBtn.Text = "⏹️ STOP"
+        startAMBtn.BackgroundColor3 = C.danger
+        amStatusLbl.Text = "Status: Starting..."
+        renderTargetList()
+        L.runLoop()
+    end)
+
+    -- Init Render
+    renderTargetList()
+    renderUnwantedList()
+    
+    print("[AoneHub] Auto Mutation UI loaded")
+end
