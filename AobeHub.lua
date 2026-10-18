@@ -10981,24 +10981,18 @@ do
     AutoMutation_Logic = {
     runLoop = runLoop,
     getPresetNames = S.getPresetNamesFromAoneHub,
-    -- ⭐ Menggunakan saveConfig bawaan AoneHub agar tidak bentrok
     saveState = function()
-    -- Update config AoneHub dengan state terbaru
-    if _G.AoneHub_Config then
-        _G.AoneHub_Config.autoMutationState = state
-        
-        -- Panggil fungsi saveConfig AoneHub
-        if _G.AoneHub_SaveConfig then
+        -- Pastikan config global AoneHub tersedia
+        if _G.AoneHub_Config and _G.AoneHub_SaveConfig then
+            -- 1. Update state ke config utama
+            _G.AoneHub_Config.autoMutationState = state
+            
+            -- 2. Panggil fungsi save AoneHub
             _G.AoneHub_SaveConfig()
         else
-            -- Fallback jika _G tidak tersedia
-            local ok, json = pcall(HttpService.JSONEncode, HttpService, _G.AoneHub_Config)
-            if ok then pcall(writefile, "AoneHub/AoneHub_Gag1.json", json) end
+            warn("[AutoMutation] Gagal save: _G.AoneHub_Config tidak ditemukan.")
         end
-    else
-        warn("[AutoMutation] _G.AoneHub_Config tidak ditemukan! State tidak tersimpan.")
     end
-        end
     }
 end
 
@@ -11468,13 +11462,21 @@ do
     -- START BUTTON
     -- ============================================================
     startAMBtn.MouseButton1Click:Connect(function()
-        if state.isRunning then
-            state.isRunning = false
-            startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
-            startAMBtn.BackgroundColor3 = C.success
-            amStatusLbl.Text = "Status: Stopped"
-            return
-        end
+    -- ⭐ FORCE RESET kalau visual masih START tapi state nyangkut di true
+    if not state.isRunning and startAMBtn.Text == "⏹️ STOP" then
+        startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
+        startAMBtn.BackgroundColor3 = C.success
+    end
+
+    if state.isRunning then
+        state.isRunning = false
+        startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
+        startAMBtn.BackgroundColor3 = C.success
+        amStatusLbl.Text = "Status: Stopped"
+        return
+    end
+
+    -- ... (validasi preset leveling & machine) ...
 
         if not state.levelingPreset then
             amStatusLbl.Text = "Pilih preset Leveling!"
@@ -11494,18 +11496,19 @@ do
         L.runLoop()
     end)
 
-    -- Init Render Pertama (tunggu data game ready)
-    task.spawn(function()
+    -- Init Render Pertama
+task.spawn(function()
     task.wait(1)
-    -- Update teks tombol preset dari state yang di-load
+    
+    -- ⭐ UPDATE TEKS TOMBOL PRESET DARI STATE YANG DI-LOAD
     if presetButtons.levelingPreset then
-        presetButtons.levelingPreset.Text = state.levelingPreset or "Pilih preset..."
+        presetButtons.levelingPreset.Text = state.levelingPreset and tostring(state.levelingPreset) or "Pilih preset..."
     end
     if presetButtons.machinePreset then
-        presetButtons.machinePreset.Text = state.machinePreset or "Pilih preset..."
+        presetButtons.machinePreset.Text = state.machinePreset and tostring(state.machinePreset) or "Pilih preset..."
     end
     if presetButtons.claimPreset then
-        presetButtons.claimPreset.Text = state.claimPreset or "Pilih preset..."
+        presetButtons.claimPreset.Text = state.claimPreset and tostring(state.claimPreset) or "Pilih preset..."
     end
     if presetButtons.levelingSlot then
         presetButtons.levelingSlot.Text = "Slot " .. tostring(state.levelingSlot)
@@ -11517,6 +11520,11 @@ do
         presetButtons.claimSlot.Text = "Slot " .. tostring(state.claimSlot)
     end
     
+    -- Jika toggle sedang ON dari config, pastikan visual tombol juga berubah (jika ada)
+    -- (Saat ini Auto Mutation tidak pakai toggle ON/OFF, tapi pakai tombol Start/Stop)
+    startAMBtn.Text = state.isRunning and "⏹️ STOP" or "▶️ MULAI AUTO MUTATION"
+    startAMBtn.BackgroundColor3 = state.isRunning and C.danger or C.success
+
     renderTargetList()
     renderUnwantedList()
 end)
