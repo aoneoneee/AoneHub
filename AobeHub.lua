@@ -1,3 +1,30 @@
+AutoMutation_Logic = {
+    runLoop = runLoop,
+    getPresetNames = S.getPresetNamesFromAoneHub,
+    saveState = function()
+        local AONEHUB_CONFIG_PATH = "AoneHub/AoneHub_Gag1.json"
+        local cachedConfig = nil
+        
+        -- 1. Baca config lama biar data lain (seperti teamPresets, targetLevel) tidak hilang
+        local ok, raw = pcall(readfile, AONEHUB_CONFIG_PATH)
+        if ok and raw then
+            local ok2, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+            if ok2 and type(decoded) == "table" then
+                cachedConfig = decoded
+            end
+        end
+        
+        if not cachedConfig then cachedConfig = {} end
+        
+        -- 2. Update state Auto Mutation ke dalam config
+        cachedConfig.autoMutationState = state
+        
+        -- 3. Simpan kembali ke file
+        local s, json = pcall(HttpService.JSONEncode, HttpService, cachedConfig)
+        if s then 
+            pcall(writefile, AONEHUB_CONFIG_PATH, json) 
+        end
+    end
 -- ==================================================================
 -- SERVICES & REQUIREMENTS
 -- ==================================================================
@@ -10945,18 +10972,33 @@ do
     end
 
     AutoMutation_Logic = {
-        runLoop = runLoop,
-        getPresetNames = S.getPresetNamesFromAoneHub,
-        saveState = function()
-            local config = S.loadAoneHubConfig(true)
-            if config then
-                config.autoMutationState = state
-                -- Save ke file JSON AoneHub
-                local s, json = pcall(HttpService.JSONEncode, HttpService, config)
-                if s then pcall(writefile, "AoneHub/AoneHub_Gag1.json", json) end
+    runLoop = runLoop,
+    getPresetNames = S.getPresetNamesFromAoneHub,
+    saveState = function()
+        local AONEHUB_CONFIG_PATH = "AoneHub/AoneHub_Gag1.json"
+        local cachedConfig = nil
+        
+        -- 1. Baca config lama biar data lain (seperti teamPresets, targetLevel) tidak hilang
+        local ok, raw = pcall(readfile, AONEHUB_CONFIG_PATH)
+        if ok and raw then
+            local ok2, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+            if ok2 and type(decoded) == "table" then
+                cachedConfig = decoded
             end
         end
-    }
+        
+        if not cachedConfig then cachedConfig = {} end
+        
+        -- 2. Update state Auto Mutation ke dalam config
+        cachedConfig.autoMutationState = state
+        
+        -- 3. Simpan kembali ke file
+        local s, json = pcall(HttpService.JSONEncode, HttpService, cachedConfig)
+        if s then 
+            pcall(writefile, AONEHUB_CONFIG_PATH, json) 
+        end
+    end
+}
 end
 
 -- ==================================================================
@@ -11377,9 +11419,12 @@ do
     L.runLoop()
 end)
 
-    -- Init Render
-    renderTargetList()
-    renderUnwantedList()
-    
+        -- Init Render Pertama
+    task.spawn(function()
+        task.wait(1) -- Tunggu game load data player
+        renderTargetList()
+        renderUnwantedList()
+    end)
+
     print("[AoneHub] Auto Mutation UI loaded")
 end
