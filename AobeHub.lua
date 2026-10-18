@@ -11171,7 +11171,11 @@ do
 
         presetBtn.MouseButton1Click:Connect(function()
             local names = S.getPresetNamesFromAoneHub()
-            if #names == 0 then presetBtn.Text = "No preset" task.wait(1) return end
+            if #names == 0 then
+                presetBtn.Text = "No preset"
+                task.wait(1)
+                return
+            end
             local isClaim = (presetKey == "claimPreset")
             local list = {}
             if isClaim then table.insert(list, "") end
@@ -11347,24 +11351,31 @@ do
     -- START BUTTON
     -- ============================================================
     startAMBtn.MouseButton1Click:Connect(function()
-        if state.isRunning then
-            state.isRunning = false
-            startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
-            startAMBtn.BackgroundColor3 = C.success
-            amStatusLbl.Text = "Status: Stopped"
-            return
-        end
+    if state.isRunning then
+        state.isRunning = false
+        startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
+        startAMBtn.BackgroundColor3 = C.success
+        amStatusLbl.Text = "Status: Stopped"
+        return
+    end
 
-        if not state.levelingPreset then return amStatusLbl.Text = "Pilih preset Leveling!" end
-        if not state.machinePreset then return amStatusLbl.Text = "Pilih preset Machine!" end
+    if not state.levelingPreset then
+        amStatusLbl.Text = "Pilih preset Leveling!"
+        return
+    end
+    
+    if not state.machinePreset then
+        amStatusLbl.Text = "Pilih preset Machine!"
+        return
+    end
 
-        state.isRunning = true
-        startAMBtn.Text = "⏹️ STOP"
-        startAMBtn.BackgroundColor3 = C.danger
-        amStatusLbl.Text = "Status: Starting..."
-        renderTargetList()
-        L.runLoop()
-    end)
+    state.isRunning = true
+    startAMBtn.Text = "⏹️ STOP"
+    startAMBtn.BackgroundColor3 = C.danger
+    amStatusLbl.Text = "Status: Starting..."
+    renderTargetList()
+    L.runLoop()
+end)
 
     -- Init Render
     renderTargetList()
