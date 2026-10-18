@@ -10686,6 +10686,7 @@ do
         PetsService = PetsService,
         PetsServiceRE = PetsServiceRE,
         PetMutationRE = PetMutationRE,
+        PetMutationRegistry = PetMutationRegistry,
     }
 end
 
@@ -11055,6 +11056,7 @@ do
     targetSearch.BorderSizePixel = 0
     targetSearch.Font = Enum.Font.Gotham
     targetSearch.PlaceholderText = "Cari pet..."
+    targetSearch.Text = ""
     targetSearch.TextColor3 = C.text
     targetSearch.TextSize = 9
     targetSearch.Parent = targetSection
@@ -11108,6 +11110,7 @@ do
     unwantedSearch.BorderSizePixel = 0
     unwantedSearch.Font = Enum.Font.Gotham
     unwantedSearch.PlaceholderText = "Cari mutasi..."
+    unwantedSearch.Text = ""
     unwantedSearch.TextColor3 = C.text
     unwantedSearch.TextSize = 9
     unwantedSearch.Parent = unwantedSection
