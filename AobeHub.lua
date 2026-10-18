@@ -3464,7 +3464,7 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
     local closeBtn = Instance.new("TextButton")
     closeBtn.Size = UDim2.new(0, 22, 0, 22)
     closeBtn.Position = UDim2.new(1, -25, 0, 3)
-    closeBtn.Text = "✕"
+    closeBtn.Text = "X"
     closeBtn.TextColor3 = Color3.fromRGB(255, 120, 120)
     closeBtn.Font = Enum.Font.GothamBold
     closeBtn.TextSize = 11
@@ -10687,6 +10687,7 @@ do
         PetsServiceRE = PetsServiceRE,
         PetMutationRE = PetMutationRE,
         PetMutationRegistry = PetMutationRegistry,
+        PetRegistry = PetRegistry,
     }
 end
 
@@ -10987,14 +10988,16 @@ do
     local mutationTab = tabFrames["Mutation"]
     if not mutationTab then return end
 
-    -- Gunakan fungsi createSection yang sudah ada di AoneHub
+    -- Scroll Utama Tab Mutation
     local amScroll = Instance.new("ScrollingFrame")
     amScroll.Size = UDim2.new(1, -10, 1, -10)
     amScroll.Position = UDim2.new(0, 5, 0, 5)
     amScroll.BackgroundTransparency = 1
     amScroll.BorderSizePixel = 0
     amScroll.ScrollBarThickness = 4
+    amScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     amScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    amScroll.ScrollingDirection = Enum.ScrollingDirection.Y
     amScroll.Parent = mutationTab
 
     local amLayout = Instance.new("UIListLayout")
@@ -11084,16 +11087,22 @@ do
     targetClrBtn.Parent = targetSection
     Instance.new("UICorner", targetClrBtn).CornerRadius = UDim.new(0, 3)
 
+    -- ⭐ PERBAIKAN SCROLL: Kanvas Size otomatis & Scrolling Direction Y
     local targetList = Instance.new("ScrollingFrame")
     targetList.Size = UDim2.new(1, -20, 0, 105)
     targetList.Position = UDim2.new(0, 10, 0, 55)
     targetList.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
     targetList.BorderSizePixel = 0
-    targetList.ScrollBarThickness = 3
+    targetList.ScrollBarThickness = 4
+    targetList.CanvasSize = UDim2.new(0, 0, 0, 0)
+    targetList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    targetList.ScrollingDirection = Enum.ScrollingDirection.Y
     targetList.Parent = targetSection
     Instance.new("UICorner", targetList).CornerRadius = UDim.new(0, 4)
+    
     local tLayout = Instance.new("UIListLayout")
     tLayout.Padding = UDim.new(0, 2)
+    tLayout.SortOrder = Enum.SortOrder.LayoutOrder
     tLayout.Parent = targetList
 
     -- ============================================================
@@ -11138,16 +11147,22 @@ do
     unwantedClrBtn.Parent = unwantedSection
     Instance.new("UICorner", unwantedClrBtn).CornerRadius = UDim.new(0, 3)
 
+    -- ⭐ PERBAIKAN SCROLL
     local unwantedList = Instance.new("ScrollingFrame")
     unwantedList.Size = UDim2.new(1, -20, 0, 105)
     unwantedList.Position = UDim2.new(0, 10, 0, 55)
     unwantedList.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
     unwantedList.BorderSizePixel = 0
-    unwantedList.ScrollBarThickness = 3
+    unwantedList.ScrollBarThickness = 4
+    unwantedList.CanvasSize = UDim2.new(0, 0, 0, 0)
+    unwantedList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    unwantedList.ScrollingDirection = Enum.ScrollingDirection.Y
     unwantedList.Parent = unwantedSection
     Instance.new("UICorner", unwantedList).CornerRadius = UDim.new(0, 4)
+    
     local uLayout = Instance.new("UIListLayout")
     uLayout.Padding = UDim.new(0, 2)
+    uLayout.SortOrder = Enum.SortOrder.LayoutOrder
     uLayout.Parent = unwantedList
 
     -- ============================================================
@@ -11189,11 +11204,7 @@ do
 
         presetBtn.MouseButton1Click:Connect(function()
             local names = S.getPresetNamesFromAoneHub()
-            if #names == 0 then
-                presetBtn.Text = "No preset"
-                task.wait(1)
-                return
-            end
+            if #names == 0 then presetBtn.Text = "No preset" task.wait(1) return end
             local isClaim = (presetKey == "claimPreset")
             local list = {}
             if isClaim then table.insert(list, "") end
@@ -11273,38 +11284,70 @@ do
     -- RENDER LISTS
     -- ============================================================
     local function renderTargetList()
-        for _, c in ipairs(targetList:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+        for _, c in ipairs(targetList:GetChildren()) do 
+            if c:IsA("TextButton") then c:Destroy() end 
+        end
+
+        -- ⭐ AMBIL SEMUA PET DARI REGISTRY (Seperti v9)
+        local allPetTypes = {}
+        if S.PetRegistry and S.PetRegistry.PetList then
+            for name, _ in pairs(S.PetRegistry.PetList) do
+                table.insert(allPetTypes, name)
+            end
+            table.sort(allPetTypes)
+        end
+
+        local search = targetSearch.Text:lower()
         local items = {}
+        
+        -- Hitung jumlah yang dimiliki
+        local invCounts = {}
         for p, _ in pairs(S.getPetInventory()) do
             local pType = S.getPetType(p)
-            items[pType] = (items[pType] or 0) + 1
+            invCounts[pType] = (invCounts[pType] or 0) + 1
         end
-        
-        local list = {}
-        for pType, count in pairs(items) do
-            if targetSearch.Text == "" or pType:lower():find(targetSearch.Text:lower()) then
-                table.insert(list, {name=pType, count=count})
+
+        for _, pType in ipairs(allPetTypes) do
+            if search == "" or pType:lower():find(search, 1, true) then
+                table.insert(items, {
+                    name = pType,
+                    count = invCounts[pType] or 0
+                })
             end
         end
-        table.sort(list, function(a,b) 
+        
+        table.sort(items, function(a,b) 
             local aSel = state.selectedPetTypes[a.name] and 1 or 0
             local bSel = state.selectedPetTypes[b.name] and 1 or 0
             if aSel ~= bSel then return aSel > bSel end
+            
+            local aOwn = (a.count > 0) and 1 or 0
+            local bOwn = (b.count > 0) and 1 or 0
+            if aOwn ~= bOwn then return aOwn > bOwn end
+            
             return a.name < b.name 
         end)
         
-        for i, item in ipairs(list) do
+        for i, item in ipairs(items) do
             local isSel = state.selectedPetTypes[item.name]
             local btn = Instance.new("TextButton")
             btn.Size = UDim2.new(1, -4, 0, 18)
             btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55,55,70)
-            btn.Text = string.format("%s %s (x%d)", isSel and "+" or "o", item.name, item.count)
+            
+            local ownedStr = (item.count > 0) and ("x" .. item.count) or "-"
+            btn.Text = string.format("%s %s (%s)", isSel and "+" or "o", item.name, ownedStr)
+            
             btn.TextColor3 = C.text
             btn.TextSize = 8
             btn.TextXAlignment = Enum.TextXAlignment.Left
             btn.LayoutOrder = i
             btn.Parent = targetList
             Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 2)
+            
+            local pad = Instance.new("UIPadding")
+            pad.PaddingLeft = UDim.new(0, 5)
+            pad.Parent = btn
+            
             btn.MouseButton1Click:Connect(function()
                 state.selectedPetTypes[item.name] = not isSel and true or nil
                 L.saveState()
@@ -11316,8 +11359,7 @@ do
     local function renderUnwantedList()
         for _, c in ipairs(unwantedList:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
         local list = {}
-        local allMut = S.getPetMutation("") -- placeholder
-        -- Ambil semua mutasi dari registry yang di-load
+        
         if S.PetMutationRegistry and S.PetMutationRegistry.PetMutationRegistry then
             for name, _ in pairs(S.PetMutationRegistry.PetMutationRegistry) do
                 if name ~= "Normal" and name ~= "Rideable" then
@@ -11358,10 +11400,33 @@ do
     targetSearch:GetPropertyChangedSignal("Text"):Connect(renderTargetList)
     unwantedSearch:GetPropertyChangedSignal("Text"):Connect(renderUnwantedList)
     
-    targetAllBtn.MouseButton1Click:Connect(function() for p, _ in pairs(S.getPetInventory()) do state.selectedPetTypes[S.getPetType(p)] = true end L.saveState() renderTargetList() end)
-    targetClrBtn.MouseButton1Click:Connect(function() state.selectedPetTypes = {} L.saveState() renderTargetList() end)
-    unwantedAllBtn.MouseButton1Click:Connect(function() for m, _ in pairs(S.PetMutationRegistry.PetMutationRegistry) do state.unwantedMutations[m] = true end L.saveState() renderUnwantedList() end)
-    unwantedClrBtn.MouseButton1Click:Connect(function() state.unwantedMutations = {} L.saveState() renderUnwantedList() end)
+    targetAllBtn.MouseButton1Click:Connect(function() 
+        for name, _ in pairs(S.PetRegistry.PetList) do 
+            state.selectedPetTypes[name] = true 
+        end 
+        L.saveState() 
+        renderTargetList() 
+    end)
+    
+    targetClrBtn.MouseButton1Click:Connect(function() 
+        state.selectedPetTypes = {} 
+        L.saveState() 
+        renderTargetList() 
+    end)
+    
+    unwantedAllBtn.MouseButton1Click:Connect(function() 
+        for m, _ in pairs(S.PetMutationRegistry.PetMutationRegistry) do 
+            state.unwantedMutations[m] = true 
+        end 
+        L.saveState() 
+        renderUnwantedList() 
+    end)
+    
+    unwantedClrBtn.MouseButton1Click:Connect(function() 
+        state.unwantedMutations = {} 
+        L.saveState() 
+        renderUnwantedList() 
+    end)
 
     _G.AoneHub_AM_RenderTargetList = renderTargetList
 
@@ -11369,37 +11434,46 @@ do
     -- START BUTTON
     -- ============================================================
     startAMBtn.MouseButton1Click:Connect(function()
-    if state.isRunning then
-        state.isRunning = false
-        startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
-        startAMBtn.BackgroundColor3 = C.success
-        amStatusLbl.Text = "Status: Stopped"
-        return
-    end
+        if state.isRunning then
+            state.isRunning = false
+            startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
+            startAMBtn.BackgroundColor3 = C.success
+            amStatusLbl.Text = "Status: Stopped"
+            return
+        end
 
-    if not state.levelingPreset then
-        amStatusLbl.Text = "Pilih preset Leveling!"
-        return
-    end
-    
-    if not state.machinePreset then
-        amStatusLbl.Text = "Pilih preset Machine!"
-        return
-    end
+        if not state.levelingPreset then
+            amStatusLbl.Text = "Pilih preset Leveling!"
+            return
+        end
+        
+        if not state.machinePreset then
+            amStatusLbl.Text = "Pilih preset Machine!"
+            return
+        end
 
-    state.isRunning = true
-    startAMBtn.Text = "⏹️ STOP"
-    startAMBtn.BackgroundColor3 = C.danger
-    amStatusLbl.Text = "Status: Starting..."
-    renderTargetList()
-    L.runLoop()
-end)
+        state.isRunning = true
+        startAMBtn.Text = "⏹️ STOP"
+        startAMBtn.BackgroundColor3 = C.danger
+        amStatusLbl.Text = "Status: Starting..."
+        renderTargetList()
+        L.runLoop()
+    end)
 
-        -- Init Render Pertama
+    -- Init Render Pertama (tunggu data game ready)
     task.spawn(function()
-        task.wait(1) -- Tunggu game load data player
+        task.wait(1)
         renderTargetList()
         renderUnwantedList()
+    end)
+
+    -- Auto Refresh List tiap 3 detik
+    task.spawn(function()
+        while amScroll and amScroll.Parent and not isGuiDestroyed do
+            task.wait(3)
+            pcall(renderTargetList)
+            pcall(renderUnwantedList)
+        end
     end)
 
     print("[AoneHub] Auto Mutation UI loaded")
