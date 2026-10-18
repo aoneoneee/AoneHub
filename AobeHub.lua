@@ -10676,6 +10676,7 @@ do
         getPresetNamesFromAoneHub = getPresetNamesFromAoneHub,
         getPresetUUIDs = getPresetUUIDs,
         getPetInventory = getPetInventory,
+        getPetData = getPetData,
         getPetType = getPetType,
         getPetLevel = getPetLevel,
         isPetFavorited = isPetFavorited,
