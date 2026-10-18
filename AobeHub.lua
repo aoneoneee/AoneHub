@@ -300,6 +300,10 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             end
         end
 
+        -- ⭐ Expose ke global agar bisa diakses Block 16
+        _G.AoneHub_SaveConfig = saveConfig
+        _G.AoneHub_Config = config
+        
         loadConfig()
 
         -- ==================================================================
@@ -3380,6 +3384,10 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
         isAutoShovelRunning = false
         isAutoCollectRunning = false
 
+        if AutoMutation_Shared and AutoMutation_Shared.state then
+            AutoMutation_Shared.state.isRunning = false
+        end
+
         rainbowMode = false
         if rainbowTask then
             task.cancel(rainbowTask)
@@ -3518,6 +3526,11 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
     closeBtn.MouseButton1Click:Connect(function()
         isGuiDestroyed = true
         isLeveling = false
+
+        if AutoMutation_Shared and AutoMutation_Shared.state then
+            AutoMutation_Shared.state.isRunning = false
+        end
+            
         screenGui:Destroy()
     end)
 
@@ -10635,6 +10648,11 @@ do
         end
     end
 
+    -- ⭐ Simpan referensi state ke config utama AoneHub
+    if _G.AoneHub_Config then
+        _G.AoneHub_Config.autoMutationState = state
+    end
+
     -- Helper Data
     local function getPetInventory()
         local data = DataService:GetData()
@@ -10871,7 +10889,7 @@ do
     local function runLoop()
         task.spawn(function()
             local failCount = 0
-            while state.isRunning do
+            while state.isRunning and not isGuiDestroyed do
                 task.wait(2)
                 if not state.isRunning then break end
                 
@@ -10950,31 +10968,24 @@ do
     AutoMutation_Logic = {
     runLoop = runLoop,
     getPresetNames = S.getPresetNamesFromAoneHub,
+    -- ⭐ Menggunakan saveConfig bawaan AoneHub agar tidak bentrok
     saveState = function()
-        local AONEHUB_CONFIG_PATH = "AoneHub/AoneHub_Gag1.json"
-        local cachedConfig = nil
-        
-        -- 1. Baca config lama biar data lain (seperti teamPresets, targetLevel) tidak hilang
-        local ok, raw = pcall(readfile, AONEHUB_CONFIG_PATH)
-        if ok and raw then
-            local ok2, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
-            if ok2 and type(decoded) == "table" then
-                cachedConfig = decoded
+        local config = S.loadAoneHubConfig() -- Tarik config terbaru
+        if config then
+            config.autoMutationState = state
+            -- Sinkronkan state ke AoneHub config
+            config.autoMutationState = state
+            -- Panggil saveConfig AoneHub (lewat _G agar aman)
+            if _G.AoneHub_SaveConfig then 
+                _G.AoneHub_SaveConfig() 
+            else
+                -- Fallback jika _G tidak diset
+                local s, json = pcall(HttpService.JSONEncode, HttpService, config)
+                if s then pcall(writefile, "AoneHub/AoneHub_Gag1.json", json) end
             end
         end
-        
-        if not cachedConfig then cachedConfig = {} end
-        
-        -- 2. Update state Auto Mutation ke dalam config
-        cachedConfig.autoMutationState = state
-        
-        -- 3. Simpan kembali ke file
-        local s, json = pcall(HttpService.JSONEncode, HttpService, cachedConfig)
-        if s then 
-            pcall(writefile, AONEHUB_CONFIG_PATH, json) 
-        end
     end
-}
+    }
 end
 
 -- ==================================================================
@@ -11173,6 +11184,8 @@ do
     presetSection.LayoutOrder = 4
     presetSection.Size = UDim2.new(1, -10, 0, 200)
 
+    local presetButtons = {}
+    
     local function createPresetRow(yPos, label, presetKey, slotKey)
         local lbl = Instance.new("TextLabel")
         lbl.Size = UDim2.new(1, -20, 0, 12)
@@ -11249,6 +11262,8 @@ do
             slotBtn.Text = "Slot " .. tostring(next)
             L.saveState()
         end)
+        presetButtons[presetKey] = presetBtn
+        presetButtons[slotKey] = slotBtn
     end
 
     createPresetRow(28, "Tim Leveling (wajib)", "levelingPreset", "levelingSlot")
@@ -11278,7 +11293,11 @@ do
     amStatusLbl.Parent = presetSection
 
     -- Ekspos callback ke blok logic
-    _G.AoneHub_AM_SetStatus = function(txt) amStatusLbl.Text = "Status: " .. txt end
+    _G.AoneHub_AM_SetStatus = function(txt) 
+        if amStatusLbl and amStatusLbl.Parent then 
+            amStatusLbl.Text = "Status: " .. txt 
+        end 
+    end
     _G.AoneHub_AM_SetLog = function(txt) print("[AutoMutation]", txt) end
 
     -- ============================================================
@@ -11463,19 +11482,30 @@ do
 
     -- Init Render Pertama (tunggu data game ready)
     task.spawn(function()
-        task.wait(1)
-        renderTargetList()
-        renderUnwantedList()
-    end)
-
-    -- Auto Refresh List tiap 3 detik
-    task.spawn(function()
-        while amScroll and amScroll.Parent and not isGuiDestroyed do
-            task.wait(3)
-            pcall(renderTargetList)
-            pcall(renderUnwantedList)
-        end
-    end)
+    task.wait(1)
+    -- Update teks tombol preset dari state yang di-load
+    if presetButtons.levelingPreset then
+        presetButtons.levelingPreset.Text = state.levelingPreset or "Pilih preset..."
+    end
+    if presetButtons.machinePreset then
+        presetButtons.machinePreset.Text = state.machinePreset or "Pilih preset..."
+    end
+    if presetButtons.claimPreset then
+        presetButtons.claimPreset.Text = state.claimPreset or "Pilih preset..."
+    end
+    if presetButtons.levelingSlot then
+        presetButtons.levelingSlot.Text = "Slot " .. tostring(state.levelingSlot)
+    end
+    if presetButtons.machineSlot then
+        presetButtons.machineSlot.Text = "Slot " .. tostring(state.machineSlot)
+    end
+    if presetButtons.claimSlot then
+        presetButtons.claimSlot.Text = "Slot " .. tostring(state.claimSlot)
+    end
+    
+    renderTargetList()
+    renderUnwantedList()
+end)
 
     print("[AoneHub] Auto Mutation UI loaded")
 end
