@@ -3388,6 +3388,10 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
             AutoMutation_Shared.state.isRunning = false
         end
 
+        if AutoBuyBackend and AutoBuyBackend.stop then
+            AutoBuyBackend.stop()
+        end
+        
         rainbowMode = false
         if rainbowTask then
             task.cancel(rainbowTask)
@@ -3529,6 +3533,10 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
 
         if AutoMutation_Shared and AutoMutation_Shared.state then
             AutoMutation_Shared.state.isRunning = false
+        end
+
+        if AutoBuyBackend and AutoBuyBackend.stop then
+            AutoBuyBackend.stop()
         end
             
         screenGui:Destroy()
@@ -8373,9 +8381,9 @@ do -- BLOCK 14A: AUTO BUY BACKEND (Config, Scanner, Loop)
     local loopThread = nil
 
     local function autoBuyLoop()
-        while autoBuyRunning do
+        while autoBuyRunning and not isGuiDestroyed do
             task.wait(ABCfg.checkInterval)
-            if not ABCfg.autoBuyEnabled then continue end
+            if not ABCfg.autoBuyEnabled or isGuiDestroyed then continue end
             local selCount = 0
             for _ in pairs(ABCfg.selected) do selCount = selCount + 1 end
             if selCount == 0 then continue end
@@ -10686,6 +10694,11 @@ do
         return data and data.PetMutationMachine
     end
 
+    -- ⭐ Simpan state ke config utama AoneHub
+    if _G.AoneHub_Config then
+        _G.AoneHub_Config.autoMutationState = state
+    end
+    
     -- Ekpos ke blok berikutnya
     AutoMutation_Shared = {
         state = state,
@@ -10970,21 +10983,22 @@ do
     getPresetNames = S.getPresetNamesFromAoneHub,
     -- ⭐ Menggunakan saveConfig bawaan AoneHub agar tidak bentrok
     saveState = function()
-        local config = S.loadAoneHubConfig() -- Tarik config terbaru
-        if config then
-            config.autoMutationState = state
-            -- Sinkronkan state ke AoneHub config
-            config.autoMutationState = state
-            -- Panggil saveConfig AoneHub (lewat _G agar aman)
-            if _G.AoneHub_SaveConfig then 
-                _G.AoneHub_SaveConfig() 
-            else
-                -- Fallback jika _G tidak diset
-                local s, json = pcall(HttpService.JSONEncode, HttpService, config)
-                if s then pcall(writefile, "AoneHub/AoneHub_Gag1.json", json) end
-            end
+    -- Update config AoneHub dengan state terbaru
+    if _G.AoneHub_Config then
+        _G.AoneHub_Config.autoMutationState = state
+        
+        -- Panggil fungsi saveConfig AoneHub
+        if _G.AoneHub_SaveConfig then
+            _G.AoneHub_SaveConfig()
+        else
+            -- Fallback jika _G tidak tersedia
+            local ok, json = pcall(HttpService.JSONEncode, HttpService, _G.AoneHub_Config)
+            if ok then pcall(writefile, "AoneHub/AoneHub_Gag1.json", json) end
         end
+    else
+        warn("[AutoMutation] _G.AoneHub_Config tidak ditemukan! State tidak tersimpan.")
     end
+        end
     }
 end
 
