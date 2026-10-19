@@ -5924,18 +5924,24 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
     -- MAIN LOGIC - AUTO LEVELING
     -- ==================================================================
     ToggleButton.MouseButton1Click:Connect(function()
-        if isLeveling then
-            isLeveling = false
-            ToggleButton.Text = "▶️ Mulai"
-            ToggleButton.BackgroundColor3 = C.success
-            updateStatus()
-            return
-        end
+    if isLeveling then
+        isLeveling = false
+        ToggleButton.Text = "▶️ Mulai"
+        ToggleButton.BackgroundColor3 = C.success
+        updateStatus()
+        return
+    end
 
-        if isRunning then
-            StatusLabel.Text = "⚠️ Stop Auto Hatch dulu sebelum mulai Auto Leveling!"
-            return
-        end
+    if isRunning then
+        StatusLabel.Text = "⚠️ Stop Auto Hatch dulu sebelum mulai Auto Leveling!"
+        return
+    end
+
+    -- ⭐ GUARD: Cek Auto Mutation
+    if AutoMutation_Shared and AutoMutation_Shared.state and AutoMutation_Shared.state.isRunning then
+        StatusLabel.Text = "⚠️ Stop Auto Mutation dulu!"
+        return
+    end
 
         if not selectedTeamPreset then
             StatusLabel.Text = "⚠️ Pilih preset tim leveling!"
@@ -7190,15 +7196,21 @@ do -- BLOCK 11: TAB HATCH
     statusCallback = function(text) statusLabel.Text = text end
 
     startBtn.MouseButton1Click:Connect(function()
-        if isRunning then
-            stopAutoHatch()
-            startBtn.Text = "▶️ MULAI"
-            startBtn.BackgroundColor3 = C.success
-        else
-            if isLeveling then
-                statusLabel.Text = "⚠️ Stop Auto Leveling dulu sebelum mulai Auto Hatch!"
-                return
-            end
+    if isRunning then
+        stopAutoHatch()
+        startBtn.Text = "▶️ MULAI"
+        startBtn.BackgroundColor3 = C.success
+    else
+        if isLeveling then
+            statusLabel.Text = "⚠️ Stop Auto Leveling dulu sebelum mulai Auto Hatch!"
+            return
+        end
+
+        -- ⭐ GUARD: Cek Auto Mutation
+        if AutoMutation_Shared and AutoMutation_Shared.state and AutoMutation_Shared.state.isRunning then
+            statusLabel.Text = "⚠️ Stop Auto Mutation dulu!"
+            return
+        end
 
             if next(config.selectedEggs) == nil then
                 statusLabel.Text = "⚠️ Pilih egg dulu!"
@@ -11515,6 +11527,7 @@ end
     end
 
     if state.isRunning then
+        -- STOP
         state.isRunning = false
         startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
         startAMBtn.BackgroundColor3 = C.success
@@ -11522,25 +11535,32 @@ end
         return
     end
 
-    -- ... (validasi preset leveling & machine) ...
+    -- ⭐ GUARD: Cek fitur lain
+    if isLeveling then
+        amStatusLbl.Text = "⚠️ Stop Auto Leveling dulu!"
+        return
+    end
+    if isRunning then
+        amStatusLbl.Text = "⚠️ Stop Auto Hatch dulu!"
+        return
+    end
+    if not state.levelingPreset then
+        amStatusLbl.Text = "Pilih preset Leveling!"
+        return
+    end
+    
+    if not state.machinePreset then
+        amStatusLbl.Text = "Pilih preset Machine!"
+        return
+    end
 
-        if not state.levelingPreset then
-            amStatusLbl.Text = "Pilih preset Leveling!"
-            return
-        end
-        
-        if not state.machinePreset then
-            amStatusLbl.Text = "Pilih preset Machine!"
-            return
-        end
-
-        state.isRunning = true
-        startAMBtn.Text = "⏹️ STOP"
-        startAMBtn.BackgroundColor3 = C.danger
-        amStatusLbl.Text = "Status: Starting..."
-        renderTargetList()
-        L.runLoop()
-    end)
+    state.isRunning = true
+    startAMBtn.Text = "⏹️ STOP"
+    startAMBtn.BackgroundColor3 = C.danger
+    amStatusLbl.Text = "Status: Starting..."
+    renderTargetList()
+    L.runLoop()
+end)
 
     -- Init Render Pertama
 task.spawn(function()
@@ -11566,14 +11586,19 @@ task.spawn(function()
         presetButtons.claimSlot.Text = "Slot " .. tostring(state.claimSlot)
     end
     
-    -- Jika toggle sedang ON dari config, pastikan visual tombol juga berubah (jika ada)
-    -- (Saat ini Auto Mutation tidak pakai toggle ON/OFF, tapi pakai tombol Start/Stop)
+    -- Tampilan tombol Start/Stop
     startAMBtn.Text = state.isRunning and "⏹️ STOP" or "▶️ MULAI AUTO MUTATION"
     startAMBtn.BackgroundColor3 = state.isRunning and C.danger or C.success
 
     renderTargetList()
     renderUnwantedList()
-end)
 
+    -- ⭐ AUTO-START LOGIC
+    if state.isRunning then
+        print("[AutoMutation] 🚀 Auto-starting karena toggle ON...")
+        amStatusLbl.Text = "Status: Auto-starting..."
+        L.runLoop()
+    end
+end)
     print("[AoneHub] Auto Mutation UI loaded")
 end
