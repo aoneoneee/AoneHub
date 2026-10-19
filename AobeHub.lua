@@ -10611,29 +10611,36 @@ do
     end
 
     local function getPresetNamesFromAoneHub()
-        local config = loadAoneHubConfig()
-        if not config or not config.teamPresets then return {} end
-        local names = {}
-        for name, _ in pairs(config.teamPresets) do table.insert(names, name) end
-        table.sort(names)
-        return names
+    -- ⭐ Baca dari config memori AoneHub, bukan dari file
+    local config = _G.AoneHub_Config
+    if not config or not config.teamPresets then return {} end
+    local names = {}
+    for name, _ in pairs(config.teamPresets) do table.insert(names, name) end
+    table.sort(names)
+    return names
+end
+
+local function getPresetUUIDs(presetName)
+    if not presetName then return {} end
+    -- ⭐ Baca dari config memori AoneHub, bukan dari file
+    local config = _G.AoneHub_Config
+    if not config or not config.teamPresets then return {} end
+    local preset = config.teamPresets[presetName]
+    if not preset or not preset.pets then return {} end
+    local uuids = {}
+    for _, petInfo in ipairs(preset.pets) do
+        if petInfo.UUID then table.insert(uuids, petInfo.UUID) end
+    end
+    return uuids
     end
 
-    local function getPresetUUIDs(presetName)
-        if not presetName then return {} end
-        local config = loadAoneHubConfig()
-        if not config or not config.teamPresets then return {} end
-        local preset = config.teamPresets[presetName]
-        if not preset or not preset.pets then return {} end
-        local uuids = {}
-        for _, petInfo in ipairs(preset.pets) do
-            if petInfo.UUID then table.insert(uuids, petInfo.UUID) end
-        end
-        return uuids
-    end
+    -- ⭐ PENTING: Gunakan tabel dari config utama AoneHub secara langsung
+-- agar saat saveConfig() dipanggil, data state ini ikut tersimpan.
+local state
 
-    -- State Auto Mutation
-    local state = {
+if _G.AoneHub_Config then
+    -- Jika config utama sudah punya autoMutationState, pakai itu
+    _G.AoneHub_Config.autoMutationState = _G.AoneHub_Config.autoMutationState or {
         selectedPetTypes = {},
         unwantedMutations = {},
         levelingPreset = nil,
@@ -10647,13 +10654,23 @@ do
         currentPhase = "idle",
         lastLoadoutSlot = nil,
     }
-
-    -- Load state dari config AoneHub (jika ada)
-    local config = loadAoneHubConfig()
-    if config and config.autoMutationState then
-        for k, v in pairs(config.autoMutationState) do
-            if state[k] ~= nil then state[k] = v end
-        end
+    state = _G.AoneHub_Config.autoMutationState
+else
+    -- Fallback jika _G tidak ada (harusnya tidak terjadi)
+    state = {
+        selectedPetTypes = {},
+        unwantedMutations = {},
+        levelingPreset = nil,
+        machinePreset = nil,
+        claimPreset = nil,
+        levelingSlot = 1,
+        machineSlot = 2,
+        claimSlot = 3,
+        minLevel = 50,
+        isRunning = false,
+        currentPhase = "idle",
+        lastLoadoutSlot = nil,
+    }
     end
 
     -- ⭐ Simpan referensi state ke config utama AoneHub
@@ -10982,15 +10999,12 @@ do
     runLoop = runLoop,
     getPresetNames = S.getPresetNamesFromAoneHub,
     saveState = function()
-        -- Pastikan config global AoneHub tersedia
-        if _G.AoneHub_Config and _G.AoneHub_SaveConfig then
-            -- 1. Update state ke config utama
-            _G.AoneHub_Config.autoMutationState = state
-            
-            -- 2. Panggil fungsi save AoneHub
+        -- Karena state sudah berupa referensi ke config utama,
+        -- cukup panggil saveConfig() milik AoneHub.
+        if _G.AoneHub_SaveConfig then
             _G.AoneHub_SaveConfig()
         else
-            warn("[AutoMutation] Gagal save: _G.AoneHub_Config tidak ditemukan.")
+            warn("[AutoMutation] Gagal save: _G.AoneHub_SaveConfig tidak ditemukan.")
         end
     end
     }
