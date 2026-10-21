@@ -1602,6 +1602,10 @@ end
     -- ==============================================================
     local function buildFilterSection(index)
         local fData = config.autoBuyFilters[index]
+        -- ⭐ PERBAIKAN: Pastikan tabel pets dan mutations tidak nil
+        if type(fData.pets) ~= "table" then fData.pets = {} end
+        if type(fData.mutations) ~= "table" then fData.mutations = {} end
+    
         local Section = createSection(buyScroll, "🎯 Filter Sniper #" .. index, "buyFilter" .. index, 400)
         Section.LayoutOrder = index + 1
 
