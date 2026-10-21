@@ -1230,16 +1230,23 @@ do
     -- Pastikan data RAP sudah dimuat oleh game
     pcall(function() TokenRAPController:GetRAPAsync("Pet", { PetType = "Huge Cat", PetData = { Level = 1 } }) end)
 
-    -- Pastikan struktur config autoBuyFilters siap (4 section)
-    if type(config.autoBuyFilters) ~= "table" or #config.autoBuyFilters == 0 then
-        config.autoBuyFilters = {
-            { enabled = false, pets = {}, maxPrice = 0, minWeight = 0, mutations = {} },
-            { enabled = false, pets = {}, maxPrice = 0, minWeight = 0, mutations = {} },
-            { enabled = false, pets = {}, maxPrice = 0, minWeight = 0, mutations = {} },
-            { enabled = false, pets = {}, maxPrice = 0, minWeight = 0, mutations = {} },
-        }
-        saveConfig()
+    -- ⭐ PERBAIKAN 1: Sanitasi Config (Mencegah error "got nil")
+    if type(config.autoBuyFilters) ~= "table" then config.autoBuyFilters = {} end
+    for i = 1, 4 do
+        local f = config.autoBuyFilters[i]
+        if type(f) ~= "table" then f = {} end
+        
+        -- Paksa buat tabel jika tidak ada
+        if type(f.pets) ~= "table" then f.pets = {} end
+        if type(f.mutations) ~= "table" then f.mutations = {} end
+        
+        f.enabled = f.enabled or false
+        f.maxPrice = tonumber(f.maxPrice) or 0
+        f.minWeight = tonumber(f.minWeight) or 0
+        
+        config.autoBuyFilters[i] = f
     end
+    saveConfig()
 
     local buyScroll = Instance.new("ScrollingFrame")
     buyScroll.Size = UDim2.new(1, -10, 1, -10)
@@ -1258,7 +1265,7 @@ do
     buyLayout.Parent = buyScroll
 
     -- ==============================================================
-    -- HELPER: Mendapatkan semua nama Pet untuk di-list
+    -- HELPER
     -- ==============================================================
     local function getAllPets()
         local list = {}
@@ -1269,9 +1276,6 @@ do
         return list
     end
 
-    -- ==============================================================
-    -- HELPER: Cek Saldo Token Pemain
-    -- ==============================================================
     local function getMyTokens()
         local ok, data = pcall(function() return DataService:GetData() end)
         if ok and data and data.TradeData and data.TradeData.Tokens then
@@ -1292,7 +1296,7 @@ do
 
         buyThread = task.spawn(function()
             while isBuying do
-                task.wait(1) -- Jeda cek 1 detik agar tidak spam server
+                task.wait(1)
 
                 local data = getBoothsData()
                 if data and data.Players then
@@ -1303,7 +1307,6 @@ do
                             for listingUUID, listing in pairs(playerData.Listings) do
                                 if not isBuying then break end
                                 
-                                -- Hanya proses jika yang dijual adalah Pet
                                 if listing.ItemType == "Pet" then
                                     local item = playerData.Items[listing.ItemId]
                                     if item then
@@ -1314,11 +1317,10 @@ do
 
                                         if mutation == "m" or mutation == "None" then mutation = "Normal" end
 
-                                        -- Cek apakah cocok dengan filter yang aktif
                                         for i, filter in ipairs(config.autoBuyFilters) do
                                             if filter.enabled then
-                                                -- 1. Cek Pet Type (kosong = semua pet)
-                                                local typeMatch = true
+                                                -- ⭐ PERBAIKAN 2: Wajib pilih minimal 1 pet
+                                                local typeMatch = false
                                                 local hasPetFilter = false
                                                 for _ in pairs(filter.pets) do hasPetFilter = true break end
                                                 
@@ -1326,13 +1328,9 @@ do
                                                     typeMatch = filter.pets[petType] == true
                                                 end
 
-                                                -- 2. Cek Max Price (0 = unlimited)
                                                 local priceMatch = (filter.maxPrice == 0) or (price <= filter.maxPrice)
-
-                                                -- 3. Cek Min Weight (0 = all weight)
                                                 local weightMatch = (filter.minWeight == 0) or (baseWeight >= filter.minWeight)
 
-                                                -- 4. Cek Mutasi (kosong = abaikan mutasi)
                                                 local mutMatch = true
                                                 local hasMutFilter = false
                                                 for _ in pairs(filter.mutations) do hasMutFilter = true break end
@@ -1341,19 +1339,17 @@ do
                                                     mutMatch = filter.mutations[mutation] == true
                                                 end
 
-                                                -- Jika semua kondisi terpenuhi
                                                 if typeMatch and priceMatch and weightMatch and mutMatch then
                                                     local myTokens = getMyTokens()
                                                     if myTokens >= price then
                                                         print(string.format("[AutoBuy] 🛒 SNIPE! %s (%s) | Weight: %.1f | Price: %d", petType, mutation, baseWeight, price))
                                                         
-                                                        -- Beli!
                                                         local sellerPlayer = "Player_" .. tostring(sellerId:match("%d+"))
                                                         pcall(function()
                                                             BuyListingRF:InvokeServer(sellerPlayer, listingUUID)
                                                         end)
                                                         
-                                                        task.wait(1.5) -- Jeda antar pembelian
+                                                        task.wait(1.5)
                                                     else
                                                         print("[AutoBuy] ⚠️ Token tidak cukup untuk " .. petType)
                                                     end
@@ -1424,7 +1420,6 @@ do
             startBuyBtn.Text = "▶️ MULAI SNIPER"
             startBuyBtn.BackgroundColor3 = C.success
         else
-            -- Cek apakah ada filter yang aktif
             local hasActiveFilter = false
             for _, f in ipairs(config.autoBuyFilters) do
                 if f.enabled then hasActiveFilter = true break end
@@ -1453,7 +1448,6 @@ do
         local Section = createSection(buyScroll, "🎯 Filter Sniper #" .. index, "buyFilter" .. index, 400)
         Section.LayoutOrder = index + 1
 
-        -- Toggle On/Off Filter
         local toggleBtn = Instance.new("TextButton")
         toggleBtn.Size = UDim2.new(1, -20, 0, 26)
         toggleBtn.Position = UDim2.new(0, 10, 0, 32)
@@ -1473,7 +1467,6 @@ do
             toggleBtn.BackgroundColor3 = fData.enabled and C.success or Color3.fromRGB(70, 70, 85)
         end)
 
-        -- Input Max Price
         local priceLbl = Instance.new("TextLabel")
         priceLbl.Size = UDim2.new(0.55, -15, 0, 16)
         priceLbl.Position = UDim2.new(0, 10, 0, 66)
@@ -1503,7 +1496,6 @@ do
             saveConfig()
         end)
 
-        -- Input Min Weight
         local weightLbl = Instance.new("TextLabel")
         weightLbl.Size = UDim2.new(0.55, -15, 0, 16)
         weightLbl.Position = UDim2.new(0, 10, 0, 90)
@@ -1533,7 +1525,6 @@ do
             saveConfig()
         end)
 
-        -- Tombol Pilih Pet (Buka Popup)
         local pickPetBtn = Instance.new("TextButton")
         pickPetBtn.Size = UDim2.new(1, -20, 0, 22)
         pickPetBtn.Position = UDim2.new(0, 10, 0, 114)
@@ -1546,7 +1537,6 @@ do
         pickPetBtn.Parent = Section
         Instance.new("UICorner", pickPetBtn).CornerRadius = UDim.new(0, 3)
 
-        -- List Pet Terpilih (Label)
         local selectedPetsLbl = Instance.new("TextLabel")
         selectedPetsLbl.Size = UDim2.new(1, -20, 0, 40)
         selectedPetsLbl.Position = UDim2.new(0, 10, 0, 140)
@@ -1575,7 +1565,6 @@ do
         end
         updateSelectedPetsLabel()
 
-        -- Tombol Pilih Mutasi (Buka Popup)
         local pickMutBtn = Instance.new("TextButton")
         pickMutBtn.Size = UDim2.new(1, -20, 0, 22)
         pickMutBtn.Position = UDim2.new(0, 10, 0, 186)
@@ -1588,7 +1577,6 @@ do
         pickMutBtn.Parent = Section
         Instance.new("UICorner", pickMutBtn).CornerRadius = UDim.new(0, 3)
 
-        -- List Mutasi Terpilih (Label)
         local selectedMutLbl = Instance.new("TextLabel")
         selectedMutLbl.Size = UDim2.new(1, -20, 0, 40)
         selectedMutLbl.Position = UDim2.new(0, 10, 0, 212)
@@ -1618,7 +1606,7 @@ do
         updateSelectedMutLbl()
 
         -- =========================================================
-        -- POPUP: PILIH PET
+        -- POPUP: PILIH PET (FIXED)
         -- =========================================================
         pickPetBtn.MouseButton1Click:Connect(function()
             local popupGui = Instance.new("ScreenGui")
@@ -1709,7 +1697,7 @@ do
                         btn.MouseButton1Click:Connect(function()
                             fData.pets[pet] = not isSel and true or nil
                             saveConfig()
-                            search.Text = "" -- Auto clear search
+                            search.Text = "" 
                             render()
                             updateSelectedPetsLabel()
                         end)
@@ -1721,7 +1709,7 @@ do
         end)
 
         -- =========================================================
-        -- POPUP: PILIH MUTASI
+        -- POPUP: PILIH MUTASI (FIXED)
         -- =========================================================
         pickMutBtn.MouseButton1Click:Connect(function()
             local popupGui = Instance.new("ScreenGui")
@@ -1773,7 +1761,6 @@ do
             lay.Padding = UDim.new(0, 2)
             lay.Parent = scr
 
-            -- Ambil list mutasi dari game
             local mutList = {}
             local ok, registry = pcall(function() return require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry) end)
             if ok and registry and registry.PetMutationRegistry then
@@ -1808,7 +1795,6 @@ do
                     saveConfig()
                     popupGui:Destroy()
                     updateSelectedMutLabel()
-                    -- Buka ulang popup untuk refresh (opsional, atau langsung close)
                 end)
             end
         end)
