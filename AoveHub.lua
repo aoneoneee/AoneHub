@@ -1226,8 +1226,11 @@ end
 -- ==================================================================
 do
     local buyTab = tabFrames["AutoBuy"]
-    pcall(function() TokenRAPController:GetRAPAsync("Pet", { PetType = "Huge Cat", PetData = { Level = 1 } }) end)
+    
+    -- ⭐ PERBAIKAN 1: Jeda sedikit agar GUI dari Tab Main selesai dimuat
+    task.wait(0.5)
 
+    -- Sanitasi Config
     if type(config.autoBuyFilters) ~= "table" then config.autoBuyFilters = {} end
     for i = 1, 4 do
         local f = config.autoBuyFilters[i]
@@ -1257,10 +1260,20 @@ do
     buyLayout.SortOrder = Enum.SortOrder.LayoutOrder
     buyLayout.Parent = buyScroll
 
+    -- ==============================================================
+    -- HELPER
+    -- ==============================================================
     local function getAllPets()
         local list = {}
-        for name, _ in pairs(PetRegistry.PetList) do
-            table.insert(list, name)
+        -- ⭐ PERBAIKAN 2: Gunakan pcall agar aman jika PetRegistry telat dimuat
+        local ok = pcall(function()
+            for name, _ in pairs(PetRegistry.PetList) do
+                table.insert(list, name)
+            end
+        end)
+        if not ok or #list == 0 then
+            -- Fallback darurat jika gagal load
+            list = {"Huge Cat", "Titan Dog", "Godly Dragon"} 
         end
         table.sort(list)
         return list
@@ -1274,6 +1287,9 @@ do
         return 0
     end
 
+    -- ==============================================================
+    -- LOGIC LOOP
+    -- ==============================================================
     local isBuying = false
     local buyThread = nil
 
@@ -1350,6 +1366,9 @@ do
         end
     end
 
+    -- ==============================================================
+    -- SECTION 1: KONTROL UTAMA
+    -- ==============================================================
     local ControlSection = createSection(buyScroll, "⚙️ Kontrol Sniper", "buyControl", 110)
     ControlSection.LayoutOrder = 1
 
@@ -1411,6 +1430,9 @@ do
         end
     end)
 
+    -- ==============================================================
+    -- FUNGSI POPUP (Dipisah agar tidak crash)
+    -- ==============================================================
     local allPets = getAllPets()
     
     local function createPopup(titleText, items, currentSelected, onSelect)
@@ -1477,9 +1499,10 @@ do
         lay.Padding = UDim.new(0, 2)
         lay.Parent = scr
 
-        local render
-        render = function()
-            for _, c in ipairs(scr:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+        local render = function()
+            for _, c in ipairs(scr:GetChildren()) do 
+                if c:IsA("TextButton") then c:Destroy() end 
+            end
             local s = search.Text:lower()
             for i, item in ipairs(items) do
                 if s == "" or item:lower():find(s, 1, true) then
@@ -1514,6 +1537,9 @@ do
         render()
     end
 
+    -- ==============================================================
+    -- PEMBUAT SECTION FILTER (Dengan Jeda Aman)
+    -- ==============================================================
     local function buildFilterSection(index)
         local fData = config.autoBuyFilters[index]
         local Section = createSection(buyScroll, "🎯 Filter Sniper #" .. index, "buyFilter" .. index, 400)
@@ -1695,8 +1721,11 @@ do
         end)
     end
 
+    -- ⭐ PERBAIKAN 3: Buat 4 Section Filter dengan jeda aman (Task.defer)
     for i = 1, 4 do
-        buildFilterSection(i)
+        task.defer(function()
+            buildFilterSection(i)
+        end)
     end
 
     if config.autoBuyEnabled then
