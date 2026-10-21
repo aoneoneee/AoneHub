@@ -1290,8 +1290,6 @@ do
     -- ==============================================================
     -- LOGIC LOOP
     -- ==============================================================
-    local buyThread = nil
-
     -- ⭐ Penyimpanan state
 local isBuying = false
 local buyConnection = nil
@@ -1303,7 +1301,6 @@ local function processListing(sellerId, listingUUID, listing)
     if not isBuying then return end
     if not listing or listing.ItemType ~= "Pet" then return end
 
-    -- Cek apakah listing ini sudah pernah kita proses di scan awal
     if scannedListings[listingUUID] then return end
 
     local data = getBoothsData()
@@ -1340,25 +1337,35 @@ local function processListing(sellerId, listingUUID, listing)
             if typeMatch and priceMatch and weightMatch and mutMatch then
                 local myTokens = getMyTokens()
                 
-                -- ⭐ CEK APAKAH BARANG INI SEDANG DALAM MASA TENGGANG GAGAL
                 if myTokens >= price and not recentlyFailed[listingUUID] then
                     print(string.format("[AutoBuy] 🎯 SNIPE! %s (%s) | Weight: %.1f | Price: %d", petType, mutation, baseWeight, price))
-                    local sellerPlayer = "Player_" .. tostring(sellerId:match("%d+"))
                     
-                    -- Tembak server
-                    local success = pcall(function() BuyListingRF:InvokeServer(sellerPlayer, listingUUID) end)
+                    -- ⭐ PERBAIKAN: Cari objek Player berdasarkan UserId
+                    local userIdStr = sellerId:match("Player_(%-?%d+)")
+                    local userId = userIdStr and tonumber(userIdStr)
+                    local sellerPlayerObj = userId and Players:GetPlayerByUserId(userId)
                     
-                    if success then
-                        scannedListings[listingUUID] = true -- Tandai sudah berhasil diproses
-                    else
-                        -- Jika gagal, masukkan ke masa tenggang 5 detik agar tidak spam
-                        recentlyFailed[listingUUID] = true
-                        task.delay(5, function()
-                            recentlyFailed[listingUUID] = nil
+                    -- Jika player ada di server
+                    if sellerPlayerObj then
+                        local success, err = pcall(function() 
+                            BuyListingRF:InvokeServer(sellerPlayerObj, listingUUID) 
                         end)
+                        
+                        if success then
+                            scannedListings[listingUUID] = true
+                            print("[AutoBuy] ✅ Pembelian berhasil ditembak!")
+                        else
+                            warn("[AutoBuy] ❌ Gagal beli:", err)
+                            recentlyFailed[listingUUID] = true
+                            task.delay(5, function() recentlyFailed[listingUUID] = nil end)
+                        end
+                    else
+                        print("[AutoBuy] ⚠️ Seller (UserId: ".. tostring(userId) ..") sudah keluar dari server.")
+                        recentlyFailed[listingUUID] = true
+                        task.delay(5, function() recentlyFailed[listingUUID] = nil end)
                     end
 
-                    task.wait(1.5) -- Jeda antar pembelian
+                    task.wait(1.5) 
                 end
                 return 
             end
