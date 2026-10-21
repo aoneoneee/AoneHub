@@ -1559,43 +1559,72 @@ end
         lay.Padding = UDim.new(0, 2)
         lay.Parent = scr
 
-        local render = function()
-            for _, c in ipairs(scr:GetChildren()) do 
-                if c:IsA("TextButton") then c:Destroy() end 
-            end
-            local s = search.Text:lower()
-            for i, item in ipairs(items) do
-                if s == "" or item:lower():find(s, 1, true) then
-                    local isSel = currentSelected[item] == true
-                    local btn = Instance.new("TextButton")
-                    btn.Size = UDim2.new(1, -4, 0, 22)
-                    btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
-                    btn.BorderSizePixel = 0
-                    btn.Font = Enum.Font.Gotham
-                    btn.Text = string.format("%s %s", isSel and "✓" or "○", item)
-                    btn.TextColor3 = C.text
-                    btn.TextSize = 9
-                    btn.TextXAlignment = Enum.TextXAlignment.Left
-                    btn.LayoutOrder = i
-                    btn.Parent = scr
-                    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
-                    local pad = Instance.new("UIPadding")
-                    pad.PaddingLeft = UDim.new(0, 6)
-                    pad.Parent = btn
+        local render
+render = function()
+    -- 1. Bersihkan list sebelumnya
+    for _, c in ipairs(scr:GetChildren()) do 
+        if c:IsA("TextButton") then c:Destroy() end 
+    end
+    
+    local s = search.Text:lower()
+    local selectedList = {}
+    local unselectedList = {}
 
-                    btn.MouseButton1Click:Connect(function()
-                        currentSelected[item] = not isSel and true or nil
-                        saveConfig()
-                        search.Text = "" 
-                        render()
-                        onSelect()
-                    end)
-                end
+    -- 2. Pisahkan antara yang terpilih dan tidak
+    for _, item in ipairs(items) do
+        if s == "" or item:lower():find(s, 1, true) then
+            if currentSelected[item] == true then
+                table.insert(selectedList, item)
+            else
+                table.insert(unselectedList, item)
             end
         end
-        search:GetPropertyChangedSignal("Text"):Connect(render)
-        render()
     end
+
+    -- 3. Gabungkan: Yang terpilih taruh paling atas
+    local combined = {}
+    for _, v in ipairs(selectedList) do table.insert(combined, v) end
+    for _, v in ipairs(unselectedList) do table.insert(combined, v) end
+
+    -- 4. Render ke GUI
+    for i, item in ipairs(combined) do
+        local isSel = currentSelected[item] == true
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 22)
+        -- Warna background: Hijau jika dipilih, Abu-abu jika tidak
+        btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
+        btn.BorderSizePixel = 0
+        btn.Font = Enum.Font.Gotham
+        btn.Text = string.format("%s %s", isSel and "✓" or "○", item)
+        btn.TextColor3 = C.text
+        btn.TextSize = 9
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.LayoutOrder = i
+        btn.Parent = scr
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 6)
+        pad.Parent = btn
+
+        btn.MouseButton1Click:Connect(function()
+            -- Toggle status
+            currentSelected[item] = not isSel and true or nil
+            saveConfig()
+            
+            -- ⭐ AUTO CLEAR SEARCH BAR (opsional, agar barang yang dipilih langsung kelihatan)
+            -- search.Text = "" 
+            
+            -- Render ulang (warna berubah & naik ke atas)
+            render()
+            onSelect()
+        end)
+    end
+end
+
+-- Hubungkan pencarian dan jalankan render pertama kali
+search:GetPropertyChangedSignal("Text"):Connect(render)
+render()
+end
 
     -- ==============================================================
     -- PEMBUAT SECTION FILTER (Dengan Jeda Aman)
