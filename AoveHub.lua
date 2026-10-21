@@ -1290,82 +1290,135 @@ do
     -- ==============================================================
     -- LOGIC LOOP
     -- ==============================================================
-    local isBuying = false
     local buyThread = nil
 
-    local function startBuyLoop()
-        if isBuying then return end
-        isBuying = true
+    -- ⭐ Penyimpanan state
+local isBuying = false
+local buyConnection = nil
+local scannedListings = {}  -- Mencegah scan berulang
+local recentlyFailed = {}   -- Mencegah spam barang yang sudah tidak ada
 
-        buyThread = task.spawn(function()
-            while isBuying do
-                task.wait(1)
-                local data = getBoothsData()
-                if data and data.Players then
-                    for sellerId, playerData in pairs(data.Players) do
+-- Fungsi pembantu untuk mengecek 1 listing
+local function processListing(sellerId, listingUUID, listing)
+    if not isBuying then return end
+    if not listing or listing.ItemType ~= "Pet" then return end
+
+    -- Cek apakah listing ini sudah pernah kita proses di scan awal
+    if scannedListings[listingUUID] then return end
+
+    local data = getBoothsData()
+    if not data or not data.Players[sellerId] or not data.Players[sellerId].Items then return end
+    
+    local item = data.Players[sellerId].Items[listing.ItemId]
+    if not item then return end
+
+    local petType = item.PetType or (item.PetData and item.PetData.PetType) or "?"
+    local baseWeight = item.BaseWeight or (item.PetData and item.PetData.BaseWeight) or 0
+    local mutation = item.MutationType or (item.PetData and item.PetData.MutationType) or "Normal"
+    local price = listing.Price or 999999
+    if mutation == "m" or mutation == "None" then mutation = "Normal" end
+
+    for i, filter in ipairs(config.autoBuyFilters) do
+        if filter.enabled then
+            local hasPetFilter = false
+            for _ in pairs(filter.pets) do hasPetFilter = true break end
+            local typeMatch = false
+            if hasPetFilter then
+                typeMatch = filter.pets[petType] == true
+            end
+
+            local priceMatch = (filter.maxPrice == 0) or (price <= filter.maxPrice)
+            local weightMatch = (filter.minWeight == 0) or (baseWeight >= filter.minWeight)
+
+            local hasMutFilter = false
+            for _ in pairs(filter.mutations) do hasMutFilter = true break end
+            local mutMatch = true
+            if hasMutFilter then
+                mutMatch = filter.mutations[mutation] == true
+            end
+
+            if typeMatch and priceMatch and weightMatch and mutMatch then
+                local myTokens = getMyTokens()
+                
+                -- ⭐ CEK APAKAH BARANG INI SEDANG DALAM MASA TENGGANG GAGAL
+                if myTokens >= price and not recentlyFailed[listingUUID] then
+                    print(string.format("[AutoBuy] 🎯 SNIPE! %s (%s) | Weight: %.1f | Price: %d", petType, mutation, baseWeight, price))
+                    local sellerPlayer = "Player_" .. tostring(sellerId:match("%d+"))
+                    
+                    -- Tembak server
+                    local success = pcall(function() BuyListingRF:InvokeServer(sellerPlayer, listingUUID) end)
+                    
+                    if success then
+                        scannedListings[listingUUID] = true -- Tandai sudah berhasil diproses
+                    else
+                        -- Jika gagal, masukkan ke masa tenggang 5 detik agar tidak spam
+                        recentlyFailed[listingUUID] = true
+                        task.delay(5, function()
+                            recentlyFailed[listingUUID] = nil
+                        end)
+                    end
+
+                    task.wait(1.5) -- Jeda antar pembelian
+                end
+                return 
+            end
+        end
+    end
+end
+
+local function startBuyLoop()
+    if isBuying then return end
+    isBuying = true
+    table.clear(scannedListings) -- Reset data scan awal
+    table.clear(recentlyFailed)
+
+    -- ⭐ 1. SCAN AWAL (Hanya berjalan 1x putaran)
+    print("[AutoBuy] Memindai listing yang sudah ada...")
+    task.spawn(function()
+        local data = getBoothsData()
+        if data and data.Players then
+            for sellerId, pData in pairs(data.Players) do
+                if not isBuying then break end
+                if pData.Listings then
+                    for listUUID, listing in pairs(pData.Listings) do
                         if not isBuying then break end
-                        if playerData.Listings and playerData.Items then
-                            for listingUUID, listing in pairs(playerData.Listings) do
-                                if not isBuying then break end
-                                if listing.ItemType == "Pet" then
-                                    local item = playerData.Items[listing.ItemId]
-                                    if item then
-                                        local petType = item.PetType or (item.PetData and item.PetData.PetType) or "?"
-                                        local baseWeight = item.BaseWeight or (item.PetData and item.PetData.BaseWeight) or 0
-                                        local mutation = item.MutationType or (item.PetData and item.PetData.MutationType) or "Normal"
-                                        local price = listing.Price or 999999
-                                        if mutation == "m" or mutation == "None" then mutation = "Normal" end
-
-                                        for i, filter in ipairs(config.autoBuyFilters) do
-                                            if filter.enabled then
-                                                local hasPetFilter = false
-                                                for _ in pairs(filter.pets) do hasPetFilter = true break end
-                                                local typeMatch = false
-                                                if hasPetFilter then
-                                                    typeMatch = filter.pets[petType] == true
-                                                end
-
-                                                local priceMatch = (filter.maxPrice == 0) or (price <= filter.maxPrice)
-                                                local weightMatch = (filter.minWeight == 0) or (baseWeight >= filter.minWeight)
-
-                                                local hasMutFilter = false
-                                                for _ in pairs(filter.mutations) do hasMutFilter = true break end
-                                                local mutMatch = true
-                                                if hasMutFilter then
-                                                    mutMatch = filter.mutations[mutation] == true
-                                                end
-
-                                                if typeMatch and priceMatch and weightMatch and mutMatch then
-                                                    local myTokens = getMyTokens()
-                                                    if myTokens >= price then
-                                                        print(string.format("[AutoBuy] 🛒 SNIPE! %s (%s) | Weight: %.1f | Price: %d", petType, mutation, baseWeight, price))
-                                                        local sellerPlayer = "Player_" .. tostring(sellerId:match("%d+"))
-                                                        pcall(function() BuyListingRF:InvokeServer(sellerPlayer, listingUUID) end)
-                                                        task.wait(1.5)
-                                                    else
-                                                        print("[AutoBuy] ⚠️ Token tidak cukup untuk " .. petType)
-                                                    end
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
+                        processListing(sellerId, listUUID, listing)
                     end
                 end
             end
-        end)
-    end
-
-    local function stopBuyLoop()
-        isBuying = false
-        if buyThread then
-            pcall(task.cancel, buyThread)
-            buyThread = nil
         end
-    end
+        print("[AutoBuy] Scan awal selesai. Beralih ke mode Siaga (Event).")
+    end)
 
+    -- ⭐ 2. EVENT LISTENER (Untuk listing baru setelah START)
+    buyConnection = boothReceiver:GetPathSignal("Players/*/Listings/*"):Connect(function(sellerId, listingUUID)
+        if not isBuying then return end
+        
+        local data = getBoothsData()
+        if data and data.Players and data.Players[sellerId] and data.Players[sellerId].Listings then
+            local listing = data.Players[sellerId].Listings[listingUUID]
+            if listing then
+                -- Hapus dari daftar scanned agar barang ini diproses kembali (karena ini event baru)
+                scannedListings[listingUUID] = nil 
+                task.spawn(function()
+                    processListing(sellerId, listingUUID, listing)
+                end)
+            end
+        end
+    end)
+    
+    print("[AutoBuy] ✅ Sistem Sniper Aktif (Scan Awal + Event Listener)")
+end
+
+local function stopBuyLoop()
+    isBuying = false
+    if buyConnection then
+        buyConnection:Disconnect()
+        buyConnection = nil
+    end
+    print("[AutoBuy] ❌ Event Listener Dimatikan.")
+end
+    
     -- ==============================================================
     -- SECTION 1: KONTROL UTAMA
     -- ==============================================================
