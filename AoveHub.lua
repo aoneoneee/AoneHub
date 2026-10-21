@@ -1226,24 +1226,17 @@ end
 -- ==================================================================
 do
     local buyTab = tabFrames["AutoBuy"]
-    
-    -- Pastikan data RAP sudah dimuat oleh game
     pcall(function() TokenRAPController:GetRAPAsync("Pet", { PetType = "Huge Cat", PetData = { Level = 1 } }) end)
 
-    -- ⭐ PERBAIKAN 1: Sanitasi Config (Mencegah error "got nil")
     if type(config.autoBuyFilters) ~= "table" then config.autoBuyFilters = {} end
     for i = 1, 4 do
         local f = config.autoBuyFilters[i]
         if type(f) ~= "table" then f = {} end
-        
-        -- Paksa buat tabel jika tidak ada
         if type(f.pets) ~= "table" then f.pets = {} end
         if type(f.mutations) ~= "table" then f.mutations = {} end
-        
         f.enabled = f.enabled or false
         f.maxPrice = tonumber(f.maxPrice) or 0
         f.minWeight = tonumber(f.minWeight) or 0
-        
         config.autoBuyFilters[i] = f
     end
     saveConfig()
@@ -1264,9 +1257,6 @@ do
     buyLayout.SortOrder = Enum.SortOrder.LayoutOrder
     buyLayout.Parent = buyScroll
 
-    -- ==============================================================
-    -- HELPER
-    -- ==============================================================
     local function getAllPets()
         local list = {}
         for name, _ in pairs(PetRegistry.PetList) do
@@ -1284,9 +1274,6 @@ do
         return 0
     end
 
-    -- ==============================================================
-    -- STATE & LOGIC BUY LOOP
-    -- ==============================================================
     local isBuying = false
     local buyThread = nil
 
@@ -1297,16 +1284,13 @@ do
         buyThread = task.spawn(function()
             while isBuying do
                 task.wait(1)
-
                 local data = getBoothsData()
                 if data and data.Players then
                     for sellerId, playerData in pairs(data.Players) do
                         if not isBuying then break end
-                        
                         if playerData.Listings and playerData.Items then
                             for listingUUID, listing in pairs(playerData.Listings) do
                                 if not isBuying then break end
-                                
                                 if listing.ItemType == "Pet" then
                                     local item = playerData.Items[listing.ItemId]
                                     if item then
@@ -1314,16 +1298,13 @@ do
                                         local baseWeight = item.BaseWeight or (item.PetData and item.PetData.BaseWeight) or 0
                                         local mutation = item.MutationType or (item.PetData and item.PetData.MutationType) or "Normal"
                                         local price = listing.Price or 999999
-
                                         if mutation == "m" or mutation == "None" then mutation = "Normal" end
 
                                         for i, filter in ipairs(config.autoBuyFilters) do
                                             if filter.enabled then
-                                                -- ⭐ PERBAIKAN 2: Wajib pilih minimal 1 pet
-                                                local typeMatch = false
                                                 local hasPetFilter = false
                                                 for _ in pairs(filter.pets) do hasPetFilter = true break end
-                                                
+                                                local typeMatch = false
                                                 if hasPetFilter then
                                                     typeMatch = filter.pets[petType] == true
                                                 end
@@ -1331,10 +1312,9 @@ do
                                                 local priceMatch = (filter.maxPrice == 0) or (price <= filter.maxPrice)
                                                 local weightMatch = (filter.minWeight == 0) or (baseWeight >= filter.minWeight)
 
-                                                local mutMatch = true
                                                 local hasMutFilter = false
                                                 for _ in pairs(filter.mutations) do hasMutFilter = true break end
-                                                
+                                                local mutMatch = true
                                                 if hasMutFilter then
                                                     mutMatch = filter.mutations[mutation] == true
                                                 end
@@ -1343,12 +1323,8 @@ do
                                                     local myTokens = getMyTokens()
                                                     if myTokens >= price then
                                                         print(string.format("[AutoBuy] 🛒 SNIPE! %s (%s) | Weight: %.1f | Price: %d", petType, mutation, baseWeight, price))
-                                                        
                                                         local sellerPlayer = "Player_" .. tostring(sellerId:match("%d+"))
-                                                        pcall(function()
-                                                            BuyListingRF:InvokeServer(sellerPlayer, listingUUID)
-                                                        end)
-                                                        
+                                                        pcall(function() BuyListingRF:InvokeServer(sellerPlayer, listingUUID) end)
                                                         task.wait(1.5)
                                                     else
                                                         print("[AutoBuy] ⚠️ Token tidak cukup untuk " .. petType)
@@ -1374,9 +1350,6 @@ do
         end
     end
 
-    -- ==============================================================
-    -- SECTION 1: KONTROL UTAMA
-    -- ==============================================================
     local ControlSection = createSection(buyScroll, "⚙️ Kontrol Sniper", "buyControl", 110)
     ControlSection.LayoutOrder = 1
 
@@ -1438,10 +1411,108 @@ do
         end
     end)
 
-    -- ==============================================================
-    -- PEMBUAT SECTION FILTER (4x)
-    -- ==============================================================
     local allPets = getAllPets()
+    
+    local function createPopup(titleText, items, currentSelected, onSelect)
+        local popupGui = Instance.new("ScreenGui")
+        popupGui.Name = "SniperHubPopup"
+        popupGui.DisplayOrder = 999
+        popupGui.ResetOnSpawn = false
+        popupGui.Parent = playerGui
+
+        local popup = Instance.new("Frame")
+        popup.Size = UDim2.new(0, 350, 0, 400)
+        popup.Position = UDim2.new(0.5, -175, 0.5, -200)
+        popup.BackgroundColor3 = C.bg
+        popup.BorderSizePixel = 0
+        popup.Parent = popupGui
+        Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
+        
+        local title = Instance.new("TextLabel")
+        title.Size = UDim2.new(1, 0, 0, 28)
+        title.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+        title.Text = titleText
+        title.TextColor3 = C.text
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 11
+        title.Parent = popup
+        Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
+
+        local close = Instance.new("TextButton")
+        close.Size = UDim2.new(0, 22, 0, 22)
+        close.Position = UDim2.new(1, -26, 0, 3)
+        close.BackgroundColor3 = C.danger
+        close.Text = "X"
+        close.TextColor3 = C.text
+        close.Font = Enum.Font.GothamBold
+        close.TextSize = 10
+        close.Parent = popup
+        Instance.new("UICorner", close).CornerRadius = UDim.new(0, 4)
+        close.MouseButton1Click:Connect(function() popupGui:Destroy() end)
+
+        local search = Instance.new("TextBox")
+        search.Size = UDim2.new(1, -20, 0, 24)
+        search.Position = UDim2.new(0, 10, 0, 35)
+        search.BackgroundColor3 = C.input
+        search.BorderSizePixel = 0
+        search.Font = Enum.Font.Gotham
+        search.PlaceholderText = "🔍 Cari..."
+        search.Text = ""
+        search.TextColor3 = C.text
+        search.TextSize = 9
+        search.ClearTextOnFocus = false
+        search.Parent = popup
+        Instance.new("UICorner", search).CornerRadius = UDim.new(0, 4)
+
+        local scr = Instance.new("ScrollingFrame")
+        scr.Size = UDim2.new(1, -20, 1, -70)
+        scr.Position = UDim2.new(0, 10, 0, 65)
+        scr.BackgroundTransparency = 1
+        scr.ScrollBarThickness = 3
+        scr.CanvasSize = UDim2.new(0, 0, 0, 0)
+        scr.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        scr.Parent = popup
+
+        local lay = Instance.new("UIListLayout")
+        lay.Padding = UDim.new(0, 2)
+        lay.Parent = scr
+
+        local render
+        render = function()
+            for _, c in ipairs(scr:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+            local s = search.Text:lower()
+            for i, item in ipairs(items) do
+                if s == "" or item:lower():find(s, 1, true) then
+                    local isSel = currentSelected[item] == true
+                    local btn = Instance.new("TextButton")
+                    btn.Size = UDim2.new(1, -4, 0, 22)
+                    btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
+                    btn.BorderSizePixel = 0
+                    btn.Font = Enum.Font.Gotham
+                    btn.Text = string.format("%s %s", isSel and "✓" or "○", item)
+                    btn.TextColor3 = C.text
+                    btn.TextSize = 9
+                    btn.TextXAlignment = Enum.TextXAlignment.Left
+                    btn.LayoutOrder = i
+                    btn.Parent = scr
+                    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+                    local pad = Instance.new("UIPadding")
+                    pad.PaddingLeft = UDim.new(0, 6)
+                    pad.Parent = btn
+
+                    btn.MouseButton1Click:Connect(function()
+                        currentSelected[item] = not isSel and true or nil
+                        saveConfig()
+                        search.Text = "" 
+                        render()
+                        onSelect()
+                    end)
+                end
+            end
+        end
+        search:GetPropertyChangedSignal("Text"):Connect(render)
+        render()
+    end
 
     local function buildFilterSection(index)
         local fData = config.autoBuyFilters[index]
@@ -1558,7 +1629,7 @@ do
                 if val then table.insert(selected, pet) end
             end
             if #selected == 0 then
-                selectedPetsLbl.Text = "Klik untuk memilih pet... (Kosong = Semua Pet)"
+                selectedPetsLbl.Text = "Klik untuk memilih pet... (Wajib pilih 1)"
             else
                 selectedPetsLbl.Text = table.concat(selected, ", ")
             end
@@ -1603,164 +1674,13 @@ do
                 selectedMutLbl.Text = table.concat(selected, ", ")
             end
         end
-        updateSelectedMutLbl()
+        updateSelectedMutLabel()
 
-        -- =========================================================
-        -- POPUP: PILIH PET (FIXED)
-        -- =========================================================
         pickPetBtn.MouseButton1Click:Connect(function()
-            local popupGui = Instance.new("ScreenGui")
-            popupGui.Name = "BuyPetPopup"
-            popupGui.DisplayOrder = 999
-            popupGui.ResetOnSpawn = false
-            popupGui.Parent = playerGui
-
-            local popup = Instance.new("Frame")
-            popup.Size = UDim2.new(0, 350, 0, 400)
-            popup.Position = UDim2.new(0.5, -175, 0.5, -200)
-            popup.BackgroundColor3 = C.bg
-            popup.BorderSizePixel = 0
-            popup.Parent = popupGui
-            Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
-            
-            local title = Instance.new("TextLabel")
-            title.Size = UDim2.new(1, 0, 0, 28)
-            title.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-            title.Text = "🎯 Pilih Pet untuk Filter #" .. index
-            title.TextColor3 = C.text
-            title.Font = Enum.Font.GothamBold
-            title.TextSize = 11
-            title.Parent = popup
-            Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
-
-            local close = Instance.new("TextButton")
-            close.Size = UDim2.new(0, 22, 0, 22)
-            close.Position = UDim2.new(1, -26, 0, 3)
-            close.BackgroundColor3 = C.danger
-            close.Text = "X"
-            close.TextColor3 = C.text
-            close.Font = Enum.Font.GothamBold
-            close.TextSize = 10
-            close.Parent = popup
-            Instance.new("UICorner", close).CornerRadius = UDim.new(0, 4)
-            close.MouseButton1Click:Connect(function() popupGui:Destroy() end)
-
-            local search = Instance.new("TextBox")
-            search.Size = UDim2.new(1, -20, 0, 24)
-            search.Position = UDim2.new(0, 10, 0, 35)
-            search.BackgroundColor3 = C.input
-            search.BorderSizePixel = 0
-            search.Font = Enum.Font.Gotham
-            search.PlaceholderText = "🔍 Cari pet..."
-            search.Text = ""
-            search.TextColor3 = C.text
-            search.TextSize = 9
-            search.ClearTextOnFocus = false
-            search.Parent = popup
-            Instance.new("UICorner", search).CornerRadius = UDim.new(0, 4)
-
-            local scr = Instance.new("ScrollingFrame")
-            scr.Size = UDim2.new(1, -20, 1, -70)
-            scr.Position = UDim2.new(0, 10, 0, 65)
-            scr.BackgroundTransparency = 1
-            scr.ScrollBarThickness = 3
-            scr.CanvasSize = UDim2.new(0, 0, 0, 0)
-            scr.AutomaticCanvasSize = Enum.AutomaticSize.Y
-            scr.Parent = popup
-
-            local lay = Instance.new("UIListLayout")
-            lay.Padding = UDim.new(0, 2)
-            lay.Parent = scr
-
-            local function render()
-                for _, c in ipairs(scr:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-                local s = search.Text:lower()
-                for i, pet in ipairs(allPets) do
-                    if s == "" or pet:lower():find(s, 1, true) then
-                        local isSel = fData.pets[pet] == true
-                        local btn = Instance.new("TextButton")
-                        btn.Size = UDim2.new(1, -4, 0, 22)
-                        btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
-                        btn.BorderSizePixel = 0
-                        btn.Font = Enum.Font.Gotham
-                        btn.Text = string.format("%s %s", isSel and "✓" or "○", pet)
-                        btn.TextColor3 = C.text
-                        btn.TextSize = 9
-                        btn.TextXAlignment = Enum.TextXAlignment.Left
-                        btn.LayoutOrder = i
-                        btn.Parent = scr
-                        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
-                        local pad = Instance.new("UIPadding")
-                        pad.PaddingLeft = UDim.new(0, 6)
-                        pad.Parent = btn
-
-                        btn.MouseButton1Click:Connect(function()
-                            fData.pets[pet] = not isSel and true or nil
-                            saveConfig()
-                            search.Text = "" 
-                            render()
-                            updateSelectedPetsLabel()
-                        end)
-                    end
-                end
-            end
-            search:GetPropertyChangedSignal("Text"):Connect(render)
-            render()
+            createPopup("🎯 Pilih Pet untuk Filter #" .. index, allPets, fData.pets, updateSelectedPetsLabel)
         end)
 
-        -- =========================================================
-        -- POPUP: PILIH MUTASI (FIXED)
-        -- =========================================================
         pickMutBtn.MouseButton1Click:Connect(function()
-            local popupGui = Instance.new("ScreenGui")
-            popupGui.Name = "BuyMutPopup"
-            popupGui.DisplayOrder = 999
-            popupGui.ResetOnSpawn = false
-            popupGui.Parent = playerGui
-
-            local popup = Instance.new("Frame")
-            popup.Size = UDim2.new(0, 350, 0, 400)
-            popup.Position = UDim2.new(0.5, -175, 0.5, -200)
-            popup.BackgroundColor3 = C.bg
-            popup.BorderSizePixel = 0
-            popup.Parent = popupGui
-            Instance.new("UICorner", popup).CornerRadius = UDim.new(0, 8)
-            
-            local title = Instance.new("TextLabel")
-            title.Size = UDim2.new(1, 0, 0, 28)
-            title.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-            title.Text = "✨ Pilih Mutasi untuk Filter #" .. index
-            title.TextColor3 = C.text
-            title.Font = Enum.Font.GothamBold
-            title.TextSize = 11
-            title.Parent = popup
-            Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
-
-            local close = Instance.new("TextButton")
-            close.Size = UDim2.new(0, 22, 0, 22)
-            close.Position = UDim2.new(1, -26, 0, 3)
-            close.BackgroundColor3 = C.danger
-            close.Text = "X"
-            close.TextColor3 = C.text
-            close.Font = Enum.Font.GothamBold
-            close.TextSize = 10
-            close.Parent = popup
-            Instance.new("UICorner", close).CornerRadius = UDim.new(0, 4)
-            close.MouseButton1Click:Connect(function() popupGui:Destroy() end)
-
-            local scr = Instance.new("ScrollingFrame")
-            scr.Size = UDim2.new(1, -20, 1, -45)
-            scr.Position = UDim2.new(0, 10, 0, 35)
-            scr.BackgroundTransparency = 1
-            scr.ScrollBarThickness = 3
-            scr.CanvasSize = UDim2.new(0, 0, 0, 0)
-            scr.AutomaticCanvasSize = Enum.AutomaticSize.Y
-            scr.Parent = popup
-
-            local lay = Instance.new("UIListLayout")
-            lay.Padding = UDim.new(0, 2)
-            lay.Parent = scr
-
             local mutList = {}
             local ok, registry = pcall(function() return require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry) end)
             if ok and registry and registry.PetMutationRegistry then
@@ -1771,41 +1691,14 @@ do
                 end
             end
             table.sort(mutList)
-
-            for i, mut in ipairs(mutList) do
-                local isSel = fData.mutations[mut] == true
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, -4, 0, 22)
-                btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
-                btn.BorderSizePixel = 0
-                btn.Font = Enum.Font.Gotham
-                btn.Text = string.format("%s %s", isSel and "✓" or "○", mut)
-                btn.TextColor3 = C.text
-                btn.TextSize = 9
-                btn.TextXAlignment = Enum.TextXAlignment.Left
-                btn.LayoutOrder = i
-                btn.Parent = scr
-                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
-                local pad = Instance.new("UIPadding")
-                pad.PaddingLeft = UDim.new(0, 6)
-                pad.Parent = btn
-
-                btn.MouseButton1Click:Connect(function()
-                    fData.mutations[mut] = not isSel and true or nil
-                    saveConfig()
-                    popupGui:Destroy()
-                    updateSelectedMutLabel()
-                end)
-            end
+            createPopup("✨ Pilih Mutasi untuk Filter #" .. index, mutList, fData.mutations, updateSelectedMutLabel)
         end)
     end
 
-    -- Buat 4 Section Filter
     for i = 1, 4 do
         buildFilterSection(i)
     end
 
-    -- Init Auto Buy jika ON
     if config.autoBuyEnabled then
         startBuyBtn.Text = "⏹️ STOP SNIPER"
         startBuyBtn.BackgroundColor3 = C.danger
