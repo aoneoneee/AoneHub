@@ -81,6 +81,9 @@ local CONFIG_DEFAULTS = {
     autoListingEnabled = false,
     autoListingFilters = {},
     autoListingMaxPrice = 1000,
+    antiAfkEnabled = false,
+    discordWebhookEnabled = false,
+    discordWebhookUrl = "",
 }
 
 local config = {}
@@ -117,6 +120,87 @@ _G.SniperHub = {
     Colors      = C,
     PlaceId     = TRADE_WORLD_PLACE_ID,
 }
+
+-- ==================================================================
+-- WEBHOOK HELPER
+-- ==================================================================
+local function sendDiscordWebhook(webhookType, data)
+    if not config.discordWebhookEnabled then return end
+    if not config.discordWebhookUrl or config.discordWebhookUrl == "" then return end
+    
+    local title, color, description
+    local currentTime = os.date("%d/%m/%y, %H.%M | %m/%d/%Y %I:%M %p")
+    
+    -- Sensor nama (S********3)
+    local function censorName(name)
+        if not name or #name < 3 then return name end
+        local first, last = name:sub(1,1), name:sub(-1)
+        local mid = string.rep("*", #name - 2)
+        return first .. mid .. last
+    end
+
+    local buyerName = censorName(player.Name)
+    local sellerName = data.sellerName and censorName(data.sellerName) or "Unknown"
+
+    if webhookType == "Snipe" then
+        title = "Snipe Alert! (Pet)"
+        color = 5763719 -- Hijau
+        description = string.format(
+            "**Item Sniped**\n" ..
+            "> Pet : **%s**\n" ..
+            "> Age : %d\n" ..
+            "> Weight : %.2f kg\n" ..
+            "> Price : **%s** Token\n" ..
+            "> Mutation : %s\n\n" ..
+            "**Trade Info**\n" ..
+            "> Buyer : ||%s||\n" ..
+            "> Seller : ||%s||",
+            data.petName, data.age or 1, data.weight or 0, tostring(data.price), data.mutation,
+            buyerName, sellerName
+        )
+    elseif webhookType == "Sell" then
+        title = "Sell Alert! (Pet)"
+        color = 16776960 -- Kuning
+        description = string.format(
+            "**Item Sold**\n" ..
+            "> Pet : **%s**\n" ..
+            "> Age : %d\n" ..
+            "> Weight : %.2f kg\n" ..
+            "> Price : **%s** Token\n" ..
+            "> Mutation : %s\n\n" ..
+            "**Trade Info**\n" ..
+            "> Buyer : ||%s||\n" ..
+            "> Seller : ||%s||",
+            data.petName, data.age or 1, data.weight or 0, tostring(data.price), data.mutation,
+            buyerName, sellerName
+        )
+    end
+
+    local payload = {
+        username = "AoneHub",
+        embeds = {{
+            title = title,
+            description = description,
+            color = color,
+            footer = {
+                text = "AoneHub  " .. currentTime
+            }
+        }}
+    }
+    
+    local httpReq = (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request) or request or http_request
+    if httpReq then
+        pcall(function()
+            httpReq({
+                Url = config.discordWebhookUrl,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode(payload)
+            })
+        end)
+    end
+end
+_G.SniperHub.SendWebhook = sendDiscordWebhook
 
 -- ==================================================================
 -- SHARED STATE
@@ -1362,8 +1446,19 @@ local function processListing(sellerId, listingUUID, listing)
                         end)
                         
                         if success then
-                            scannedListings[listingUUID] = true
-                            print("[AutoBuy] ✅ Pembelian berhasil ditembak!")
+    scannedListings[listingUUID] = true
+    print("[AutoBuy] ✅ Pembelian berhasil ditembak!")
+    
+    -- ⭐ PEMANGGILAN WEBHOOK SNIPE
+    local sellerName = sellerPlayerObj.Name
+    _G.SniperHub.SendWebhook("Snipe", {
+        petName = petType,
+        age = item.Level or (item.PetData and item.PetData.Level) or 1,
+        weight = baseWeight,
+        price = price,
+        mutation = mutation,
+        sellerName = sellerName
+    })
                         else
                             warn("[AutoBuy] ❌ Gagal beli:", err)
                             recentlyFailed[listingUUID] = true
@@ -2057,14 +2152,40 @@ local function startBuyLoop()
     processQueue()
 
     -- 3. EVENT LISTENER: Deteksi jika ada slot kosong (pet terjual)
-    if not buyConnection then
-        buyConnection = boothReceiver:GetPathSignal("Players/" .. tostring(player.UserId) .. "/Listings"):Connect(function()
-            task.wait(2) -- Beri jeda sinkronisasi data
-            if isListing and #queue > 0 then
-                processQueue() -- Isi ulang slot yang kosong
-            end
-        end)
-    end
+if not buyConnection then
+    local myId = "Player_" .. tostring(player.UserId)
+    local previousListingCount = getMyCurrentListingCount() -- ⭐ Inisialisasi awal
+
+    buyConnection = boothReceiver:GetPathSignal("Players/" .. myId .. "/Listings"):Connect(function()
+        task.wait(2) -- Beri jeda sinkronisasi data
+        local currentCount = getMyCurrentListingCount()
+        
+        -- ⭐ DETEKSI TERJUAL & KIRIM WEBHOOK
+        if currentCount < previousListingCount then
+            local sold = previousListingCount - currentCount
+            
+            -- Ambil data pet dari antrian (jika ada) sebagai sampel info
+            local samplePet = queue[1] or { petType = "Unknown", weight = 0, price = 0, mutation = "Normal" }
+
+            _G.SniperHub.SendWebhook("Sell", {
+                petName = samplePet.petType,
+                age = 1,
+                weight = samplePet.weight,
+                price = samplePet.price,
+                mutation = samplePet.mutation,
+                sellerName = player.Name
+            })
+            print("[AutoListing] 💰 " .. sold .. " Pet terjual! Mengisi ulang slot...")
+        end
+        
+        previousListingCount = currentCount
+        
+        -- Isi ulang slot yang kosong
+        if isListing and #queue > 0 then
+            processQueue() 
+        end
+    end)
+        end
     end
 
     -- ==============================================================
@@ -2498,7 +2619,213 @@ if config.autoListingEnabled then
 end
 end -- END OF TAB AUTO LISTING BLOCK
 
-makePlaceholder("Misc",        "⚙️ Tab Misc\nAntiAfk & Discord Webhook\n(menyusul)")
+-- ==================================================================
+-- =================== TAB MISC (ISOLATED DO-END) ===================
+-- ==================================================================
+do
+    local miscTab = tabFrames["Misc"]
+    
+    local miscScroll = Instance.new("ScrollingFrame")
+    miscScroll.Size = UDim2.new(1, -10, 1, -10)
+    miscScroll.Position = UDim2.new(0, 5, 0, 5)
+    miscScroll.BackgroundTransparency = 1
+    miscScroll.BorderSizePixel = 0
+    miscScroll.ScrollBarThickness = 4
+    miscScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+    miscScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    miscScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    miscScroll.Parent = miscTab
+
+    local miscLayout = Instance.new("UIListLayout")
+    miscLayout.Padding = UDim.new(0, 6)
+    miscLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    miscLayout.Parent = miscScroll
+
+    -- ==============================================================
+    -- SECTION 1: ANTI-AFK
+    -- ==============================================================
+    local AfkSection = createSection(miscScroll, "🛡️ Anti-AFK System", "miscAfk", 90)
+    AfkSection.LayoutOrder = 1
+
+    local afkToggleBtn = Instance.new("TextButton")
+    afkToggleBtn.Size = UDim2.new(1, -20, 0, 26)
+    afkToggleBtn.Position = UDim2.new(0, 10, 0, 32)
+    afkToggleBtn.BackgroundColor3 = config.antiAfkEnabled and C.success or Color3.fromRGB(70, 70, 85)
+    afkToggleBtn.BorderSizePixel = 0
+    afkToggleBtn.Font = Enum.Font.GothamBold
+    afkToggleBtn.Text = config.antiAfkEnabled and "🛡️ Anti-AFK: ON" or "🛡️ Anti-AFK: OFF"
+    afkToggleBtn.TextColor3 = C.text
+    afkToggleBtn.TextSize = 9
+    afkToggleBtn.Parent = AfkSection
+    Instance.new("UICorner", afkToggleBtn).CornerRadius = UDim.new(0, 4)
+
+    afkToggleBtn.MouseButton1Click:Connect(function()
+        config.antiAfkEnabled = not config.antiAfkEnabled
+        saveConfig()
+        afkToggleBtn.Text = config.antiAfkEnabled and "🛡️ Anti-AFK: ON" or "🛡️ Anti-AFK: OFF"
+        afkToggleBtn.BackgroundColor3 = config.antiAfkEnabled and C.success or Color3.fromRGB(70, 70, 85)
+    end)
+
+    local afkHint = Instance.new("TextLabel")
+    afkHint.Size = UDim2.new(1, -20, 0, 14)
+    afkHint.Position = UDim2.new(0, 10, 0, 65)
+    afkHint.BackgroundTransparency = 1
+    afkHint.Font = Enum.Font.Gotham
+    afkHint.Text = "Mencegah kick karena AFK (Idle) di dalam game."
+    afkHint.TextColor3 = C.textDim
+    afkHint.TextSize = 8
+    afkHint.TextXAlignment = Enum.TextXAlignment.Left
+    afkHint.Parent = AfkSection
+
+    -- ==============================================================
+    -- SECTION 2: DISCORD WEBHOOK
+    -- ==============================================================
+    local WebhookSection = createSection(miscScroll, "🔔 Discord Webhook", "miscWebhook", 140)
+    WebhookSection.LayoutOrder = 2
+
+    local webToggleBtn = Instance.new("TextButton")
+    webToggleBtn.Size = UDim2.new(1, -20, 0, 26)
+    webToggleBtn.Position = UDim2.new(0, 10, 0, 32)
+    webToggleBtn.BackgroundColor3 = config.discordWebhookEnabled and C.success or Color3.fromRGB(70, 70, 85)
+    webToggleBtn.BorderSizePixel = 0
+    webToggleBtn.Font = Enum.Font.GothamBold
+    webToggleBtn.Text = config.discordWebhookEnabled and "🔔 Webhook: ON" or "🔔 Webhook: OFF"
+    webToggleBtn.TextColor3 = C.text
+    webToggleBtn.TextSize = 9
+    webToggleBtn.Parent = WebhookSection
+    Instance.new("UICorner", webToggleBtn).CornerRadius = UDim.new(0, 4)
+
+    webToggleBtn.MouseButton1Click:Connect(function()
+        config.discordWebhookEnabled = not config.discordWebhookEnabled
+        saveConfig()
+        webToggleBtn.Text = config.discordWebhookEnabled and "🔔 Webhook: ON" or "🔔 Webhook: OFF"
+        webToggleBtn.BackgroundColor3 = config.discordWebhookEnabled and C.success or Color3.fromRGB(70, 70, 85)
+    end)
+
+    local urlInput = Instance.new("TextBox")
+    urlInput.Size = UDim2.new(1, -20, 0, 24)
+    urlInput.Position = UDim2.new(0, 10, 0, 66)
+    urlInput.BackgroundColor3 = C.input
+    urlInput.BorderSizePixel = 0
+    urlInput.Font = Enum.Font.Gotham
+    urlInput.PlaceholderText = "https://discord.com/api/webhooks/..."
+    urlInput.Text = config.discordWebhookUrl or ""
+    urlInput.TextColor3 = C.text
+    urlInput.TextSize = 8
+    urlInput.ClearTextOnFocus = false
+    urlInput.Parent = WebhookSection
+    Instance.new("UICorner", urlInput).CornerRadius = UDim.new(0, 4)
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 6)
+    pad.Parent = urlInput
+
+    urlInput.FocusLost:Connect(function()
+        config.discordWebhookUrl = urlInput.Text:gsub("%s+$", "")
+        saveConfig()
+        _G.SniperHub.UpdateStatus("✅ Webhook URL disimpan", C.success)
+    end)
+
+    local webHint = Instance.new("TextLabel")
+    webHint.Size = UDim2.new(1, -20, 0, 30)
+    webHint.Position = UDim2.new(0, 10, 0, 100)
+    webHint.BackgroundTransparency = 1
+    webHint.Font = Enum.Font.Gotham
+    webHint.Text = "Kirim notifikasi saat pet berhasil di-snipe atau terjual."
+    webHint.TextColor3 = C.textDim
+    webHint.TextSize = 8
+    webHint.TextWrapped = true
+    webHint.TextXAlignment = Enum.TextXAlignment.Left
+    webHint.Parent = WebhookSection
+
+    -- ==============================================================
+-- LOGIKA ANTI-AFK (AoneHub Style - Hotbar Safe)
+-- ==============================================================
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local antiAFKActive = false
+local antiAFKDelayActive = false
+
+local function PerformAntiAFKAction()
+    pcall(function()
+        VirtualInputManager:SendMouseMoveEvent(
+            math.random(100, 500),
+            math.random(100, 500),
+            nil
+        )
+    end)
+end
+
+local function StartAntiAFK()
+    if antiAFKActive or antiAFKDelayActive then return end
+
+    local initialDelay = 600 -- 10 menit
+    antiAFKDelayActive = true
+
+    task.spawn(function()
+        local remainingDelay = initialDelay
+        while remainingDelay > 0 do
+            if isGuiDestroyed or not config.antiAfkEnabled then
+                antiAFKDelayActive = false
+                return
+            end
+
+            task.wait(1)
+            remainingDelay -= 1
+        end
+
+        if config.antiAfkEnabled and not isGuiDestroyed then
+            antiAFKDelayActive = false
+            antiAFKActive = true
+            
+            while antiAFKActive and config.antiAfkEnabled and not isGuiDestroyed do
+                PerformAntiAFKAction()
+                local waitTime = 420 + math.random() * 180 -- 7 s/d 10 menit
+                local waited = 0
+                while waited < waitTime and antiAFKActive and config.antiAfkEnabled and not isGuiDestroyed do
+                    task.wait(1)
+                    waited += 1
+                end
+            end
+            antiAFKActive = false
+        else
+            antiAFKDelayActive = false
+            
+        end
+    end)
+end
+
+local function StopAntiAFK()
+    antiAFKActive = false
+    antiAFKDelayActive = false
+end
+
+-- Watcher untuk deteksi toggle
+task.spawn(function()
+    local lastToggleState = config.antiAfkEnabled
+    while screenGui.Parent do
+        task.wait(0.5)
+        if config.antiAfkEnabled ~= lastToggleState then
+            lastToggleState = config.antiAfkEnabled
+            if config.antiAfkEnabled then
+                if not antiAFKActive and not antiAFKDelayActive then
+                    StartAntiAFK()
+                end
+            else
+                StopAntiAFK()
+            end
+        end
+    end
+end)
+
+-- Auto-start jika config ON saat script di-load
+if config.antiAfkEnabled then
+    task.delay(1, function()
+        if config.antiAfkEnabled and not isGuiDestroyed then
+            StartAntiAFK()
+            
+        end
+    end)
+    end
+end -- END OF TAB MISC BLOCK
 
 -- ==================================================================
 -- INIT GLOBAL
