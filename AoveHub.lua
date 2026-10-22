@@ -1875,36 +1875,38 @@ do
     local RemoveListingRF = ReplicatedStorage.GameEvents.TradeEvents.Booths.RemoveListing
 
     local function getMyInventoryPets()
-        local data = DataService:GetData()
-        if not data or not data.PetsData or not data.PetsData.PetInventory then return {} end
+    local data = DataService:GetData()
+    if not data or not data.PetsData or not data.PetsData.PetInventory then return {} end
+    
+    -- ⭐ Ambil Registry Mutasi
+    local mutRegistry = require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
+    local enumToMut = mutRegistry.EnumToPetMutation
+
+    local list = {}
+    for uuid, pet in pairs(data.PetsData.PetInventory.Data) do
+        -- ... (kode equip & favorit) ...
         
-        local list = {}
-        for uuid, pet in pairs(data.PetsData.PetInventory.Data) do
-            local isEquipped = false
-            if data.PetsData.EquippedPets then
-                for _, eqUUID in ipairs(data.PetsData.EquippedPets) do
-                    if eqUUID == uuid then isEquipped = true break end
-                end
+        if not isEquipped and not isFavorited then
+            local petType = pet.PetType or (pet.PetData and pet.PetData.PetType) or "?"
+            local baseWeight = pet.BaseWeight or (pet.PetData and pet.PetData.BaseWeight) or 0
+            
+            -- ⭐ PERBAIKAN MUTASI: Konversi Enum ID ke Nama (misal "b" -> "Golden")
+            local rawMut = pet.MutationType or (pet.PetData and pet.PetData.MutationType) or "m"
+            local mutation = "Normal"
+            if rawMut ~= "m" and rawMut ~= "Normal" then
+                mutation = enumToMut[rawMut] or rawMut 
             end
             
-            local isFavorited = pet.IsFavorite or (pet.PetData and pet.PetData.IsFavorite) or false
-            
-            if not isEquipped and not isFavorited then
-                local petType = pet.PetType or (pet.PetData and pet.PetData.PetType) or "?"
-                local baseWeight = pet.BaseWeight or (pet.PetData and pet.PetData.BaseWeight) or 0
-                local mutation = pet.MutationType or (pet.PetData and pet.PetData.MutationType) or "Normal"
-                if mutation == "m" or mutation == "None" then mutation = "Normal" end
-                
-                table.insert(list, {
-                    uuid = uuid,
-                    type = "Pet",
-                    petType = petType,
-                    weight = baseWeight,
-                    mutation = mutation,
-                })
-            end
+            table.insert(list, {
+                uuid = uuid,
+                type = "Pet",
+                petType = petType,
+                weight = baseWeight,
+                mutation = mutation,
+            })
         end
-        return list
+    end
+    return list
     end
 
     local function getMyCurrentListingCount()
@@ -2026,41 +2028,43 @@ local function doAutoListing()
 local isStopping = false
 
 startListBtn.MouseButton1Click:Connect(function()
-    -- ⭐ Jika sedang proses berhenti, abaikan klik (mencegah double-click)
-    if isStopping then return end
-
     if isListing then
+        -- ==============================
         -- PROSES STOP
+        -- ==============================
         isListing = false
-        isStopping = true -- Kunci tombol
         startListBtn.Text = "⏳ Stopping..."
-        startListBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150) -- Abu-abu
-        
+        startListBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150) -- Warna abu-abu
+
         if listingThread then
-            pcall(task.cancel, listingThread) -- Paksa hentikan
+            pcall(task.cancel, listingThread) -- Hentikan paksa thread yang berjalan
             listingThread = nil
         end
         
-        -- Beri jeda 0.5 detik agar game benar-benar berhenti memproses
+        -- Beri waktu sistem untuk benar-benar berhenti
         task.wait(0.5) 
         
+        -- Kembalikan tombol ke posisi START
         startListBtn.Text = "▶️ MULAI AUTO LISTING"
         startListBtn.BackgroundColor3 = C.success
-        isStopping = false -- Buka kunci
         print("[AutoListing] Dihentikan oleh pengguna.")
     else
+        -- ==============================
         -- PROSES START
+        -- ==============================
         local hasActive = false
         for _, f in ipairs(config.autoListingFilters) do
             if f.enabled then hasActive = true break end
         end
+        
         if not hasActive then
             _G.SniperHub.UpdateStatus("⚠️ Aktifkan minimal 1 filter!", C.warning)
             return
         end
+        
         startListBtn.Text = "⏹️ STOP LISTING"
         startListBtn.BackgroundColor3 = C.danger
-        doAutoListing()
+        doAutoListing() -- Panggil fungsi loop listing
     end
 end)
     
