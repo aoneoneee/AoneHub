@@ -206,38 +206,6 @@ end
 _G.SniperHub.SendWebhook = sendDiscordWebhook
 
 -- ==================================================================
--- AUTO HOP HELPER
--- ==================================================================
-local TeleportService = game:GetService("TeleportService")
-
-local function countActiveBooths()
-    local data = getBoothsData()
-    if not data or not data.Booths then return 0 end
-    local count = 0
-    for _, booth in pairs(data.Booths) do
-        if booth.Owner ~= nil then count = count + 1 end
-    end
-    return count
-end
-
-local function hopServer()
-    if not config.autoHopEnabled then return end
-    
-    local serverList = game:GetService("HttpService"):JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
-    local currentJobId = game.JobId
-    
-    for _, server in ipairs(serverList.data) do
-        if server.playing < server.maxPlayers and server.id ~= currentJobId then
-            -- Kirim teleport
-            pcall(function()
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
-            end)
-            return
-        end
-    end
-end
-
--- ==================================================================
 -- SHARED STATE
 -- ==================================================================
 local MainState = {
@@ -296,6 +264,38 @@ local function getMyPlayerBoothId()
     local myId = "Player_" .. tostring(player.UserId)
     local pdata = data.Players[myId]
     return pdata and pdata.Booth or nil
+end
+
+-- ==================================================================
+-- AUTO HOP HELPER
+-- ==================================================================
+local TeleportService = game:GetService("TeleportService")
+
+local function countActiveBooths()
+    local data = getBoothsData()
+    if not data or not data.Booths then return 0 end
+    local count = 0
+    for _, booth in pairs(data.Booths) do
+        if booth.Owner ~= nil then count = count + 1 end
+    end
+    return count
+end
+
+local function hopServer()
+    if not config.autoHopEnabled then return end
+    
+    local serverList = game:GetService("HttpService"):JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+    local currentJobId = game.JobId
+    
+    for _, server in ipairs(serverList.data) do
+        if server.playing < server.maxPlayers and server.id ~= currentJobId then
+            -- Kirim teleport
+            pcall(function()
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
+            end)
+            return
+        end
+    end
 end
 
 -- ==================================================================
