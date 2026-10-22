@@ -1924,26 +1924,30 @@ do
 
     local isListing = false
 local listingThread = nil
+local processedUUIDs = {} -- ⭐ Mencegah duplikasi UUID
 
 local function doAutoListing()
     if isListing then return end
     isListing = true
+    table.clear(processedUUIDs) -- Reset data setiap mulai
 
     listingThread = task.spawn(function()
+        local currentListings = getMyCurrentListingCount()
         local MAX_LIMIT = 50
+        local listedCount = 0
         
+        if currentListings >= MAX_LIMIT then
+            print("[AutoListing] Booth sudah penuh.")
+            isListing = false
+            return
+        end
+
         local pets = getMyInventoryPets()
         
         for _, pet in ipairs(pets) do
-            -- ⭐ Jika user menekan STOP, langsung hentikan loop
             if not isListing then break end
-            
-            -- ⭐ Cek limit secara realtime (bukan pakai counter manual)
-            local currentCount = getMyCurrentListingCount()
-            if currentCount >= MAX_LIMIT then 
-                print("[AutoListing] Booth penuh (50/50).")
-                break 
-            end
+            if (currentListings + listedCount) >= MAX_LIMIT then break end
+            if processedUUIDs[pet.uuid] then continue end -- ⭐ Skip jika sudah diproses
             
             local isTarget = false
             local targetPrice = 1000
@@ -1976,20 +1980,27 @@ local function doAutoListing()
             end
 
             if isTarget then
+                processedUUIDs[pet.uuid] = true -- ⭐ Tandai UUID ini sudah diproses
                 print(string.format("[AutoListing] Memasang %s (%s) | Price: %d", pet.petType, pet.mutation, targetPrice))
                 
-                -- Tembak server
                 pcall(function()
                     CreateListingRF:InvokeServer(pet.type, pet.uuid, targetPrice)
                 end)
                 
-                -- ⭐ TUNGGU 4.5 DETIK (Sesuai cooldown server)
-                task.wait(4.5) 
+                listedCount = listedCount + 1
+                
+                -- ⭐ Cooldown 5.5 detik sesuai batas game
+                task.wait(5.5) 
             end
         end
         
-        print(string.format("[AutoListing] Selesai. Total di booth: %d", getMyCurrentListingCount()))
+        print(string.format("[AutoListing] Selesai. %d item baru terpasang. Total di booth: %d", listedCount, getMyCurrentListingCount()))
         isListing = false
+        -- Update UI Tombol setelah selesai
+        if startListBtn and startListBtn.Parent then
+            startListBtn.Text = "▶️ MULAI AUTO LISTING"
+            startListBtn.BackgroundColor3 = C.success
+        end
     end)
     end
 
@@ -2013,16 +2024,17 @@ local function doAutoListing()
 
     startListBtn.MouseButton1Click:Connect(function()
     if isListing then
-        -- ⭐ Hentikan thread secara paksa
+        -- ⭐ PROSES STOP
         isListing = false
         if listingThread then
-            task.cancel(listingThread)
+            pcall(task.cancel, listingThread) -- Paksa hentikan thread yang sedang berjalan
             listingThread = nil
         end
         startListBtn.Text = "▶️ MULAI AUTO LISTING"
         startListBtn.BackgroundColor3 = C.success
         print("[AutoListing] Dihentikan oleh pengguna.")
     else
+        -- ⭐ PROSES START
         local hasActive = false
         for _, f in ipairs(config.autoListingFilters) do
             if f.enabled then hasActive = true break end
