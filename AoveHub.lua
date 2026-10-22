@@ -84,6 +84,9 @@ local CONFIG_DEFAULTS = {
     antiAfkEnabled = false,
     discordWebhookEnabled = false,
     discordWebhookUrl = "",
+    autoHopEnabled = false,
+    autoHopTime = 30, -- Menit tanpa penjualan sebelum hop
+    autoHopMinBooths = 7,
 }
 
 local config = {}
@@ -201,6 +204,38 @@ local function sendDiscordWebhook(webhookType, data)
     end
 end
 _G.SniperHub.SendWebhook = sendDiscordWebhook
+
+-- ==================================================================
+-- AUTO HOP HELPER
+-- ==================================================================
+local TeleportService = game:GetService("TeleportService")
+
+local function countActiveBooths()
+    local data = getBoothsData()
+    if not data or not data.Booths then return 0 end
+    local count = 0
+    for _, booth in pairs(data.Booths) do
+        if booth.Owner ~= nil then count = count + 1 end
+    end
+    return count
+end
+
+local function hopServer()
+    if not config.autoHopEnabled then return end
+    
+    local serverList = game:GetService("HttpService"):JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+    local currentJobId = game.JobId
+    
+    for _, server in ipairs(serverList.data) do
+        if server.playing < server.maxPlayers and server.id ~= currentJobId then
+            -- Kirim teleport
+            pcall(function()
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
+            end)
+            return
+        end
+    end
+end
 
 -- ==================================================================
 -- SHARED STATE
@@ -2163,7 +2198,12 @@ if not buyConnection then
         -- ⭐ DETEKSI TERJUAL & KIRIM WEBHOOK
         if currentCount < previousListingCount then
             local sold = previousListingCount - currentCount
-            
+    
+            -- ⭐ RESET TIMER HOP KARENA ADA PENJUALAN
+            if _G.SniperHub.ResetHopTimer then
+                _G.SniperHub.ResetHopTimer()
+            end
+                        
             -- Ambil data pet dari antrian (jika ada) sebagai sampel info
             local samplePet = queue[1] or { petType = "Unknown", weight = 0, price = 0, mutation = "Normal" }
 
@@ -2713,6 +2753,7 @@ do
     urlInput.TextColor3 = C.text
     urlInput.TextSize = 8
     urlInput.ClearTextOnFocus = false
+    urlInput.TextTruncate = Enum.TextTruncate.AtEnd
     urlInput.Parent = WebhookSection
     Instance.new("UICorner", urlInput).CornerRadius = UDim.new(0, 4)
     local pad = Instance.new("UIPadding")
@@ -2737,6 +2778,160 @@ do
     webHint.TextXAlignment = Enum.TextXAlignment.Left
     webHint.Parent = WebhookSection
 
+    -- ==============================================================
+-- SECTION 3: AUTO HOP SERVER
+-- ==============================================================
+local HopSection = createSection(miscScroll, "🌐 Auto Server Hop", "miscHop", 220)
+HopSection.LayoutOrder = 3
+
+-- Toggle On/Off
+local hopToggleBtn = Instance.new("TextButton")
+hopToggleBtn.Size = UDim2.new(1, -20, 0, 26)
+hopToggleBtn.Position = UDim2.new(0, 10, 0, 32)
+hopToggleBtn.BackgroundColor3 = config.autoHopEnabled and C.success or Color3.fromRGB(70, 70, 85)
+hopToggleBtn.BorderSizePixel = 0
+hopToggleBtn.Font = Enum.Font.GothamBold
+hopToggleBtn.Text = config.autoHopEnabled and "🌐 Auto Hop: ON" or "🌐 Auto Hop: OFF"
+hopToggleBtn.TextColor3 = C.text
+hopToggleBtn.TextSize = 9
+hopToggleBtn.Parent = HopSection
+Instance.new("UICorner", hopToggleBtn).CornerRadius = UDim.new(0, 4)
+
+hopToggleBtn.MouseButton1Click:Connect(function()
+    config.autoHopEnabled = not config.autoHopEnabled
+    saveConfig()
+    hopToggleBtn.Text = config.autoHopEnabled and "🌐 Auto Hop: ON" or "🌐 Auto Hop: OFF"
+    hopToggleBtn.BackgroundColor3 = config.autoHopEnabled and C.success or Color3.fromRGB(70, 70, 85)
+end)
+
+-- Input Waktu
+local timeLbl = Instance.new("TextLabel")
+timeLbl.Size = UDim2.new(0.6, -15, 0, 16)
+timeLbl.Position = UDim2.new(0, 10, 0, 66)
+timeLbl.Text = "Waktu Hop (Menit):"
+timeLbl.TextColor3 = C.textDim
+timeLbl.Font = Enum.Font.Gotham
+timeLbl.TextSize = 8
+timeLbl.TextXAlignment = Enum.TextXAlignment.Left
+timeLbl.BackgroundTransparency = 1
+timeLbl.Parent = HopSection
+
+local timeInput = Instance.new("TextBox")
+timeInput.Size = UDim2.new(0.4, -15, 0, 20)
+timeInput.Position = UDim2.new(0.6, 5, 0, 63)
+timeInput.BackgroundColor3 = C.input
+timeInput.BorderSizePixel = 0
+timeInput.Font = Enum.Font.Gotham
+timeInput.Text = tostring(config.autoHopTime)
+timeInput.TextColor3 = C.text
+timeInput.TextSize = 9
+timeInput.Parent = HopSection
+Instance.new("UICorner", timeInput).CornerRadius = UDim.new(0, 3)
+timeInput.FocusLost:Connect(function()
+    config.autoHopTime = tonumber(timeInput.Text) or 30
+    timeInput.Text = tostring(config.autoHopTime)
+    saveConfig()
+end)
+
+-- Input Minimal Booth
+local boothLbl = Instance.new("TextLabel")
+boothLbl.Size = UDim2.new(0.6, -15, 0, 16)
+boothLbl.Position = UDim2.new(0, 10, 0, 90)
+boothLbl.Text = "Minimal Booth Aktif:"
+boothLbl.TextColor3 = C.textDim
+boothLbl.Font = Enum.Font.Gotham
+boothLbl.TextSize = 8
+boothLbl.TextXAlignment = Enum.TextXAlignment.Left
+boothLbl.BackgroundTransparency = 1
+boothLbl.Parent = HopSection
+
+local boothInput = Instance.new("TextBox")
+boothInput.Size = UDim2.new(0.4, -15, 0, 20)
+boothInput.Position = UDim2.new(0.6, 5, 0, 87)
+boothInput.BackgroundColor3 = C.input
+boothInput.BorderSizePixel = 0
+boothInput.Font = Enum.Font.Gotham
+boothInput.Text = tostring(config.autoHopMinBooths)
+boothInput.TextColor3 = C.text
+boothInput.TextSize = 9
+boothInput.Parent = HopSection
+Instance.new("UICorner", boothInput).CornerRadius = UDim.new(0, 3)
+boothInput.FocusLost:Connect(function()
+    config.autoHopMinBooths = tonumber(boothInput.Text) or 7
+    boothInput.Text = tostring(config.autoHopMinBooths)
+    saveConfig()
+end)
+
+-- Status
+local hopStatusLbl = Instance.new("TextLabel")
+hopStatusLbl.Size = UDim2.new(1, -20, 0, 16)
+hopStatusLbl.Position = UDim2.new(0, 10, 0, 118)
+hopStatusLbl.BackgroundTransparency = 1
+hopStatusLbl.Font = Enum.Font.GothamBold
+hopStatusLbl.Text = "Status: Menunggu..."
+hopStatusLbl.TextColor3 = C.textDim
+hopStatusLbl.TextSize = 8
+hopStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+hopStatusLbl.Parent = HopSection
+
+-- Tombol Force Hop (Pindah Paksa Sekarang)
+local forceHopBtn = Instance.new("TextButton")
+forceHopBtn.Size = UDim2.new(1, -20, 0, 26)
+forceHopBtn.Position = UDim2.new(0, 10, 0, 145)
+forceHopBtn.BackgroundColor3 = C.accent
+forceHopBtn.BorderSizePixel = 0
+forceHopBtn.Font = Enum.Font.GothamBold
+forceHopBtn.Text = "🚀 Force Server Hop Sekarang"
+forceHopBtn.TextColor3 = C.text
+forceHopBtn.TextSize = 9
+forceHopBtn.Parent = HopSection
+Instance.new("UICorner", forceHopBtn).CornerRadius = UDim.new(0, 4)
+
+forceHopBtn.MouseButton1Click:Connect(function()
+    hopStatusLbl.Text = "Status: Mencari server baru..."
+    hopServer()
+end)
+
+-- ==============================================================
+-- LOGIKA LOOP AUTO HOP
+-- ==============================================================
+local lastSellTime = tick()
+local checkHopThread = task.spawn(function()
+    while screenGui.Parent do
+        task.wait(10) -- Cek tiap 10 detik
+        
+        if config.autoHopEnabled and isInTradeWorld() then
+            local currentTime = tick()
+            local minutesSinceLastSell = (currentTime - lastSellTime) / 60
+            
+            -- Update label status
+            if hopStatusLbl and hopStatusLbl.Parent then
+                hopStatusLbl.Text = string.format("Status: %d menit tanpa penjualan", math.floor(minutesSinceLastSell))
+            end
+
+            -- Cek apakah sudah melewati batas waktu
+            if minutesSinceLastSell >= config.autoHopTime then
+                local activeBooths = countActiveBooths()
+                
+                if activeBooths < config.autoHopMinBooths then
+                    hopStatusLbl.Text = "Status: Server sepi ("..activeBooths.." booth). Hop..."
+                    hopServer()
+                    task.wait(5) -- Jeda sebelum teleport
+                else
+                    -- Server cukup ramai, reset timer
+                    lastSellTime = currentTime
+                end
+            end
+        end
+    end
+end)
+
+-- Fungsi untuk mereset timer saat ada pet terjual
+-- Panggil fungsi ini di dalam Event Listener AutoListing jika ada slot kosong
+_G.SniperHub.ResetHopTimer = function()
+    lastSellTime = tick()
+end
+    
     -- ==============================================================
 -- LOGIKA ANTI-AFK (AoneHub Style - Hotbar Safe)
 -- ==============================================================
