@@ -1298,7 +1298,9 @@ local isBuying = false
 local buyConnection = nil
 local scannedListings = {}  -- Mencegah scan berulang
 local recentlyFailed = {}   -- Mencegah spam barang yang sudah tidak ada
-
+local MutRegistry = require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
+local enumToMut = MutRegistry.EnumToPetMutation
+    
 -- Fungsi pembantu untuk mengecek 1 listing
 local function processListing(sellerId, listingUUID, listing)
     if not isBuying then return end
@@ -1314,9 +1316,14 @@ local function processListing(sellerId, listingUUID, listing)
 
     local petType = item.PetType or (item.PetData and item.PetData.PetType) or "?"
     local baseWeight = item.BaseWeight or (item.PetData and item.PetData.BaseWeight) or 0
-    local mutation = item.MutationType or (item.PetData and item.PetData.MutationType) or "Normal"
-    local price = listing.Price or 999999
-    if mutation == "m" or mutation == "None" then mutation = "Normal" end
+
+    -- ⭐ PERBAIKAN MUTASI: Konversi Enum ID ke Nama (misal "b" -> "Golden")
+    local rawMut = item.MutationType or (item.PetData and item.PetData.MutationType) or "m"
+    local mutation = "Normal"
+    if rawMut ~= "m" and rawMut ~= "Normal" then
+        mutation = enumToMut[rawMut] or rawMut 
+    end
+    local price = listing.Price or 99999
 
     for i, filter in ipairs(config.autoBuyFilters) do
         if filter.enabled then
@@ -1931,6 +1938,25 @@ do
         return count
     end
 
+    local function getMyListedUUIDs()
+    local listed = {}
+    local data = getBoothsData()
+    if not data or not data.Players then return listed end
+    
+    local myId = "Player_" .. tostring(player.UserId)
+    local myData = data.Players[myId]
+    
+    if myData and myData.Listings then
+        for _, listing in pairs(myData.Listings) do
+            -- Simpan ItemId (yang merupakan UUID pet) ke dalam tabel
+            if listing.ItemId then
+                listed[listing.ItemId] = true 
+            end
+        end
+    end
+    return listed
+end
+    
     local isListing = false
 local listingThread = nil
 local processedUUIDs = {}
@@ -1957,11 +1983,16 @@ local function doAutoListing()
         end
 
         local pets = getMyInventoryPets()
-        
+        local listedUUIDs = getMyListedUUIDs() -- ⭐ Ambil daftar pet yang sudah dilisting
+
         for _, pet in ipairs(pets) do
             if not isListing then break end
             if (currentListings + listedCount) >= MAX_LIMIT then break end
-            if processedUUIDs[pet.uuid] then continue end
+    
+            -- ⭐ Cek: Jika sudah diproses, ATAU sudah ada di booth, lewati!
+            if processedUUIDs[pet.uuid] or listedUUIDs[pet.uuid] then 
+                continue 
+            end
             
             local isTarget = false
             local targetPrice = 1000
