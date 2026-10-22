@@ -1923,74 +1923,74 @@ do
     end
 
     local isListing = false
-    local listingThread = nil
+local listingThread = nil
 
-    local function doAutoListing()
-        if isListing then return end
-        isListing = true
+local function doAutoListing()
+    if isListing then return end
+    isListing = true
 
-        listingThread = task.spawn(function()
-            local currentListings = getMyCurrentListingCount()
-            local MAX_LIMIT = 50
-            local listedCount = 0
+    listingThread = task.spawn(function()
+        local MAX_LIMIT = 50
+        
+        local pets = getMyInventoryPets()
+        
+        for _, pet in ipairs(pets) do
+            -- ⭐ Jika user menekan STOP, langsung hentikan loop
+            if not isListing then break end
             
-            if currentListings >= MAX_LIMIT then
-                print("[AutoListing] Booth sudah penuh (50/50). Hentikan listing.")
-                isListing = false
-                return
+            -- ⭐ Cek limit secara realtime (bukan pakai counter manual)
+            local currentCount = getMyCurrentListingCount()
+            if currentCount >= MAX_LIMIT then 
+                print("[AutoListing] Booth penuh (50/50).")
+                break 
             end
-
-            local pets = getMyInventoryPets()
             
-            for _, pet in ipairs(pets) do
-                if not isListing then break end
-                if (currentListings + listedCount) >= MAX_LIMIT then break end
-                
-                local isTarget = false
-                local targetPrice = 1000
-                
-                for _, filter in ipairs(config.autoListingFilters) do
-                    if filter.enabled then
-                        local hasPetFilter = false
-                        for _ in pairs(filter.pets) do hasPetFilter = true break end
-                        
-                        -- ⭐ Wajib pilih pet
-                        local typeMatch = false
-                        if hasPetFilter then
-                            typeMatch = filter.pets[pet.petType] == true
-                        end
+            local isTarget = false
+            local targetPrice = 1000
+            
+            for _, filter in ipairs(config.autoListingFilters) do
+                if filter.enabled then
+                    local hasPetFilter = false
+                    for _ in pairs(filter.pets) do hasPetFilter = true break end
+                    
+                    local typeMatch = false
+                    if hasPetFilter then
+                        typeMatch = filter.pets[pet.petType] == true
+                    end
 
-                        -- ⭐ Max Weight
-                        local weightMatch = (filter.maxWeight == 0) or (pet.weight <= filter.maxWeight)
+                    local weightMatch = (filter.maxWeight == 0) or (pet.weight <= filter.maxWeight)
 
-                        local hasMutFilter = false
-                        for _ in pairs(filter.mutations) do hasMutFilter = true break end
-                        local mutMatch = true
-                        if hasMutFilter then
-                            mutMatch = filter.mutations[pet.mutation] == true
-                        end
+                    local hasMutFilter = false
+                    for _ in pairs(filter.mutations) do hasMutFilter = true break end
+                    local mutMatch = true
+                    if hasMutFilter then
+                        mutMatch = filter.mutations[pet.mutation] == true
+                    end
 
-                        if typeMatch and weightMatch and mutMatch then
-                            isTarget = true
-                            targetPrice = filter.price
-                            break
-                        end
+                    if typeMatch and weightMatch and mutMatch then
+                        isTarget = true
+                        targetPrice = filter.price
+                        break
                     end
                 end
-
-                if isTarget then
-                    print(string.format("[AutoListing] Memasang %s (%s) | Price: %d", pet.petType, pet.mutation, targetPrice))
-                    pcall(function()
-                        CreateListingRF:InvokeServer(pet.type, pet.uuid, targetPrice)
-                    end)
-                    listedCount = listedCount + 1
-                    task.wait(1) -- Jeda antar listing
-                end
             end
-            
-            print(string.format("[AutoListing] Selesai. %d item baru terpasang. Total di booth: %d", listedCount, getMyCurrentListingCount()))
-            isListing = false
-        end)
+
+            if isTarget then
+                print(string.format("[AutoListing] Memasang %s (%s) | Price: %d", pet.petType, pet.mutation, targetPrice))
+                
+                -- Tembak server
+                pcall(function()
+                    CreateListingRF:InvokeServer(pet.type, pet.uuid, targetPrice)
+                end)
+                
+                -- ⭐ TUNGGU 4.5 DETIK (Sesuai cooldown server)
+                task.wait(4.5) 
+            end
+        end
+        
+        print(string.format("[AutoListing] Selesai. Total di booth: %d", getMyCurrentListingCount()))
+        isListing = false
+    end)
     end
 
     -- ==============================================================
@@ -2012,24 +2012,30 @@ do
     Instance.new("UICorner", startListBtn).CornerRadius = UDim.new(0, 5)
 
     startListBtn.MouseButton1Click:Connect(function()
-        if isListing then
-            isListing = false
-            startListBtn.Text = "▶️ MULAI AUTO LISTING"
-            startListBtn.BackgroundColor3 = C.success
-        else
-            local hasActive = false
-            for _, f in ipairs(config.autoListingFilters) do
-                if f.enabled then hasActive = true break end
-            end
-            if not hasActive then
-                _G.SniperHub.UpdateStatus("⚠️ Aktifkan minimal 1 filter!", C.warning)
-                return
-            end
-            startListBtn.Text = "⏹️ STOP LISTING"
-            startListBtn.BackgroundColor3 = C.danger
-            doAutoListing()
+    if isListing then
+        -- ⭐ Hentikan thread secara paksa
+        isListing = false
+        if listingThread then
+            task.cancel(listingThread)
+            listingThread = nil
         end
-    end)
+        startListBtn.Text = "▶️ MULAI AUTO LISTING"
+        startListBtn.BackgroundColor3 = C.success
+        print("[AutoListing] Dihentikan oleh pengguna.")
+    else
+        local hasActive = false
+        for _, f in ipairs(config.autoListingFilters) do
+            if f.enabled then hasActive = true break end
+        end
+        if not hasActive then
+            _G.SniperHub.UpdateStatus("⚠️ Aktifkan minimal 1 filter!", C.warning)
+            return
+        end
+        startListBtn.Text = "⏹️ STOP LISTING"
+        startListBtn.BackgroundColor3 = C.danger
+        doAutoListing()
+    end
+end)
 
     local unlistAllBtn = Instance.new("TextButton")
     unlistAllBtn.Size = UDim2.new(1, -20, 0, 28)
