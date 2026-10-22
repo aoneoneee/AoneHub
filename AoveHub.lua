@@ -1958,94 +1958,120 @@ do
 end
     
     local isListing = false
-local listingThread = nil
-local processedUUIDs = {}
+local buyConnection = nil
+local queue = {} -- ⭐ Tabel Antrian
+local isProcessingQueue = false -- Mencegah bentrok saat antrian diproses
 
-local function doAutoListing()
-    if isListing then return end
-    isListing = true
-    table.clear(processedUUIDs)
+-- Fungsi untuk mengambil daftar UUID yang sudah ada di booth
+local function getMyListedUUIDs()
+    local listed = {}
+    local data = getBoothsData()
+    if not data or not data.Players then return listed end
+    local myId = "Player_" .. tostring(player.UserId)
+    local myData = data.Players[myId]
+    if myData and myData.Listings then
+        for _, listing in pairs(myData.Listings) do
+            if listing.ItemId then listed[listing.ItemId] = true end
+        end
+    end
+    return listed
+end
 
-    listingThread = task.spawn(function()
-        local currentListings = getMyCurrentListingCount()
-        local MAX_LIMIT = 50
-        local listedCount = 0
+-- Fungsi untuk memproses antrian
+local function processQueue()
+    if isProcessingQueue or not isListing then return end
+    if #queue == 0 then return end
+
+    isProcessingQueue = true
+    
+    task.spawn(function()
+        while #queue > 0 and isListing do
+            -- Cek kapasitas saat ini
+            local currentListings = getMyCurrentListingCount()
+            if currentListings >= 50 then
+                break -- Booth penuh, tunggu sampai ada yang terjual
+            end
+            
+            -- Ambil pet dari antrian terdepan
+            local pet = table.remove(queue, 1)
+            
+            if pet then
+                print(string.format("[AutoListing] Memasang dari Antrian: %s | Sisa Antrian: %d", pet.petType, #queue))
+                
+                pcall(function()
+                    CreateListingRF:InvokeServer(pet.type, pet.uuid, pet.price)
+                end)
+                
+                task.wait(5.5) -- Cooldown wajib dari server
+            end
+        end
+        isProcessingQueue = false
         
-        if currentListings >= MAX_LIMIT then
-            print("[AutoListing] Booth sudah penuh.")
-            isListing = false
-            -- ⭐ Kembalikan UI ke MULAI
+        -- Jika antrian kosong dan booth belum penuh, berarti sudah selesai
+        if #queue == 0 and getMyCurrentListingCount() < 50 then
+            isListing = false -- Hentikan sistem karena semua sudah terlisting
             if startListBtn and startListBtn.Parent then
                 startListBtn.Text = "▶️ MULAI AUTO LISTING"
                 startListBtn.BackgroundColor3 = C.success
             end
-            return
+            print("[AutoListing] Antrian habis. Auto Listing berhenti.")
         end
+    end)
+end
 
-        local pets = getMyInventoryPets()
-        local listedUUIDs = getMyListedUUIDs() -- ⭐ Ambil daftar pet yang sudah dilisting
+local function startBuyLoop()
+    if isListing then return end
+    isListing = true
+    table.clear(queue) -- Reset antrian setiap mulai baru
 
-        for _, pet in ipairs(pets) do
-            if not isListing then break end
-            if (currentListings + listedCount) >= MAX_LIMIT then break end
+    -- 1. SCAN AWAL: Kumpulkan pet yang lolos filter dan belum dilisting
+    local pets = getMyInventoryPets()
+    local listedUUIDs = getMyListedUUIDs()
+    local currentListings = getMyCurrentListingCount()
     
-            -- ⭐ Cek: Jika sudah diproses, ATAU sudah ada di booth, lewati!
-            if processedUUIDs[pet.uuid] or listedUUIDs[pet.uuid] then 
-                continue 
-            end
-            
-            local isTarget = false
-            local targetPrice = 1000
-            
+    for _, pet in ipairs(pets) do
+        if not listedUUIDs[pet.uuid] then
+            -- Cek filter
             for _, filter in ipairs(config.autoListingFilters) do
                 if filter.enabled then
                     local hasPetFilter = false
                     for _ in pairs(filter.pets) do hasPetFilter = true break end
-                    
-                    local typeMatch = false
-                    if hasPetFilter then
-                        typeMatch = filter.pets[pet.petType] == true
-                    end
-
+                    local typeMatch = hasPetFilter and filter.pets[pet.petType] == true
                     local weightMatch = (filter.maxWeight == 0) or (pet.weight <= filter.maxWeight)
-
+                    
                     local hasMutFilter = false
                     for _ in pairs(filter.mutations) do hasMutFilter = true break end
                     local mutMatch = true
-                    if hasMutFilter then
-                        mutMatch = filter.mutations[pet.mutation] == true -- Sekarang membandingkan nama (misal "Golden" == "Golden")
-                    end
+                    if hasMutFilter then mutMatch = filter.mutations[pet.mutation] == true end
 
                     if typeMatch and weightMatch and mutMatch then
-                        isTarget = true
-                        targetPrice = filter.price
+                        table.insert(queue, {
+                            uuid = pet.uuid,
+                            type = pet.type,
+                            petType = pet.petType,
+                            price = filter.price
+                        })
                         break
                     end
                 end
             end
+        end
+    end
+    
+    print("[AutoListing] Menemukan " .. #queue .. " pet baru untuk diantrikan.")
+    
+    -- 2. JALANKAN PROSES ANTRIAN
+    processQueue()
 
-            if isTarget then
-                processedUUIDs[pet.uuid] = true
-                print(string.format("[AutoListing] Memasang %s (%s) | Price: %d", pet.petType, pet.mutation, targetPrice))
-                
-                pcall(function()
-                    CreateListingRF:InvokeServer(pet.type, pet.uuid, targetPrice)
-                end)
-                
-                listedCount = listedCount + 1
-                task.wait(5.5) -- Cooldown
+    -- 3. EVENT LISTENER: Deteksi jika ada slot kosong (pet terjual)
+    if not buyConnection then
+        buyConnection = boothReceiver:GetPathSignal("Players/" .. tostring(player.UserId) .. "/Listings"):Connect(function()
+            task.wait(2) -- Beri jeda sinkronisasi data
+            if isListing and #queue > 0 then
+                processQueue() -- Isi ulang slot yang kosong
             end
-        end
-        
-        print(string.format("[AutoListing] Selesai. %d item terpasang. Total di booth: %d", listedCount, getMyCurrentListingCount()))
-        
-        -- ⭐ Kembalikan UI ke MULAI setelah selesai alami
-        isListing = false
-        if startListBtn and startListBtn.Parent then
-            startListBtn.Text = "▶️ MULAI AUTO LISTING"
-            startListBtn.BackgroundColor3 = C.success
-        end
-    end)
+        end)
+    end
     end
 
     -- ==============================================================
@@ -2069,25 +2095,19 @@ local function doAutoListing()
     -- Tambahkan variabel ini di atas tombol atau di dalam fungsi (jika belum ada)
 local isStopping = false
 startListBtn.MouseButton1Click:Connect(function()
-    if isStopping then return end
-
     if isListing then
+        -- PROSES STOP
         isListing = false
-        isStopping = true
-        startListBtn.Text = "⏳ Stopping..."
-        startListBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-        
-        if listingThread then
-            pcall(task.cancel, listingThread)
-            listingThread = nil
+        table.clear(queue)
+        if buyConnection then
+            buyConnection:Disconnect()
+            buyConnection = nil
         end
-        
-        task.wait(1) -- Tunggu sampai benar-benar mati
         startListBtn.Text = "▶️ MULAI AUTO LISTING"
         startListBtn.BackgroundColor3 = C.success
-        isStopping = false
-        print("[AutoListing] Dihentikan oleh pengguna.")
+        print("[AutoListing] Dihentikan oleh pengguna. Antrian dihapus.")
     else
+        -- PROSES START
         local hasActive = false
         for _, f in ipairs(config.autoListingFilters) do
             if f.enabled then hasActive = true break end
@@ -2098,7 +2118,7 @@ startListBtn.MouseButton1Click:Connect(function()
         end
         startListBtn.Text = "⏹️ STOP LISTING"
         startListBtn.BackgroundColor3 = C.danger
-        doAutoListing()
+        startBuyLoop()
     end
 end)
     
@@ -2115,24 +2135,36 @@ end)
     Instance.new("UICorner", unlistAllBtn).CornerRadius = UDim.new(0, 5)
 
     unlistAllBtn.MouseButton1Click:Connect(function()
-        local data = getBoothsData()
-        if not data or not data.Players then return end
-        local myId = "Player_" .. tostring(player.UserId)
-        local myData = data.Players[myId]
-        
-        if myData and myData.Listings then
-            local count = 0
-            for listUUID, _ in pairs(myData.Listings) do
-                pcall(function() RemoveListingRF:InvokeServer(listUUID) end)
-                count = count + 1
-                task.wait(0.5)
-            end
-            print("[AutoListing] Unlist All selesai. " .. count .. " item dihapus.")
-            _G.SniperHub.UpdateStatus("🗑️ " .. count .. " listing dihapus", C.warning)
-        else
-            print("[AutoListing] Tidak ada listing untuk dihapus.")
+    -- Matikan sistem dan bersihkan antrian secara paksa
+    isListing = false
+    table.clear(queue)
+    if buyConnection then
+        buyConnection:Disconnect()
+        buyConnection = nil
+    end
+    if startListBtn and startListBtn.Parent then
+        startListBtn.Text = "▶️ MULAI AUTO LISTING"
+        startListBtn.BackgroundColor3 = C.success
+    end
+
+    local data = getBoothsData()
+    if not data or not data.Players then return end
+    local myId = "Player_" .. tostring(player.UserId)
+    local myData = data.Players[myId]
+    
+    if myData and myData.Listings then
+        local count = 0
+        for listUUID, _ in pairs(myData.Listings) do
+            pcall(function() RemoveListingRF:InvokeServer(listUUID) end)
+            count = count + 1
+            task.wait(1) -- Beri jeda agar server tidak stress
         end
-    end)
+        print("[AutoListing] Unlist All selesai. " .. count .. " item dihapus.")
+        _G.SniperHub.UpdateStatus("🗑️ " .. count .. " listing dihapus", C.warning)
+    else
+        print("[AutoListing] Tidak ada listing untuk dihapus.")
+    end
+end)
 
     -- ==============================================================
     -- FUNGSI POPUP
