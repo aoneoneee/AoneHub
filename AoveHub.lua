@@ -1884,7 +1884,14 @@ do
 
     local list = {}
     for uuid, pet in pairs(data.PetsData.PetInventory.Data) do
-        -- ... (kode equip & favorit) ...
+        local isEquipped = false
+            if data.PetsData.EquippedPets then
+                for _, eqUUID in ipairs(data.PetsData.EquippedPets) do
+                    if eqUUID == uuid then isEquipped = true break end
+                end
+            end
+            
+            local isFavorited = pet.IsFavorite or (pet.PetData and pet.PetData.IsFavorite) or false
         
         if not isEquipped and not isFavorited then
             local petType = pet.PetType or (pet.PetData and pet.PetData.PetType) or "?"
@@ -1926,12 +1933,12 @@ do
 
     local isListing = false
 local listingThread = nil
-local processedUUIDs = {} -- ⭐ Mencegah duplikasi UUID
+local processedUUIDs = {}
 
 local function doAutoListing()
     if isListing then return end
     isListing = true
-    table.clear(processedUUIDs) -- Reset data setiap mulai
+    table.clear(processedUUIDs)
 
     listingThread = task.spawn(function()
         local currentListings = getMyCurrentListingCount()
@@ -1941,6 +1948,11 @@ local function doAutoListing()
         if currentListings >= MAX_LIMIT then
             print("[AutoListing] Booth sudah penuh.")
             isListing = false
+            -- ⭐ Kembalikan UI ke MULAI
+            if startListBtn and startListBtn.Parent then
+                startListBtn.Text = "▶️ MULAI AUTO LISTING"
+                startListBtn.BackgroundColor3 = C.success
+            end
             return
         end
 
@@ -1949,7 +1961,7 @@ local function doAutoListing()
         for _, pet in ipairs(pets) do
             if not isListing then break end
             if (currentListings + listedCount) >= MAX_LIMIT then break end
-            if processedUUIDs[pet.uuid] then continue end -- ⭐ Skip jika sudah diproses
+            if processedUUIDs[pet.uuid] then continue end
             
             local isTarget = false
             local targetPrice = 1000
@@ -1970,7 +1982,7 @@ local function doAutoListing()
                     for _ in pairs(filter.mutations) do hasMutFilter = true break end
                     local mutMatch = true
                     if hasMutFilter then
-                        mutMatch = filter.mutations[pet.mutation] == true
+                        mutMatch = filter.mutations[pet.mutation] == true -- Sekarang membandingkan nama (misal "Golden" == "Golden")
                     end
 
                     if typeMatch and weightMatch and mutMatch then
@@ -1982,7 +1994,7 @@ local function doAutoListing()
             end
 
             if isTarget then
-                processedUUIDs[pet.uuid] = true -- ⭐ Tandai UUID ini sudah diproses
+                processedUUIDs[pet.uuid] = true
                 print(string.format("[AutoListing] Memasang %s (%s) | Price: %d", pet.petType, pet.mutation, targetPrice))
                 
                 pcall(function()
@@ -1990,15 +2002,14 @@ local function doAutoListing()
                 end)
                 
                 listedCount = listedCount + 1
-                
-                -- ⭐ Cooldown 5.5 detik sesuai batas game
-                task.wait(5.5) 
+                task.wait(5.5) -- Cooldown
             end
         end
         
-        print(string.format("[AutoListing] Selesai. %d item baru terpasang. Total di booth: %d", listedCount, getMyCurrentListingCount()))
+        print(string.format("[AutoListing] Selesai. %d item terpasang. Total di booth: %d", listedCount, getMyCurrentListingCount()))
+        
+        -- ⭐ Kembalikan UI ke MULAI setelah selesai alami
         isListing = false
-        -- Update UI Tombol setelah selesai
         if startListBtn and startListBtn.Parent then
             startListBtn.Text = "▶️ MULAI AUTO LISTING"
             startListBtn.BackgroundColor3 = C.success
@@ -2026,45 +2037,37 @@ local function doAutoListing()
 
     -- Tambahkan variabel ini di atas tombol atau di dalam fungsi (jika belum ada)
 local isStopping = false
-
 startListBtn.MouseButton1Click:Connect(function()
-    if isListing then
-        -- ==============================
-        -- PROSES STOP
-        -- ==============================
-        isListing = false
-        startListBtn.Text = "⏳ Stopping..."
-        startListBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150) -- Warna abu-abu
+    if isStopping then return end
 
+    if isListing then
+        isListing = false
+        isStopping = true
+        startListBtn.Text = "⏳ Stopping..."
+        startListBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+        
         if listingThread then
-            pcall(task.cancel, listingThread) -- Hentikan paksa thread yang berjalan
+            pcall(task.cancel, listingThread)
             listingThread = nil
         end
         
-        -- Beri waktu sistem untuk benar-benar berhenti
-        task.wait(0.5) 
-        
-        -- Kembalikan tombol ke posisi START
+        task.wait(1) -- Tunggu sampai benar-benar mati
         startListBtn.Text = "▶️ MULAI AUTO LISTING"
         startListBtn.BackgroundColor3 = C.success
+        isStopping = false
         print("[AutoListing] Dihentikan oleh pengguna.")
     else
-        -- ==============================
-        -- PROSES START
-        -- ==============================
         local hasActive = false
         for _, f in ipairs(config.autoListingFilters) do
             if f.enabled then hasActive = true break end
         end
-        
         if not hasActive then
             _G.SniperHub.UpdateStatus("⚠️ Aktifkan minimal 1 filter!", C.warning)
             return
         end
-        
         startListBtn.Text = "⏹️ STOP LISTING"
         startListBtn.BackgroundColor3 = C.danger
-        doAutoListing() -- Panggil fungsi loop listing
+        doAutoListing()
     end
 end)
     
