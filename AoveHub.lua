@@ -1989,7 +1989,7 @@ local function processQueue()
             -- Cek kapasitas saat ini
             local currentListings = getMyCurrentListingCount()
             if currentListings >= 50 then
-                break -- Booth penuh, tunggu sampai ada yang terjual
+                break -- Booth penuh, keluar dari loop (script tetap menyala)
             end
             
             -- Ambil pet dari antrian terdepan
@@ -2007,15 +2007,8 @@ local function processQueue()
         end
         isProcessingQueue = false
         
-        -- Jika antrian kosong dan booth belum penuh, berarti sudah selesai
-        if #queue == 0 and getMyCurrentListingCount() < 50 then
-            isListing = false -- Hentikan sistem karena semua sudah terlisting
-            if startListBtn and startListBtn.Parent then
-                startListBtn.Text = "▶️ MULAI AUTO LISTING"
-                startListBtn.BackgroundColor3 = C.success
-            end
-            print("[AutoListing] Antrian habis. Auto Listing berhenti.")
-        end
+        -- ⭐ HAPUS LOGIKA AUTO-STOP DI SINI
+        -- Script akan tetap menyala dan standby menunggu event listener
     end)
 end
 
@@ -2093,11 +2086,13 @@ local function startBuyLoop()
     Instance.new("UICorner", startListBtn).CornerRadius = UDim.new(0, 5)
 
     -- Tambahkan variabel ini di atas tombol atau di dalam fungsi (jika belum ada)
-local isStopping = false
 startListBtn.MouseButton1Click:Connect(function()
     if isListing then
         -- PROSES STOP
         isListing = false
+        config.autoListingEnabled = false -- ⭐ Simpan ke config
+        saveConfig()
+        
         table.clear(queue)
         if buyConnection then
             buyConnection:Disconnect()
@@ -2116,6 +2111,10 @@ startListBtn.MouseButton1Click:Connect(function()
             _G.SniperHub.UpdateStatus("⚠️ Aktifkan minimal 1 filter!", C.warning)
             return
         end
+        
+        config.autoListingEnabled = true -- ⭐ Simpan ke config
+        saveConfig()
+        
         startListBtn.Text = "⏹️ STOP LISTING"
         startListBtn.BackgroundColor3 = C.danger
         startBuyLoop()
@@ -2135,8 +2134,10 @@ end)
     Instance.new("UICorner", unlistAllBtn).CornerRadius = UDim.new(0, 5)
 
     unlistAllBtn.MouseButton1Click:Connect(function()
-    -- Matikan sistem dan bersihkan antrian secara paksa
     isListing = false
+    config.autoListingEnabled = false -- ⭐ Matikan di config
+    saveConfig()
+    
     table.clear(queue)
     if buyConnection then
         buyConnection:Disconnect()
@@ -2476,6 +2477,25 @@ end)
         buildListFilter(i)
         task.wait(0.1)
     end
+    
+    -- ⭐ AUTO-START SAAT SCRIPT DIMUAT
+if config.autoListingEnabled then
+    local hasActive = false
+    for _, f in ipairs(config.autoListingFilters) do
+        if f.enabled then hasActive = true break end
+    end
+    
+    if hasActive then
+        task.delay(2, function()
+            if startListBtn and startListBtn.Parent then
+                startListBtn.Text = "⏹️ STOP LISTING"
+                startListBtn.BackgroundColor3 = C.danger
+                startBuyLoop()
+                print("[AutoListing] 🚀 Auto-start berhasil dijalankan dari config.")
+            end
+        end)
+    end
+end
 end -- END OF TAB AUTO LISTING BLOCK
 
 makePlaceholder("Misc",        "⚙️ Tab Misc\nAntiAfk & Discord Webhook\n(menyusul)")
