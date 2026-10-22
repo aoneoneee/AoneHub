@@ -2022,19 +2022,34 @@ local function doAutoListing()
     startListBtn.Parent = CtrlSection
     Instance.new("UICorner", startListBtn).CornerRadius = UDim.new(0, 5)
 
-    startListBtn.MouseButton1Click:Connect(function()
+    -- Tambahkan variabel ini di atas tombol atau di dalam fungsi (jika belum ada)
+local isStopping = false
+
+startListBtn.MouseButton1Click:Connect(function()
+    -- ⭐ Jika sedang proses berhenti, abaikan klik (mencegah double-click)
+    if isStopping then return end
+
     if isListing then
-        -- ⭐ PROSES STOP
+        -- PROSES STOP
         isListing = false
+        isStopping = true -- Kunci tombol
+        startListBtn.Text = "⏳ Stopping..."
+        startListBtn.BackgroundColor3 = Color3.fromRGB(150, 150, 150) -- Abu-abu
+        
         if listingThread then
-            pcall(task.cancel, listingThread) -- Paksa hentikan thread yang sedang berjalan
+            pcall(task.cancel, listingThread) -- Paksa hentikan
             listingThread = nil
         end
+        
+        -- Beri jeda 0.5 detik agar game benar-benar berhenti memproses
+        task.wait(0.5) 
+        
         startListBtn.Text = "▶️ MULAI AUTO LISTING"
         startListBtn.BackgroundColor3 = C.success
+        isStopping = false -- Buka kunci
         print("[AutoListing] Dihentikan oleh pengguna.")
     else
-        -- ⭐ PROSES START
+        -- PROSES START
         local hasActive = false
         for _, f in ipairs(config.autoListingFilters) do
             if f.enabled then hasActive = true break end
@@ -2048,7 +2063,7 @@ local function doAutoListing()
         doAutoListing()
     end
 end)
-
+    
     local unlistAllBtn = Instance.new("TextButton")
     unlistAllBtn.Size = UDim2.new(1, -20, 0, 28)
     unlistAllBtn.Position = UDim2.new(0, 10, 0, 72)
