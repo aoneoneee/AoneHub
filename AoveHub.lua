@@ -66,7 +66,7 @@ end
 -- ==================================================================
 local CONFIG_DEFAULTS = {
     autoClaimEnabled     = false,
-    claimSkinEnabled     = false,
+    claimSkinEnabled     = true,
     claimSkinID          = "Default",
     claimPriority        = "front", -- "front" | "back" | "random"
     autoBuyFilters       = {},
@@ -307,48 +307,35 @@ end
 -- ==================================================================
 -- LOGIC CLAIM & TELEPORT
 -- ==================================================================
-local function applyBoothSkin()
-    -- ⭐ 1. CEK PERTAMA KALI: Jika toggle OFF, langsung keluar!
+local function applyBoothSkin(force)
     if not config.claimSkinEnabled then return false end
-    
     local skinId = config.claimSkinID
     if not skinId or skinId == "" then return false end
     if not BoothSkinRegistry[skinId] then return false end
-    if MainState.lastAppliedSkinID == skinId then return false end
 
+    -- ⭐ Jika tidak dipaksa (force), cek apakah sudah pernah ditembak
+    if not force and MainState.lastAppliedSkinID == skinId then 
+        return false 
+    end
+
+    -- Cari service
     local GameEvents = ReplicatedStorage:FindFirstChild("GameEvents")
     if not GameEvents then return false end
     
     local skinService = GameEvents:FindFirstChild("TradeBoothSkinService")
-    
-    -- Jika service belum dimuat, tunggu di background
-    if not skinService then
-        task.spawn(function()
-            local s = GameEvents:WaitForChild("TradeBoothSkinService", 10)
-            
-            -- ⭐ 2. CEK ULANG SETELAH MENUNGGU: Pastikan toggle masih ON
-            if s and config.claimSkinEnabled and MainState.lastAppliedSkinID ~= skinId then
-                local equipRemote = s:FindFirstChild("Equip")
-                if equipRemote then
-                    pcall(function() equipRemote:FireServer(skinId) end)
-                    MainState.lastAppliedSkinID = skinId
-                    print("[BoothSkin] ✅ Skin berhasil dipasang (delayed).")
-                end
-            end
-        end)
-        return false
-    end
+    if not skinService then return false end
 
     local equipRemote = skinService:FindFirstChild("Equip")
     if not equipRemote then return false end
 
+    -- Tembak server
     local ok = pcall(function()
         equipRemote:FireServer(skinId)
     end)
     
     if ok then
         MainState.lastAppliedSkinID = skinId
-        print("[BoothSkin] ✅ Skin " .. skinId .. " berhasil dipasang!")
+        print("[BoothSkin] ✅ Skin " .. skinId .. " berhasil ditembak.")
     end
     return ok
 end
@@ -491,18 +478,21 @@ local function startClaimLoop()
                         if _G.SniperHub.UpdateStatus then
                             _G.SniperHub.UpdateStatus(string.format("🔄 Pindah prioritas"), C.warning)
                         end
+    
+                        -- ⭐ FORCE EQUIP SKIN DULU
+                        MainState.lastAppliedSkinID = nil
+                        applyBoothSkin(true)
+                        task.wait(0.5)
+    
                         pcall(function() RemoveBoothRE:FireServer() end)
                         task.wait(1.5)
                         pcall(function() ClaimBoothRE:FireServer(best.instance) end)
                         task.wait(1.5)
 
                         if getMyPlayerBoothId() then
-                            MainState.lastAppliedSkinID = nil
-                            task.wait(1)
-                            applyBoothSkin()
                             teleportToBooth(best.instance)
                             ok = true
-                            msg = "Re-Claim berhasil"
+                            msg = "Re-Claim & Skin berhasil"
                         else
                             msg = "Gagal pindah"
                         end
@@ -515,15 +505,19 @@ local function startClaimLoop()
             else
                 if #claimable > 0 then
                     local target = claimable[1]
+    
+                    -- ⭐ FORCE EQUIP SKIN DULU
+                    MainState.lastAppliedSkinID = nil -- Reset state
+                    applyBoothSkin(true)              -- Force tembak
+                    task.wait(0.5) 
+    
                     pcall(function() ClaimBoothRE:FireServer(target.instance) end)
                     task.wait(1.5)
 
                     if getMyPlayerBoothId() then
-                        MainState.lastAppliedSkinID = nil
-                        applyBoothSkin()
                         teleportToBooth(target.instance)
                         ok = true
-                        msg = "Claim berhasil"
+                        msg = "Claim berhasil & Skin terpasang"
                     else
                         msg = "Claim gagal"
                     end
