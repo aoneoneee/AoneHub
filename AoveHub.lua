@@ -1206,8 +1206,8 @@ do
     priorityLbl.Parent = StatusSection
 
     local PRIORITY_OPTIONS = {
-        {label = "⬆️ Paling Depan (Tengah Map)", value = "front"},
-        {label = "⬇️ Paling Belakang (Ujung Map)", value = "back"},
+        {label = "⬆️ Paling Depan", value = "front"},
+        {label = "⬇️ Paling Belakang", value = "back"},
         {label = "🎲 Random", value = "random"},
     }
     local priorityLabels = {
@@ -1296,7 +1296,7 @@ do
     SkinSection.LayoutOrder = 2
 
     makeToggle(
-        StatusSection, 28,
+        SkinSection, 28,
         "Apply Booth Skin", "claimSkinEnabled",
         "🎨 Apply Skin: ON", "🎨 Apply Skin: OFF"
     )
@@ -1501,7 +1501,7 @@ do
         if type(f.pets) ~= "table" then f.pets = {} end
         if type(f.mutations) ~= "table" then f.mutations = {} end
         f.enabled = f.enabled or false
-        f.maxPrice = tonumber(f.maxPrice) or 0
+        f.maxPrice = tonumber(f.maxPrice) or 100
         f.minWeight = tonumber(f.minWeight) or 0
         config.autoBuyFilters[i] = f
     end
@@ -1916,7 +1916,7 @@ end
         if type(fData.pets) ~= "table" then fData.pets = {} end
         if type(fData.mutations) ~= "table" then fData.mutations = {} end
     
-        local Section = createSection(buyScroll, "🎯 Filter Sniper #" .. index, "buyFilter" .. index, 300)
+        local Section = createSection(buyScroll, "🎯 Filter Sniper #" .. index, "buyFilter" .. index, 252)
         Section.LayoutOrder = index + 1
 
         local toggleBtn = Instance.new("TextButton")
@@ -1951,7 +1951,7 @@ end
 
         local priceInput = Instance.new("TextBox")
         priceInput.Size = UDim2.new(0.45, -15, 0, 20)
-        priceInput.Position = UDim2.new(0.55, 5, 0, 80)
+        priceInput.Position = UDim2.new(0.55, 5, 0, 56)
         priceInput.BackgroundColor3 = C.input
         priceInput.BorderSizePixel = 0
         priceInput.Font = Enum.Font.Gotham
@@ -1969,8 +1969,8 @@ end
 
         local weightLbl = Instance.new("TextLabel")
         weightLbl.Size = UDim2.new(0.55, -15, 0, 16)
-        weightLbl.Position = UDim2.new(0, 10, 0, 105)
-        weightLbl.Text = "Min Weight (KG, 0=All):"
+        weightLbl.Position = UDim2.new(0, 10, 0, 81)
+        weightLbl.Text = "Min Base Weight (KG, 0=All):"
         weightLbl.TextColor3 = C.textDim
         weightLbl.Font = Enum.Font.Gotham
         weightLbl.TextSize = 8
@@ -1980,7 +1980,7 @@ end
 
         local weightInput = Instance.new("TextBox")
         weightInput.Size = UDim2.new(0.45, -15, 0, 20)
-        weightInput.Position = UDim2.new(0.55, 5, 0, 126)
+        weightInput.Position = UDim2.new(0.55, 5, 0, 78)
         weightInput.BackgroundColor3 = C.input
         weightInput.BorderSizePixel = 0
         weightInput.Font = Enum.Font.Gotham
@@ -1998,7 +1998,7 @@ end
 
         local pickPetBtn = Instance.new("TextButton")
         pickPetBtn.Size = UDim2.new(1, -20, 0, 22)
-        pickPetBtn.Position = UDim2.new(0, 10, 0, 151)
+        pickPetBtn.Position = UDim2.new(0, 10, 0, 103)
         pickPetBtn.BackgroundColor3 = C.accent
         pickPetBtn.BorderSizePixel = 0
         pickPetBtn.Font = Enum.Font.GothamBold
@@ -2010,7 +2010,7 @@ end
 
         local selectedPetsLbl = Instance.new("TextLabel")
         selectedPetsLbl.Size = UDim2.new(1, -20, 0, 40)
-        selectedPetsLbl.Position = UDim2.new(0, 10, 0, 178)
+        selectedPetsLbl.Position = UDim2.new(0, 10, 0, 130)
         selectedPetsLbl.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
         selectedPetsLbl.BorderSizePixel = 0
         selectedPetsLbl.Font = Enum.Font.Gotham
@@ -2038,7 +2038,7 @@ end
 
         local pickMutBtn = Instance.new("TextButton")
         pickMutBtn.Size = UDim2.new(1, -20, 0, 22)
-        pickMutBtn.Position = UDim2.new(0, 10, 0, 223)
+        pickMutBtn.Position = UDim2.new(0, 10, 0, 175)
         pickMutBtn.BackgroundColor3 = C.accent
         pickMutBtn.BorderSizePixel = 0
         pickMutBtn.Font = Enum.Font.GothamBold
@@ -2050,7 +2050,7 @@ end
 
         local selectedMutLbl = Instance.new("TextLabel")
         selectedMutLbl.Size = UDim2.new(1, -20, 0, 40)
-        selectedMutLbl.Position = UDim2.new(0, 10, 0, 250)
+        selectedMutLbl.Position = UDim2.new(0, 10, 0, 202)
         selectedMutLbl.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
         selectedMutLbl.BorderSizePixel = 0
         selectedMutLbl.Font = Enum.Font.Gotham
@@ -2125,7 +2125,7 @@ do
         if type(f.mutations) ~= "table" then f.mutations = {} end
         f.enabled = f.enabled or false
         f.price = tonumber(f.price) or 1000
-        f.maxWeight = tonumber(f.maxWeight) or 9999 -- ⭐ Ubah ke Max Weight
+        f.maxWeight = tonumber(f.maxWeight) or 3 -- ⭐ Ubah ke Max Weight
         config.autoListingFilters[i] = f
     end
     saveConfig()
@@ -2598,7 +2598,7 @@ end)
         if type(fData.pets) ~= "table" then fData.pets = {} end
         if type(fData.mutations) ~= "table" then fData.mutations = {} end
 
-        local Section = createSection(listScroll, "🎯 Filter Listing #" .. index, "listFilter" .. index, 300)
+        local Section = createSection(listScroll, "🎯 Filter Listing #" .. index, "listFilter" .. index, 252)
         Section.LayoutOrder = index + 1
 
         local toggleBtn = Instance.new("TextButton")
@@ -2633,7 +2633,7 @@ end)
 
         local priceInput = Instance.new("TextBox")
         priceInput.Size = UDim2.new(0.45, -15, 0, 20)
-        priceInput.Position = UDim2.new(0.55, 5, 0, 80)
+        priceInput.Position = UDim2.new(0.55, 5, 0, 56)
         priceInput.BackgroundColor3 = C.input
         priceInput.BorderSizePixel = 0
         priceInput.Font = Enum.Font.Gotham
@@ -2650,8 +2650,8 @@ end)
 
         local weightLbl = Instance.new("TextLabel")
         weightLbl.Size = UDim2.new(0.55, -15, 0, 16)
-        weightLbl.Position = UDim2.new(0, 10, 0, 105)
-        weightLbl.Text = "Max Weight (KG, 0=All):"
+        weightLbl.Position = UDim2.new(0, 10, 0, 81)
+        weightLbl.Text = "Max Base Weight (KG, 0=All):"
         weightLbl.TextColor3 = C.textDim
         weightLbl.Font = Enum.Font.Gotham
         weightLbl.TextSize = 8
@@ -2661,7 +2661,7 @@ end)
 
         local weightInput = Instance.new("TextBox")
         weightInput.Size = UDim2.new(0.45, -15, 0, 20)
-        weightInput.Position = UDim2.new(0.55, 5, 0, 126)
+        weightInput.Position = UDim2.new(0.55, 5, 0, 78)
         weightInput.BackgroundColor3 = C.input
         weightInput.BorderSizePixel = 0
         weightInput.Font = Enum.Font.Gotham
@@ -2678,7 +2678,7 @@ end)
 
         local pickPetBtn = Instance.new("TextButton")
         pickPetBtn.Size = UDim2.new(1, -20, 0, 22)
-        pickPetBtn.Position = UDim2.new(0, 10, 0, 151)
+        pickPetBtn.Position = UDim2.new(0, 10, 0, 103)
         pickPetBtn.BackgroundColor3 = C.accent
         pickPetBtn.BorderSizePixel = 0
         pickPetBtn.Font = Enum.Font.GothamBold
@@ -2690,7 +2690,7 @@ end)
 
         local selectedPetsLbl = Instance.new("TextLabel")
         selectedPetsLbl.Size = UDim2.new(1, -20, 0, 40)
-        selectedPetsLbl.Position = UDim2.new(0, 10, 0, 178)
+        selectedPetsLbl.Position = UDim2.new(0, 10, 0, 130)
         selectedPetsLbl.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
         selectedPetsLbl.BorderSizePixel = 0
         selectedPetsLbl.Font = Enum.Font.Gotham
@@ -2718,7 +2718,7 @@ end)
 
         local pickMutBtn = Instance.new("TextButton")
         pickMutBtn.Size = UDim2.new(1, -20, 0, 22)
-        pickMutBtn.Position = UDim2.new(0, 10, 0, 223)
+        pickMutBtn.Position = UDim2.new(0, 10, 0, 175)
         pickMutBtn.BackgroundColor3 = C.accent
         pickMutBtn.BorderSizePixel = 0
         pickMutBtn.Font = Enum.Font.GothamBold
@@ -2730,7 +2730,7 @@ end)
 
         local selectedMutLbl = Instance.new("TextLabel")
         selectedMutLbl.Size = UDim2.new(1, -20, 0, 40)
-        selectedMutLbl.Position = UDim2.new(0, 10, 0, 250)
+        selectedMutLbl.Position = UDim2.new(0, 10, 0, 202)
         selectedMutLbl.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
         selectedMutLbl.BorderSizePixel = 0
         selectedMutLbl.Font = Enum.Font.Gotham
@@ -2825,12 +2825,12 @@ do
     -- ==============================================================
     -- SECTION 1: ANTI-AFK
     -- ==============================================================
-    local AfkSection = createSection(miscScroll, "🛡️ Anti-AFK System", "miscAfk", 90)
+    local AfkSection = createSection(miscScroll, "🛡️ Anti-AFK System", "miscAfk", 83)
     AfkSection.LayoutOrder = 1
 
     local afkToggleBtn = Instance.new("TextButton")
     afkToggleBtn.Size = UDim2.new(1, -20, 0, 26)
-    afkToggleBtn.Position = UDim2.new(0, 10, 0, 32)
+    afkToggleBtn.Position = UDim2.new(0, 10, 0, 28)
     afkToggleBtn.BackgroundColor3 = config.antiAfkEnabled and C.success or Color3.fromRGB(70, 70, 85)
     afkToggleBtn.BorderSizePixel = 0
     afkToggleBtn.Font = Enum.Font.GothamBold
@@ -2849,7 +2849,7 @@ do
 
     local afkHint = Instance.new("TextLabel")
     afkHint.Size = UDim2.new(1, -20, 0, 14)
-    afkHint.Position = UDim2.new(0, 10, 0, 65)
+    afkHint.Position = UDim2.new(0, 10, 0, 59)
     afkHint.BackgroundTransparency = 1
     afkHint.Font = Enum.Font.Gotham
     afkHint.Text = "Mencegah kick karena AFK (Idle) di dalam game."
@@ -2861,12 +2861,12 @@ do
     -- ==============================================================
     -- SECTION 2: DISCORD WEBHOOK
     -- ==============================================================
-    local WebhookSection = createSection(miscScroll, "🔔 Discord Webhook", "miscWebhook", 140)
+    local WebhookSection = createSection(miscScroll, "🔔 Discord Webhook", "miscWebhook", 112)
     WebhookSection.LayoutOrder = 2
 
     local webToggleBtn = Instance.new("TextButton")
     webToggleBtn.Size = UDim2.new(1, -20, 0, 26)
-    webToggleBtn.Position = UDim2.new(0, 10, 0, 32)
+    webToggleBtn.Position = UDim2.new(0, 10, 0, 28)
     webToggleBtn.BackgroundColor3 = config.discordWebhookEnabled and C.success or Color3.fromRGB(70, 70, 85)
     webToggleBtn.BorderSizePixel = 0
     webToggleBtn.Font = Enum.Font.GothamBold
@@ -2885,7 +2885,7 @@ do
 
     local urlInput = Instance.new("TextBox")
     urlInput.Size = UDim2.new(1, -20, 0, 24)
-    urlInput.Position = UDim2.new(0, 10, 0, 66)
+    urlInput.Position = UDim2.new(0, 10, 0, 59)
     urlInput.BackgroundColor3 = C.input
     urlInput.BorderSizePixel = 0
     urlInput.Font = Enum.Font.Gotham
@@ -2908,11 +2908,11 @@ do
     end)
 
     local webHint = Instance.new("TextLabel")
-    webHint.Size = UDim2.new(1, -20, 0, 30)
-    webHint.Position = UDim2.new(0, 10, 0, 100)
+    webHint.Size = UDim2.new(1, -20, 0, 14)
+    webHint.Position = UDim2.new(0, 10, 0, 88)
     webHint.BackgroundTransparency = 1
     webHint.Font = Enum.Font.Gotham
-    webHint.Text = "Kirim notifikasi saat pet berhasil di-snipe atau terjual."
+    webHint.Text = "Kirim Webhook Snipe & Sell"
     webHint.TextColor3 = C.textDim
     webHint.TextSize = 8
     webHint.TextWrapped = true
@@ -2922,13 +2922,13 @@ do
     -- ==============================================================
 -- SECTION 3: AUTO HOP SERVER
 -- ==============================================================
-local HopSection = createSection(miscScroll, "🌐 Auto Server Hop", "miscHop", 220)
+local HopSection = createSection(miscScroll, "🌐 Auto Server Hop", "miscHop", 184)
 HopSection.LayoutOrder = 3
 
 -- Toggle On/Off
 local hopToggleBtn = Instance.new("TextButton")
 hopToggleBtn.Size = UDim2.new(1, -20, 0, 26)
-hopToggleBtn.Position = UDim2.new(0, 10, 0, 32)
+hopToggleBtn.Position = UDim2.new(0, 10, 0, 28)
 hopToggleBtn.BackgroundColor3 = config.autoHopEnabled and C.success or Color3.fromRGB(70, 70, 85)
 hopToggleBtn.BorderSizePixel = 0
 hopToggleBtn.Font = Enum.Font.GothamBold
@@ -2948,7 +2948,7 @@ end)
 -- Input Waktu
 local timeLbl = Instance.new("TextLabel")
 timeLbl.Size = UDim2.new(0.6, -15, 0, 16)
-timeLbl.Position = UDim2.new(0, 10, 0, 66)
+timeLbl.Position = UDim2.new(0, 10, 0, 59)
 timeLbl.Text = "Waktu Hop (Menit):"
 timeLbl.TextColor3 = C.textDim
 timeLbl.Font = Enum.Font.Gotham
@@ -2959,7 +2959,7 @@ timeLbl.Parent = HopSection
 
 local timeInput = Instance.new("TextBox")
 timeInput.Size = UDim2.new(0.4, -15, 0, 20)
-timeInput.Position = UDim2.new(0.6, 5, 0, 63)
+timeInput.Position = UDim2.new(0.6, 5, 0, 80)
 timeInput.BackgroundColor3 = C.input
 timeInput.BorderSizePixel = 0
 timeInput.Font = Enum.Font.Gotham
@@ -2977,7 +2977,7 @@ end)
 -- Input Minimal Booth
 local boothLbl = Instance.new("TextLabel")
 boothLbl.Size = UDim2.new(0.6, -15, 0, 16)
-boothLbl.Position = UDim2.new(0, 10, 0, 90)
+boothLbl.Position = UDim2.new(0, 10, 0, 105)
 boothLbl.Text = "Minimal Booth Aktif:"
 boothLbl.TextColor3 = C.textDim
 boothLbl.Font = Enum.Font.Gotham
@@ -2988,7 +2988,7 @@ boothLbl.Parent = HopSection
 
 local boothInput = Instance.new("TextBox")
 boothInput.Size = UDim2.new(0.4, -15, 0, 20)
-boothInput.Position = UDim2.new(0.6, 5, 0, 87)
+boothInput.Position = UDim2.new(0.6, 5, 0, 102)
 boothInput.BackgroundColor3 = C.input
 boothInput.BorderSizePixel = 0
 boothInput.Font = Enum.Font.Gotham
@@ -3006,7 +3006,7 @@ end)
 -- Status
 local hopStatusLbl = Instance.new("TextLabel")
 hopStatusLbl.Size = UDim2.new(1, -20, 0, 16)
-hopStatusLbl.Position = UDim2.new(0, 10, 0, 118)
+hopStatusLbl.Position = UDim2.new(0, 10, 0, 127)
 hopStatusLbl.BackgroundTransparency = 1
 hopStatusLbl.Font = Enum.Font.GothamBold
 hopStatusLbl.Text = "Status: Menunggu..."
@@ -3018,7 +3018,7 @@ hopStatusLbl.Parent = HopSection
 -- Tombol Force Hop (Pindah Paksa Sekarang)
 local forceHopBtn = Instance.new("TextButton")
 forceHopBtn.Size = UDim2.new(1, -20, 0, 26)
-forceHopBtn.Position = UDim2.new(0, 10, 0, 145)
+forceHopBtn.Position = UDim2.new(0, 10, 0, 148)
 forceHopBtn.BackgroundColor3 = C.accent
 forceHopBtn.BorderSizePixel = 0
 forceHopBtn.Font = Enum.Font.GothamBold
@@ -3174,12 +3174,12 @@ end
 -- ==============================================================
 -- SECTION 4: AUTO RECONNECT
 -- ==============================================================
-local ReconnectSection = createSection(miscScroll, "📡 Auto Reconnect", "miscReconnect", 110)
+local ReconnectSection = createSection(miscScroll, "📡 Auto Reconnect", "miscReconnect", 85)
 ReconnectSection.LayoutOrder = 4
 
 local rejoinToggle = Instance.new("TextButton")
 rejoinToggle.Size = UDim2.new(1, -20, 0, 26)
-rejoinToggle.Position = UDim2.new(0, 10, 0, 32)
+rejoinToggle.Position = UDim2.new(0, 10, 0, 28)
 rejoinToggle.BackgroundColor3 = config.autoReconnectEnabled and C.success or Color3.fromRGB(70, 70, 85)
 rejoinToggle.BorderSizePixel = 0
 rejoinToggle.Font = Enum.Font.GothamBold
@@ -3197,11 +3197,11 @@ rejoinToggle.MouseButton1Click:Connect(function()
 end)
 
 local reconnectHint = Instance.new("TextLabel")
-reconnectHint.Size = UDim2.new(1, -20, 0, 30)
-reconnectHint.Position = UDim2.new(0, 10, 0, 65)
+reconnectHint.Size = UDim2.new(1, -20, 0, 16)
+reconnectHint.Position = UDim2.new(0, 10, 0, 59)
 reconnectHint.BackgroundTransparency = 1
 reconnectHint.Font = Enum.Font.Gotham
-reconnectHint.Text = "Mencoba rejoin jika error/teleport gagal terdeteksi. Tidak bisa menjamin reconnect setelah script dihentikan Roblox."
+reconnectHint.Text = "Mencoba rejoin kalau Disconnect"
 reconnectHint.TextColor3 = C.textDim
 reconnectHint.TextSize = 8
 reconnectHint.TextWrapped = true
