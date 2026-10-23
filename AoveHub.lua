@@ -86,7 +86,8 @@ local CONFIG_DEFAULTS = {
     discordWebhookUrl = "",
     autoHopEnabled = false,
     autoHopTime = 30, -- Menit tanpa penjualan sebelum hop
-    autoHopMinBooths = 7,
+    autoHopMinBooths = 10,
+    autoReconnectEnabled = false,
 }
 
 local config = {}
@@ -3004,6 +3005,56 @@ _G.SniperHub.ResetHopTimer = function()
         hopStatusLbl.Text = "Status: Timer di-reset (ada pembeli!)"
     end
 end
+
+-- ==============================================================
+-- SECTION 4: AUTO RECONNECT
+-- ==============================================================
+local ReconnectSection = createSection(miscScroll, "📡 Auto Reconnect", "miscReconnect", 110)
+ReconnectSection.LayoutOrder = 4
+
+local rejoinToggle = Instance.new("TextButton")
+rejoinToggle.Size = UDim2.new(1, -20, 0, 26)
+rejoinToggle.Position = UDim2.new(0, 10, 0, 32)
+rejoinToggle.BackgroundColor3 = config.autoReconnectEnabled and C.success or Color3.fromRGB(70, 70, 85)
+rejoinToggle.BorderSizePixel = 0
+rejoinToggle.Font = Enum.Font.GothamBold
+rejoinToggle.Text = config.autoReconnectEnabled and "📡 Auto Reconnect: ON" or "📡 Auto Reconnect: OFF"
+rejoinToggle.TextColor3 = C.text
+rejoinToggle.TextSize = 9
+rejoinToggle.Parent = ReconnectSection
+Instance.new("UICorner", rejoinToggle).CornerRadius = UDim.new(0, 4)
+
+rejoinToggle.MouseButton1Click:Connect(function()
+    config.autoReconnectEnabled = not config.autoReconnectEnabled
+    saveConfig()
+    rejoinToggle.Text = config.autoReconnectEnabled and "📡 Auto Reconnect: ON" or "📡 Auto Reconnect: OFF"
+    rejoinToggle.BackgroundColor3 = config.autoReconnectEnabled and C.success or Color3.fromRGB(70, 70, 85)
+end)
+
+local reconnectHint = Instance.new("TextLabel")
+reconnectHint.Size = UDim2.new(1, -20, 0, 30)
+reconnectHint.Position = UDim2.new(0, 10, 0, 65)
+reconnectHint.BackgroundTransparency = 1
+reconnectHint.Font = Enum.Font.Gotham
+reconnectHint.Text = "Otomatis masuk kembali ke game jika koneksi terputus."
+reconnectHint.TextColor3 = C.textDim
+reconnectHint.TextSize = 8
+reconnectHint.TextWrapped = true
+reconnectHint.TextXAlignment = Enum.TextXAlignment.Left
+reconnectHint.Parent = ReconnectSection
+
+-- ==============================================================
+-- LOGIKA AUTO RECONNECT (Event Listener)
+-- ==============================================================
+game:GetService("Players").LocalPlayer.OnTeleport:Connect(function(teleportState)
+    if teleportState == Enum.TeleportState.Failed and config.autoReconnectEnabled then
+        print("[AutoReconnect] ⚠️ Teleport gagal! Mencoba masuk kembali...")
+        task.wait(5)
+        pcall(function()
+            game:GetService("TeleportService"):Teleport(game.PlaceId, player)
+        end)
+    end
+end)
     
     -- ==============================================================
 -- LOGIKA ANTI-AFK (AoneHub Style - Hotbar Safe)
@@ -3092,7 +3143,29 @@ if config.antiAfkEnabled then
             
         end
     end)
+end
+
+-- ==============================================================
+-- LOGIKA AUTO RECONNECT (Checker)
+-- ==============================================================
+task.spawn(function()
+    while screenGui.Parent do
+        task.wait(5)
+        if config.autoReconnectEnabled then
+            -- Cek apakah pemain terputus dari DataService (indikasi lag/desync)
+            local ok, data = pcall(function() return DataService:GetData() end)
+            
+            -- Jika data tiba-tiba nil (padahal sebelumnya ada), kemungkinan besar koneksi terputus
+            if not ok or not data then
+                print("[AutoReconnect] ❌ Koneksi terputus terdeteksi, mencoba rejoin...")
+                pcall(function()
+                    game:GetService("TeleportService"):Teleport(game.PlaceId, player)
+                end)
+                task.wait(10) -- Jeda sebelum cek lagi
+            end
+        end
     end
+end)
 end -- END OF TAB MISC BLOCK
 
 -- ==================================================================
