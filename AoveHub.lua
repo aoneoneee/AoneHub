@@ -308,23 +308,26 @@ end
 -- LOGIC CLAIM & TELEPORT
 -- ==================================================================
 local function applyBoothSkin()
+    -- ⭐ 1. CEK PERTAMA KALI: Jika toggle OFF, langsung keluar!
     if not config.claimSkinEnabled then return false end
+    
     local skinId = config.claimSkinID
     if not skinId or skinId == "" then return false end
     if not BoothSkinRegistry[skinId] then return false end
     if MainState.lastAppliedSkinID == skinId then return false end
 
-    -- ⭐ PERBAIKAN: TradeBoothSkinService ada di GameEvents, BUKAN di TradeEvents
     local GameEvents = ReplicatedStorage:FindFirstChild("GameEvents")
     if not GameEvents then return false end
     
     local skinService = GameEvents:FindFirstChild("TradeBoothSkinService")
     
-    -- Jika belum dimuat (misal baru masuk game), tunggu sebentar di background
+    -- Jika service belum dimuat, tunggu di background
     if not skinService then
         task.spawn(function()
             local s = GameEvents:WaitForChild("TradeBoothSkinService", 10)
-            if s and MainState.lastAppliedSkinID ~= skinId then
+            
+            -- ⭐ 2. CEK ULANG SETELAH MENUNGGU: Pastikan toggle masih ON
+            if s and config.claimSkinEnabled and MainState.lastAppliedSkinID ~= skinId then
                 local equipRemote = s:FindFirstChild("Equip")
                 if equipRemote then
                     pcall(function() equipRemote:FireServer(skinId) end)
@@ -336,7 +339,6 @@ local function applyBoothSkin()
         return false
     end
 
-    -- Langsung tembak jika service sudah siap
     local equipRemote = skinService:FindFirstChild("Equip")
     if not equipRemote then return false end
 
