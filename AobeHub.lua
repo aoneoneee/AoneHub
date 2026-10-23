@@ -20,9 +20,9 @@ local oldTradeGui = playerGui:FindFirstChild("AoneHubTrade")
 if oldTradeGui then oldTradeGui:Destroy() end
 
 -- Kill Switch
-if _G.AoneHub_Active then
-    pcall(function() _G.AoneHub_Active:Destroy() end)
-    _G.AoneHub_IsAlive = false
+if _G.AoneHub_Cleanup then
+    pcall(_G.AoneHub_Cleanup)
+    _G.AoneHub_Cleanup = nil
 end
 _G.AoneHub_IsAlive = true
 
@@ -47,14 +47,6 @@ local BuyListingRF = ReplicatedStorage.GameEvents.TradeEvents.Booths.BuyListing
 local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- ⭐ KILL SWITCH: Matikan script lama jika ada
-if _G.AoneHub_Active then
-    pcall(function()
-        _G.AoneHub_Active:Destroy() -- Jika script lama punya fungsi cleanup
-    end)
-    -- Paksa matikan variabel loop lama
-    _G.AoneHub_IsAlive = false 
-end
 _G.AoneHub_IsAlive = true
 
 -- ==================================================================
@@ -3539,8 +3531,26 @@ end)
 -- ⭐ KIRIM WEBHOOK SAAT SCRIPT BARU DIBUKA
 task.delay(2, function()
     _G.SniperHub.SendWebhook("TradeActive", {})
-end)        
+end)
+
+-- ⭐ KILL SWITCH UNTUK INSTANCE BERIKUTNYA
+_G.AoneHub_Cleanup = function()
+    _G.AoneHub_IsAlive = false
+    isGuiDestroyed = true
+    isShuttingDown = true
+
+    -- Stop AutoListing
+    if stopBuyLoop then pcall(stopBuyLoop) end
+
+    -- Stop AutoClaim
+    if stopClaimLoop then pcall(stopClaimLoop) end
+
+    -- Destroy GUI (akan trigger screenGui.Destroying → bersihkan sisanya)
+    if screenGui then 
+        pcall(function() screenGui:Destroy() end) 
+    end
 end
+end  -- ← end penutup loadAoneHubTrade        
 
 local function loadAoneHubMain()
     
