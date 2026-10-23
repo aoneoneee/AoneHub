@@ -2324,7 +2324,8 @@ end
 local buyConnection = nil
 local queue = {} -- ⭐ Tabel Antrian
 local isProcessingQueue = false -- Mencegah bentrok saat antrian diproses
-
+local isUserUnlisting = false
+        
 -- Fungsi untuk mengambil daftar UUID yang sudah ada di booth
 local function getMyListedUUIDs()
     local listed = {}
@@ -2375,6 +2376,26 @@ local function processQueue()
     end)
 end
 
+-- Sebelum startBuyLoop, inisialisasi snapshot
+local lastKnownListings = {}  -- { [listUUID] = { petType=..., price=... } }
+
+local function snapshotMyListings()
+    local snapshot = {}
+    local data = getBoothsData()
+    if not data or not data.Players then return snapshot end
+    local myId = "Player_" .. tostring(player.UserId)
+    local myData = data.Players[myId]
+    if myData and myData.Listings then
+        for listUUID, listing in pairs(myData.Listings) do
+            snapshot[listUUID] = {
+                itemId = listing.ItemId,
+                price = listing.Price,
+            }
+        end
+    end
+    return snapshot
+end
+        
 local function startBuyLoop()
     if isListing then return end
     isListing = true
@@ -2384,7 +2405,9 @@ local function startBuyLoop()
         buyConnection:Disconnect()
         buyConnection = nil
     end
-        
+
+    lastKnownListings = snapshotMyListings()
+            
     -- 1. SCAN AWAL: Kumpulkan pet yang lolos filter dan belum dilisting
     local pets = getMyInventoryPets()
     local listedUUIDs = getMyListedUUIDs()
@@ -2430,40 +2453,51 @@ if not buyConnection then
     local previousListingCount = getMyCurrentListingCount() -- ⭐ Inisialisasi awal
 
     buyConnection = boothReceiver:GetPathSignal("Players/" .. myId .. "/Listings"):Connect(function()
-        task.wait(2) -- Beri jeda sinkronisasi data
-        local currentCount = getMyCurrentListingCount()
-        
-        -- ⭐ DETEKSI TERJUAL & KIRIM WEBHOOK
-        if currentCount < previousListingCount then
-            local sold = previousListingCount - currentCount
+    task.wait(2)
     
-            -- ⭐ RESET TIMER HOP KARENA ADA PENJUALAN
-            if _G.SniperHub.ResetHopTimer then
-                _G.SniperHub.ResetHopTimer()
-            end
-                        
-            -- Ambil data pet dari antrian (jika ada) sebagai sampel info
-            local samplePet = queue[1] or { petType = "Unknown", weight = 0, price = 0, mutation = "Normal" }
-
-            _G.SniperHub.SendWebhook("Sell", {
-                petName = samplePet.petType,
-                age = 1,
-                weight = samplePet.weight,
-                price = samplePet.price,
-                mutation = samplePet.mutation,
-                sellerName = player.Name
-            })
-            print("[AutoListing] 💰 " .. sold .. " Pet terjual! Mengisi ulang slot...")
+    -- ⭐ SKIP kalau user sedang unlist
+    if isUserUnlisting then
+        lastKnownListings = snapshotMyListings()
+        return
+    end
+    
+    local currentSnapshot = snapshotMyListings()
+    
+    -- Cari UUID yang HILANG dari listing
+    local removedUUIDs = {}
+    for listUUID, info in pairs(lastKnownListings) do
+        if not currentSnapshot[listUUID] then
+            table.insert(removedUUIDs, info)
+        end
+    end
+    
+    -- ⭐ HANYA kirim webhook kalau ADA yang hilang DAN bukan user unlist
+    if #removedUUIDs > 0 then
+        if _G.SniperHub.ResetHopTimer then
+            _G.SniperHub.ResetHopTimer()
         end
         
-        previousListingCount = currentCount
-        
-        -- Isi ulang slot yang kosong
-        if isListing and #queue > 0 then
-            processQueue() 
+        -- Ambil data dari snapshot yang hilang (info asli, bukan sampel dari queue)
+        local sold = removedUUIDs[1]
+        _G.SniperHub.SendWebhook("Sell", {
+            petName = sold.itemId or "Unknown",
+            age = 1,
+            weight = 0,
+            price = sold.price or 0,
+            mutation = "Normal",
+            sellerName = player.Name
+        })
+        print("[AutoListing] 💰 " .. #removedUUIDs .. " Pet terjual!")
+    end
+    
+    lastKnownListings = currentSnapshot
+    
+    if isListing and #queue > 0 then
+        processQueue()
+    end
+end)
         end
-    end)
-        end
+        buyConnection = boothReceiver:GetPathSignal(...):Connect(...)
     end
 
     -- ==============================================================
@@ -2531,8 +2565,9 @@ end)
     unlistAllBtn.TextSize = 10
     unlistAllBtn.Parent = CtrlSection
     Instance.new("UICorner", unlistAllBtn).CornerRadius = UDim.new(0, 5)
-
+        
     unlistAllBtn.MouseButton1Click:Connect(function()
+    isUserUnlisting = true
     isListing = false
     config.autoListingEnabled = false -- ⭐ Matikan di config
     saveConfig()
@@ -2564,6 +2599,7 @@ end)
     else
         print("[AutoListing] Tidak ada listing untuk dihapus.")
     end
+    isUserUnlisting = false
 end)
 
     -- ==============================================================
