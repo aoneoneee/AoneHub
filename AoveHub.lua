@@ -3043,8 +3043,6 @@ local function countActiveBooths()
 end
 
 local function hopServer()
-    if not config.autoHopEnabled then return false end
-    
     hopStatusLbl.Text = "Status: Mencari server ramai..."
     print("[AutoHop] Mencari server baru...")
     
@@ -3170,6 +3168,15 @@ _G.SniperHub.ResetHopTimer = function()
     end
 end
 
+forceHopBtn.MouseButton1Click:Connect(function()
+    print("[AutoHop] ⚡ Force Hop ditekan pengguna!")
+    hopStatusLbl.Text = "Status: Mencari server baru..."
+    local success = hopServer()
+    if not success then
+        print("[AutoHop] ❌ Gagal menemukan server. Cek koneksi atau coba lagi.")
+    end
+end)
+    
 -- ==============================================================
 -- SECTION 4: AUTO RECONNECT
 -- ==============================================================
