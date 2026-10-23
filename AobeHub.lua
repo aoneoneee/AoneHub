@@ -2301,7 +2301,6 @@ do
         return count
     end
 
-    local function getMyListedUUIDs()
     local listed = {}
     local data = getBoothsData()
     if not data or not data.Players then return listed end
@@ -2315,27 +2314,6 @@ do
             if listing.ItemId then
                 listed[listing.ItemId] = true 
             end
-        end
-    end
-    return listed
-end
-    
-    local isListing = false
-local buyConnection = nil
-local queue = {} -- ⭐ Tabel Antrian
-local isProcessingQueue = false -- Mencegah bentrok saat antrian diproses
-local isUserUnlisting = false
-        
--- Fungsi untuk mengambil daftar UUID yang sudah ada di booth
-local function getMyListedUUIDs()
-    local listed = {}
-    local data = getBoothsData()
-    if not data or not data.Players then return listed end
-    local myId = "Player_" .. tostring(player.UserId)
-    local myData = data.Players[myId]
-    if myData and myData.Listings then
-        for _, listing in pairs(myData.Listings) do
-            if listing.ItemId then listed[listing.ItemId] = true end
         end
     end
     return listed
@@ -2387,8 +2365,17 @@ local function snapshotMyListings()
     local myData = data.Players[myId]
     if myData and myData.Listings then
         for listUUID, listing in pairs(myData.Listings) do
+            -- ⭐ Cari petType dari inventory
+            local petType = "Unknown"
+            local item = myData.Items and listing.ItemId and myData.Items[listing.ItemId]
+            if item then
+                petType = item.PetType 
+                    or (item.PetData and item.PetData.PetType) 
+                    or "Unknown"
+            end
             snapshot[listUUID] = {
                 itemId = listing.ItemId,
+                petType = petType,      -- ⭐ Tambah ini
                 price = listing.Price,
             }
         end
@@ -2405,8 +2392,6 @@ local function startBuyLoop()
         buyConnection:Disconnect()
         buyConnection = nil
     end
-
-    lastKnownListings = snapshotMyListings()
             
     -- 1. SCAN AWAL: Kumpulkan pet yang lolos filter dan belum dilisting
     local pets = getMyInventoryPets()
@@ -2446,6 +2431,8 @@ local function startBuyLoop()
     
     -- 2. JALANKAN PROSES ANTRIAN
     processQueue()
+    task.wait(1)  -- beri waktu scan selesai
+    lastKnownListings = snapshotMyListings()
 
     -- 3. EVENT LISTENER: Deteksi jika ada slot kosong (pet terjual)
 if not buyConnection then
@@ -2480,7 +2467,7 @@ if not buyConnection then
         -- Ambil data dari snapshot yang hilang (info asli, bukan sampel dari queue)
         local sold = removedUUIDs[1]
         _G.SniperHub.SendWebhook("Sell", {
-            petName = sold.itemId or "Unknown",
+            petName = sold.petType or "Unknown",
             age = 1,
             weight = 0,
             price = sold.price or 0,
@@ -2497,7 +2484,6 @@ if not buyConnection then
     end
 end)
         end
-        buyConnection = boothReceiver:GetPathSignal(...):Connect(...)
     end
 
     -- ==============================================================
@@ -2567,38 +2553,43 @@ end)
     Instance.new("UICorner", unlistAllBtn).CornerRadius = UDim.new(0, 5)
         
     unlistAllBtn.MouseButton1Click:Connect(function()
-    isUserUnlisting = true
+    isUserUnlisting = true  -- ⭐ Set flag
     isListing = false
-    config.autoListingEnabled = false -- ⭐ Matikan di config
+    config.autoListingEnabled = false
     saveConfig()
-    
     table.clear(queue)
-    if buyConnection then
-        buyConnection:Disconnect()
-        buyConnection = nil
-    end
+    if buyConnection then buyConnection:Disconnect() buyConnection = nil end
     if startListBtn and startListBtn.Parent then
         startListBtn.Text = "▶️ MULAI AUTO LISTING"
         startListBtn.BackgroundColor3 = C.success
     end
 
-    local data = getBoothsData()
-    if not data or not data.Players then return end
-    local myId = "Player_" .. tostring(player.UserId)
-    local myData = data.Players[myId]
-    
-    if myData and myData.Listings then
-        local count = 0
-        for listUUID, _ in pairs(myData.Listings) do
-            pcall(function() RemoveListingRF:InvokeServer(listUUID) end)
-            count = count + 1
-            task.wait(1) -- Beri jeda agar server tidak stress
+    -- ⭐ Bungkus dalam pcall + finally
+    local ok, err = pcall(function()
+        local data = getBoothsData()
+        if not data or not data.Players then return end
+        local myId = "Player_" .. tostring(player.UserId)
+        local myData = data.Players[myId]
+        if myData and myData.Listings then
+            local count = 0
+            for listUUID, _ in pairs(myData.Listings) do
+                pcall(function() RemoveListingRF:InvokeServer(listUUID) end)
+                count = count + 1
+                task.wait(1)
+            end
+            print("[AutoListing] Unlist All selesai. " .. count .. " item dihapus.")
+            _G.SniperHub.UpdateStatus("🗑️ " .. count .. " listing dihapus", C.warning)
+        else
+            print("[AutoListing] Tidak ada listing untuk dihapus.")
         end
-        print("[AutoListing] Unlist All selesai. " .. count .. " item dihapus.")
-        _G.SniperHub.UpdateStatus("🗑️ " .. count .. " listing dihapus", C.warning)
-    else
-        print("[AutoListing] Tidak ada listing untuk dihapus.")
+    end)
+
+    if not ok then
+        warn("[AutoListing] Unlist error:", err)
     end
+
+    -- ⭐ Reset flag SELALU — walaupun ada error
+    task.wait(2)  -- beri waktu event listener selesai
     isUserUnlisting = false
 end)
 
