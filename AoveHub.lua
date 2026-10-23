@@ -908,28 +908,42 @@ local function createDynamicDropdown(parent, position, placeholder, onSelect, op
     Instance.new("UICorner", list).CornerRadius = UDim.new(0, 4)
 
     local isOpen = false
+    local baseSectionHeight = baseHeight or (parentSection and parentSection.Size.Y.Offset) or 275
+
+    -- Fungsi pembantu untuk memperbarui tinggi section dan memindahkan elemen lain
+    local function updateLayout(extraHeight)
+        if parentSection then
+            local meta = sectionMeta[parentSection]
+            if meta then
+                meta.expandedHeight = baseSectionHeight + extraHeight
+                if meta.expanded then
+                    parentSection.Size = UDim2.new(1, -10, 0, meta.expandedHeight)
+                end
+            end
+            -- Geser semua elemen di bawah dropdown ini ke bawah
+            for _, child in ipairs(parentSection:GetChildren()) do
+                if child:IsA("TextButton") and child ~= btn and child.Position.Y.Offset > position.Y.Offset then
+                    local originalY = child:GetAttribute("OriginalY") or child.Position.Y.Offset
+                    child:SetAttribute("OriginalY", originalY)
+                    child.Position = UDim2.new(child.Position.X.Scale, child.Position.X.Offset, 0, originalY + extraHeight)
+                end
+            end
+        end
+    end
+
     local api = {
         Container = Container,
         HeaderButton = btn,
         ListScroll = list,
         ItemHeight = 22,
+        IsOpen = function() return isOpen end,
         Close = function()
             if not isOpen then return end
             isOpen = false
             list.Visible = false
             arrow.Text = "▼"
             Container.Size = UDim2.new(1, -20, 0, 28)
-
-            -- Kembalikan tinggi section dan geser elemen lain ke atas
-            if parentSection then
-                local SectionMeta = sectionMeta[parentSection]
-                if SectionMeta then
-                    SectionMeta.expandedHeight = baseHeight
-                    if SectionMeta.expanded then
-                        parentSection.Size = UDim2.new(1, -10, 0, baseHeight)
-                    end
-                end
-            end
+            updateLayout(0)
         end,
     }
 
@@ -972,34 +986,19 @@ local function createDynamicDropdown(parent, position, placeholder, onSelect, op
         local total = #items * 24 + 8
         local listHeight = math.min(total, 160)
         list.Size = UDim2.new(1, 0, 0, listHeight)
-
-        if isOpen then
-            Container.Size = UDim2.new(1, -20, 0, 30 + listHeight + 2)
-            
-            -- Dorong elemen di bawahnya
-            if parentSection then
-                local SectionMeta = sectionMeta[parentSection]
-                if SectionMeta then
-                    local newHeight = baseHeight + listHeight + 10
-                    SectionMeta.expandedHeight = newHeight
-                    if SectionMeta.expanded then
-                        parentSection.Size = UDim2.new(1, -10, 0, newHeight)
-                    end
-                end
-            end
-        else
-            Container.Size = UDim2.new(1, -20, 0, 28)
-        end
+        return listHeight
     end
 
     btn.MouseButton1Click:Connect(function()
-        isOpen = not isOpen
         if isOpen then
-            render()
+            api.Close()
+        else
+            isOpen = true
+            local listHeight = render()
             list.Visible = true
             arrow.Text = "▲"
-        else
-            api.Close()
+            Container.Size = UDim2.new(1, -20, 0, 30 + listHeight + 2)
+            updateLayout(listHeight + 10) -- Geser elemen di bawah dropdown
         end
     end)
 
@@ -2922,7 +2921,7 @@ do
     -- ==============================================================
 -- SECTION 3: AUTO HOP SERVER
 -- ==============================================================
-local HopSection = createSection(miscScroll, "🌐 Auto Server Hop", "miscHop", 184)
+local HopSection = createSection(miscScroll, "🌐 Auto Server Hop", "miscHop", 160)
 HopSection.LayoutOrder = 3
 
 -- Toggle On/Off
@@ -2959,7 +2958,7 @@ timeLbl.Parent = HopSection
 
 local timeInput = Instance.new("TextBox")
 timeInput.Size = UDim2.new(0.4, -15, 0, 20)
-timeInput.Position = UDim2.new(0.6, 5, 0, 80)
+timeInput.Position = UDim2.new(0.6, 5, 0, 56)
 timeInput.BackgroundColor3 = C.input
 timeInput.BorderSizePixel = 0
 timeInput.Font = Enum.Font.Gotham
@@ -2977,7 +2976,7 @@ end)
 -- Input Minimal Booth
 local boothLbl = Instance.new("TextLabel")
 boothLbl.Size = UDim2.new(0.6, -15, 0, 16)
-boothLbl.Position = UDim2.new(0, 10, 0, 105)
+boothLbl.Position = UDim2.new(0, 10, 0, 81)
 boothLbl.Text = "Minimal Booth Aktif:"
 boothLbl.TextColor3 = C.textDim
 boothLbl.Font = Enum.Font.Gotham
@@ -2988,7 +2987,7 @@ boothLbl.Parent = HopSection
 
 local boothInput = Instance.new("TextBox")
 boothInput.Size = UDim2.new(0.4, -15, 0, 20)
-boothInput.Position = UDim2.new(0.6, 5, 0, 102)
+boothInput.Position = UDim2.new(0.6, 5, 0, 78)
 boothInput.BackgroundColor3 = C.input
 boothInput.BorderSizePixel = 0
 boothInput.Font = Enum.Font.Gotham
@@ -3006,7 +3005,7 @@ end)
 -- Status
 local hopStatusLbl = Instance.new("TextLabel")
 hopStatusLbl.Size = UDim2.new(1, -20, 0, 16)
-hopStatusLbl.Position = UDim2.new(0, 10, 0, 127)
+hopStatusLbl.Position = UDim2.new(0, 10, 0, 103)
 hopStatusLbl.BackgroundTransparency = 1
 hopStatusLbl.Font = Enum.Font.GothamBold
 hopStatusLbl.Text = "Status: Menunggu..."
@@ -3018,7 +3017,7 @@ hopStatusLbl.Parent = HopSection
 -- Tombol Force Hop (Pindah Paksa Sekarang)
 local forceHopBtn = Instance.new("TextButton")
 forceHopBtn.Size = UDim2.new(1, -20, 0, 26)
-forceHopBtn.Position = UDim2.new(0, 10, 0, 148)
+forceHopBtn.Position = UDim2.new(0, 10, 0, 124)
 forceHopBtn.BackgroundColor3 = C.accent
 forceHopBtn.BorderSizePixel = 0
 forceHopBtn.Font = Enum.Font.GothamBold
