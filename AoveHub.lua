@@ -304,7 +304,7 @@ local function teleportToBooth(boothInstance)
     if not hrp then return end
 
     -- 1. Posisi tujuan
-    local offset = CFrame.new(0, -1, 5) 
+    local offset = CFrame.new(0, -1, 6) 
     local targetPos = (boothInstance:GetPivot() * offset).Position
     
     -- 2. Titik pusat booth (untuk arah pandang)
@@ -584,6 +584,34 @@ contentArea.BackgroundTransparency = 1
 contentArea.ClipsDescendants = true
 contentArea.Parent = mainFrame
 
+-- ==============================================================
+-- DEFAULT VIEW (Halaman Depan)
+-- ==============================================================
+local defaultView = Instance.new("Frame")
+defaultView.Size = UDim2.new(1, 0, 1, 0)
+defaultView.BackgroundTransparency = 1
+defaultView.Parent = contentArea
+
+local logoLabel = Instance.new("TextLabel")
+logoLabel.Size = UDim2.new(1, 0, 0, 32)
+logoLabel.Position = UDim2.new(0, 0, 0.35, -16)
+logoLabel.Text = "AoneHub"
+logoLabel.TextColor3 = C.accent
+logoLabel.Font = Enum.Font.GothamBlack
+logoLabel.TextSize = 24
+logoLabel.BackgroundTransparency = 1
+logoLabel.Parent = defaultView
+
+local subLabel = Instance.new("TextLabel")
+subLabel.Size = UDim2.new(1, 0, 0, 14)
+subLabel.Position = UDim2.new(0, 0, 0.5, 0)
+subLabel.Text = "Pilih menu di samping"
+subLabel.TextColor3 = C.textDim
+subLabel.Font = Enum.Font.Gotham
+subLabel.TextSize = 10
+subLabel.BackgroundTransparency = 1
+subLabel.Parent = defaultView
+
 -- ==================================================================
 -- HELPER UI GLOBAL
 -- ==================================================================
@@ -837,6 +865,9 @@ for i, tab in ipairs(TABS) do
 end
 
 local function switchTab(name)
+    -- Sembunyikan halaman depan
+    defaultView.Visible = false
+
     for n, f in pairs(tabFrames) do f.Visible = (n == name) end
     for n, b in pairs(tabBtns) do
         b.BackgroundColor3 = (n == name) and C.accent or Color3.fromRGB(32, 32, 40)
@@ -1055,50 +1086,6 @@ do
         PRIORITY_OPTIONS
     )
     priorityDropdown.HeaderButton.Text = priorityLabels[config.claimPriority] or "📍 Pilih Prioritas"
-
-    -- TOMBOL DEBUG
-    local debugBtn = Instance.new("TextButton")
-    debugBtn.Size = UDim2.new(1, -20, 0, 22)
-    debugBtn.Position = UDim2.new(0, 10, 0, 132)
-    debugBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-    debugBtn.BorderSizePixel = 0
-    debugBtn.Font = Enum.Font.GothamBold
-    debugBtn.Text = "🛠️ Debug Data Booth (Cek Console)"
-    debugBtn.TextColor3 = C.text
-    debugBtn.TextSize = 8
-    debugBtn.Parent = ConfigSection
-    Instance.new("UICorner", debugBtn).CornerRadius = UDim.new(0, 3)
-
-    debugBtn.MouseButton1Click:Connect(function()
-        local booths = getPhysicalBooths()
-        if #booths == 0 then return print("Tidak ada booth!") end
-        local infos = {}
-        for _, b in ipairs(booths) do table.insert(infos, getBoothInfo(b)) end
-        
-        local sumX, sumZ = 0, 0
-        for _, info in ipairs(infos) do sumX = sumX + info.posX; sumZ = sumZ + info.posZ end
-        local cx, cz = sumX / #infos, sumZ / #infos
-        
-        print("=== DEBUG BOOTH ===")
-        print("Center Point: X="..math.floor(cx).." Z="..math.floor(cz))
-        
-        local sorted = {}
-        for _, info in ipairs(infos) do
-            table.insert(sorted, {
-                name = info.name, x = info.posX, z = info.posZ,
-                dist = math.sqrt((info.posX - cx)^2 + (info.posZ - cz)^2),
-                owner = info.ownerId and "Taken" or "KOSONG"
-            })
-        end
-        table.sort(sorted, function(a,b) return a.dist < b.dist end)
-        
-        print("Urutan dari Paling Depan (Jarak < ke Pusat):")
-        for i = 1, math.min(5, #sorted) do
-            print(string.format("%d. %s | X:%.0f Z:%.0f | Jarak:%.1f | %s", 
-                i, sorted[i].name, sorted[i].x, sorted[i].z, sorted[i].dist, sorted[i].owner))
-        end
-        print("=== END DEBUG ===")
-    end)
 
     makeToggle(
         ConfigSection, 162,
@@ -3111,7 +3098,6 @@ end -- END OF TAB MISC BLOCK
 -- ==================================================================
 -- INIT GLOBAL
 -- ==================================================================
-switchTab("Main")
 
 closeBtn.MouseButton1Click:Connect(function()
     stopClaimLoop()
