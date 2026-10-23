@@ -357,15 +357,18 @@ local function teleportToBooth(boothInstance)
     -- 3. Teleport Karakter
     hrp.CFrame = lookAtCFrame
     
-    -- ⭐ Opsi 1: Kamera di belakang Humanoid
+    -- 4. Pindahkan Kamera ke Belakang Karakter
     local camera = workspace.CurrentCamera
     if camera then
-        -- Posisi kamera: 12 stud di belakang karakter, 2 stud lebih tinggi
-        local camOffset = CFrame.new(0, 2, 12)
-        local camPos = (lookAtCFrame * camOffset).Position
-    
-        -- Kamera melihat ke arah yang sama dengan karakter
-        camera.CFrame = CFrame.lookAt(camPos, targetPos, Vector3.new(0, 1, 0))
+        -- Arah pandang horizontal (abaikan pitch naik/turun)
+        local lookDir = (centerPos - targetPos).Unit
+        local flatLook = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
+        
+        -- Kamera berada 12 stud di belakang karakter dan 4 stud lebih tinggi
+        local camPos = targetPos - (flatLook * 12) + Vector3.new(0, 4, 0)
+        
+        -- Arahkan kamera dari camPos ke arah booth (bukan ke kepala karakter)
+        camera.CFrame = CFrame.lookAt(camPos, camPos + flatLook, Vector3.new(0, 1, 0))
     end
 
     -- ⭐ 5. Nyalakan kembali kontrol setelah jeda
