@@ -238,6 +238,9 @@ local MainState = {
 }
 _G.SniperHub.MainState = MainState
 
+local isGuiDestroyed = false
+local isShuttingDown = false -- ⭐ Tambahkan di SHARED STATE
+
 -- ==================================================================
 -- BOOTH DATA HELPER
 -- ==================================================================
@@ -1056,7 +1059,7 @@ do
     }
 
     local priorityDropdown = createDropdown(
-        ConfigSection,
+        StatusSection,
         UDim2.new(0, 10, 0, 175),
         priorityLabels[config.claimPriority] or "📍 Pilih Prioritas",
         function(v) config.claimPriority = v; saveConfig() end,
@@ -3203,18 +3206,22 @@ end -- END OF TAB MISC BLOCK
 -- ==================================================================
 -- INIT GLOBAL
 -- ==================================================================
-
 closeBtn.MouseButton1Click:Connect(function()
+    isShuttingDown = true
     stopClaimLoop()
+    _G.SniperHub.SendWebhook("TradeInactive", { reason = "Script Di-close (Tombol X)" })
     screenGui:Destroy()
 end)
 
 screenGui.Destroying:Connect(function()
+    isGuiDestroyed = true
     stopClaimLoop()
     
-    -- ⭐ KIRIM WEBHOOK SAAT SCRIPT DIHENTIKAN
-    if _G.SniperHub.SendWebhook then
-        _G.SniperHub.SendWebhook("TradeInactive", { reason = "Script Di-close / GUI Destroyed" })
+    -- Hanya kirim jika belum dikirim oleh tombol X
+    if not isShuttingDown then
+        if _G.SniperHub.SendWebhook then
+            _G.SniperHub.SendWebhook("TradeInactive", { reason = "GUI Destroyed / Script Dimatikan" })
+        end
     end
 end)
 
