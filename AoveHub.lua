@@ -325,21 +325,32 @@ local function teleportToBooth(boothInstance)
     if not boothInstance then return end
     local char = player.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
 
-    -- 1. Posisi tujuan
+    -- ⭐ 1. Matikan kontrol karakter sementara
+    hum.AutoRotate = false
+    hum:ChangeState(Enum.HumanoidStateType.Physics) -- Menghentikan animasi lari/berjalan
+
+    -- 2. Hitung Posisi Tujuan
     local offset = CFrame.new(0, -1, 7) 
     local targetPos = (boothInstance:GetPivot() * offset).Position
-    
-    -- 2. Titik pusat booth (untuk arah pandang)
     local centerPos = boothInstance:GetPivot().Position
-    
-    -- 3. Hitung arah pandang (dari posisi pemain ke tengah booth)
-    -- Vector3.new(0,1,0) adalah sumbu Up agar karakter tidak miring
     local lookAtCFrame = CFrame.lookAt(targetPos, centerPos, Vector3.new(0, 1, 0))
     
-    -- 4. Terapkan ke karakter
+    -- 3. Teleport Karakter
     hrp.CFrame = lookAtCFrame
+    
+    -- ⭐ 4. Pindahkan Kamera secara instan
+    local camera = workspace.CurrentCamera
+    if camera then
+        camera.CFrame = lookAtCFrame
+    end
+
+    -- ⭐ 5. Nyalakan kembali kontrol setelah jeda
+    task.wait(0.1) -- Beri waktu 1 frame agar engine Roblox sinkron
+    hum:ChangeState(Enum.HumanoidStateType.GettingUp) -- Kembalikan ke state berdiri
+    hum.AutoRotate = true
 end
 
 local function startClaimLoop()
