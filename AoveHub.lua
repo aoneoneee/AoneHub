@@ -300,23 +300,39 @@ local function applyBoothSkin()
     if not BoothSkinRegistry[skinId] then return false end
     if MainState.lastAppliedSkinID == skinId then return false end
 
-    local skinService = TRADE_EVENTS:FindFirstChild("TradeBoothSkinService")
+    -- ⭐ PERBAIKAN: TradeBoothSkinService ada di GameEvents, BUKAN di TradeEvents
+    local GameEvents = ReplicatedStorage:FindFirstChild("GameEvents")
+    if not GameEvents then return false end
+    
+    local skinService = GameEvents:FindFirstChild("TradeBoothSkinService")
+    
+    -- Jika belum dimuat (misal baru masuk game), tunggu sebentar di background
     if not skinService then
         task.spawn(function()
-            local s = TRADE_EVENTS:WaitForChild("TradeBoothSkinService", 10)
+            local s = GameEvents:WaitForChild("TradeBoothSkinService", 10)
             if s and MainState.lastAppliedSkinID ~= skinId then
-                pcall(function() s.Equip:FireServer(skinId) end)
-                MainState.lastAppliedSkinID = skinId
+                local equipRemote = s:FindFirstChild("Equip")
+                if equipRemote then
+                    pcall(function() equipRemote:FireServer(skinId) end)
+                    MainState.lastAppliedSkinID = skinId
+                    print("[BoothSkin] ✅ Skin berhasil dipasang (delayed).")
+                end
             end
         end)
         return false
     end
 
+    -- Langsung tembak jika service sudah siap
+    local equipRemote = skinService:FindFirstChild("Equip")
+    if not equipRemote then return false end
+
     local ok = pcall(function()
-        skinService.Equip:FireServer(skinId)
+        equipRemote:FireServer(skinId)
     end)
+    
     if ok then
         MainState.lastAppliedSkinID = skinId
+        print("[BoothSkin] ✅ Skin " .. skinId .. " berhasil dipasang!")
     end
     return ok
 end
@@ -341,10 +357,15 @@ local function teleportToBooth(boothInstance)
     -- 3. Teleport Karakter
     hrp.CFrame = lookAtCFrame
     
-    -- ⭐ 4. Pindahkan Kamera secara instan
+    -- ⭐ 4. Pindahkan Kamera tepat di Kepala & Tatap Center
     local camera = workspace.CurrentCamera
     if camera then
-        camera.CFrame = lookAtCFrame
+        -- Posisi kamera: Sedikit di atas HumanoidRootPart (area kepala)
+        local headOffset = Vector3.new(0, 2, 0) 
+        local camPos = targetPos + headOffset
+    
+        -- Kamera menatap lurus ke tengah booth
+        camera.CFrame = CFrame.lookAt(camPos, centerPos, Vector3.new(0, 1, 0))
     end
 
     -- ⭐ 5. Nyalakan kembali kontrol setelah jeda
@@ -458,6 +479,7 @@ local function startClaimLoop()
 
                         if getMyPlayerBoothId() then
                             MainState.lastAppliedSkinID = nil
+                            task.wait(1)
                             applyBoothSkin()
                             teleportToBooth(best.instance)
                             ok = true
@@ -2039,7 +2061,7 @@ end
                 if val then table.insert(selected, pet) end
             end
             if #selected == 0 then
-                selectedPetsLbl.Text = "Klik untuk memilih pet... (Wajib pilih 1)"
+                selectedPetsLbl.Text = "Klik untuk memilih pet... (Wajib pilih minimal 1)"
             else
                 selectedPetsLbl.Text = table.concat(selected, ", ")
             end
@@ -2719,7 +2741,7 @@ end)
                 if val then table.insert(selected, pet) end
             end
             if #selected == 0 then
-                selectedPetsLbl.Text = "Klik untuk memilih pet... (Wajib pilih 1)"
+                selectedPetsLbl.Text = "Klik untuk memilih pet... (Wajib pilih minimal 1)"
             else
                 selectedPetsLbl.Text = table.concat(selected, ", ")
             end
