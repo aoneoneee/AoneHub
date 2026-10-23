@@ -848,6 +848,164 @@ local function makeToggle(parent, yPos, label, configKey, onText, offText)
     return btn
 end
 
+-- ==============================================================
+-- DYNAMIC DROPDOWN (Anti-Overlap seperti AoneHub)
+-- ==============================================================
+local function createDynamicDropdown(parent, position, placeholder, onSelect, options, parentSection, baseHeight)
+    options = options or {}
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, -20, 0, 28)
+    Container.Position = position
+    Container.BackgroundTransparency = 1
+    Container.ClipsDescendants = true
+    Container.ZIndex = 10
+    Container.Parent = parent
+
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, 28)
+    header.BackgroundColor3 = C.input
+    header.BorderSizePixel = 0
+    header.ZIndex = 10
+    header.Parent = Container
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 4)
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -20, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Font = Enum.Font.Gotham
+    btn.Text = placeholder
+    btn.TextColor3 = C.text
+    btn.TextSize = 9
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.ZIndex = 11
+    btn.Parent = header
+    local bp = Instance.new("UIPadding")
+    bp.PaddingLeft = UDim.new(0, 8)
+    bp.Parent = btn
+
+    local arrow = Instance.new("TextLabel")
+    arrow.Size = UDim2.new(0, 15, 0, 20)
+    arrow.Position = UDim2.new(1, -18, 0, 4)
+    arrow.BackgroundTransparency = 1
+    arrow.Font = Enum.Font.GothamBold
+    arrow.Text = "▼"
+    arrow.TextColor3 = C.textDim
+    arrow.TextSize = 10
+    arrow.ZIndex = 11
+    arrow.Parent = header
+
+    local list = Instance.new("ScrollingFrame")
+    list.Size = UDim2.new(1, 0, 0, 0)
+    list.Position = UDim2.new(0, 0, 0, 30)
+    list.BackgroundColor3 = Color3.fromRGB(45, 45, 58)
+    list.BorderSizePixel = 0
+    list.Visible = false
+    list.ScrollBarThickness = 3
+    list.CanvasSize = UDim2.new(0, 0, 0, 0)
+    list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    list.ZIndex = 10
+    list.Parent = Container
+    Instance.new("UICorner", list).CornerRadius = UDim.new(0, 4)
+
+    local isOpen = false
+    local api = {
+        Container = Container,
+        HeaderButton = btn,
+        ListScroll = list,
+        ItemHeight = 22,
+        Close = function()
+            if not isOpen then return end
+            isOpen = false
+            list.Visible = false
+            arrow.Text = "▼"
+            Container.Size = UDim2.new(1, -20, 0, 28)
+
+            -- Kembalikan tinggi section dan geser elemen lain ke atas
+            if parentSection then
+                local SectionMeta = sectionMeta[parentSection]
+                if SectionMeta then
+                    SectionMeta.expandedHeight = baseHeight
+                    if SectionMeta.expanded then
+                        parentSection.Size = UDim2.new(1, -10, 0, baseHeight)
+                    end
+                end
+            end
+        end,
+    }
+
+    local function render()
+        for _, c in ipairs(list:GetChildren()) do
+            if c:IsA("TextButton") then c:Destroy() end
+        end
+        local items = typeof(options) == "function" and options() or options
+        for i, item in ipairs(items) do
+            local label = type(item) == "table" and item.label or tostring(item)
+            local value = type(item) == "table" and item.value or item
+            local ib = Instance.new("TextButton")
+            ib.Size = UDim2.new(1, -4, 0, 22)
+            ib.BackgroundColor3 = Color3.fromRGB(65, 65, 80)
+            ib.BorderSizePixel = 0
+            ib.Font = Enum.Font.Gotham
+            ib.Text = tostring(label)
+            ib.TextColor3 = C.text
+            ib.TextSize = 8
+            ib.TextXAlignment = Enum.TextXAlignment.Left
+            ib.LayoutOrder = i
+            ib.ZIndex = 12
+            ib.Parent = list
+            Instance.new("UICorner", ib).CornerRadius = UDim.new(0, 3)
+            local ip = Instance.new("UIPadding")
+            ip.PaddingLeft = UDim.new(0, 6)
+            ip.Parent = ib
+            ib.MouseButton1Click:Connect(function()
+                btn.Text = tostring(label)
+                api.Close()
+                onSelect(value)
+            end)
+        end
+        local layout = list:FindFirstChildOfClass("UIListLayout")
+        if not layout then
+            layout = Instance.new("UIListLayout")
+            layout.Padding = UDim.new(0, 2)
+            layout.Parent = list
+        end
+        local total = #items * 24 + 8
+        local listHeight = math.min(total, 160)
+        list.Size = UDim2.new(1, 0, 0, listHeight)
+
+        if isOpen then
+            Container.Size = UDim2.new(1, -20, 0, 30 + listHeight + 2)
+            
+            -- Dorong elemen di bawahnya
+            if parentSection then
+                local SectionMeta = sectionMeta[parentSection]
+                if SectionMeta then
+                    local newHeight = baseHeight + listHeight + 10
+                    SectionMeta.expandedHeight = newHeight
+                    if SectionMeta.expanded then
+                        parentSection.Size = UDim2.new(1, -10, 0, newHeight)
+                    end
+                end
+            end
+        else
+            Container.Size = UDim2.new(1, -20, 0, 28)
+        end
+    end
+
+    btn.MouseButton1Click:Connect(function()
+        isOpen = not isOpen
+        if isOpen then
+            render()
+            list.Visible = true
+            arrow.Text = "▲"
+        else
+            api.Close()
+        end
+    end)
+
+    return api
+end
+
 -- ==================================================================
 -- TAB SYSTEM
 -- ==================================================================
@@ -979,7 +1137,7 @@ do
     mainLayout.Parent = mainScroll
 
     -- SECTION 1: STATUS
-    local StatusSection = createSection(mainScroll, "⚙️ Konfigurasi Booth", "mainStatus", 275)
+    local StatusSection = createSection(mainScroll, "⚙️ Konfigurasi Booth", "mainStatus", 213)
     StatusSection.LayoutOrder = 1
 
     local StatusLbl = Instance.new("TextLabel")
@@ -1058,20 +1216,16 @@ do
         random = "🎲 Random",
     }
 
-    local priorityDropdown = createDropdown(
+    local priorityDropdown = createDynamicDropdown(
         StatusSection,
         UDim2.new(0, 10, 0, 175),
         priorityLabels[config.claimPriority] or "📍 Pilih Prioritas",
         function(v) config.claimPriority = v; saveConfig() end,
-        PRIORITY_OPTIONS
+        PRIORITY_OPTIONS,
+        StatusSection, -- ⭐ Parent Section
+        213            -- ⭐ Tinggi awal Section
     )
     priorityDropdown.HeaderButton.Text = priorityLabels[config.claimPriority] or "📍 Pilih Prioritas"
-
-    makeToggle(
-        StatusSection, 239,
-        "Apply Booth Skin", "claimSkinEnabled",
-        "🎨 Apply Skin: ON", "🎨 Apply Skin: OFF"
-    )
     
     -- Ekspos callback update status ke global _G agar bisa dipanggil loop di atas
     _G.SniperHub.UpdateStatus = function(text, color)
@@ -1138,12 +1292,18 @@ do
     end)
 
     -- SECTION 2: DAFTAR SKIN
-    local SkinSection = createSection(mainScroll, "🎨 Pilih Booth Skin", "mainSkin", 290)
+    local SkinSection = createSection(mainScroll, "🎨 Pilih Booth Skin", "mainSkin", 296)
     SkinSection.LayoutOrder = 2
 
+    makeToggle(
+        StatusSection, 28,
+        "Apply Booth Skin", "claimSkinEnabled",
+        "🎨 Apply Skin: ON", "🎨 Apply Skin: OFF"
+    )
+    
     local skinSearch = Instance.new("TextBox")
     skinSearch.Size = UDim2.new(1, -20, 0, 22)
-    skinSearch.Position = UDim2.new(0, 10, 0, 32)
+    skinSearch.Position = UDim2.new(0, 10, 0, 59)
     skinSearch.BackgroundColor3 = C.input
     skinSearch.BorderSizePixel = 0
     skinSearch.Font = Enum.Font.Gotham
@@ -1157,7 +1317,7 @@ do
 
     local skinListFrame = Instance.new("ScrollingFrame")
     skinListFrame.Size = UDim2.new(1, -20, 0, 200)
-    skinListFrame.Position = UDim2.new(0, 10, 0, 60)
+    skinListFrame.Position = UDim2.new(0, 10, 0, 86)
     skinListFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
     skinListFrame.BorderSizePixel = 0
     skinListFrame.ScrollBarThickness = 3
@@ -1756,12 +1916,12 @@ end
         if type(fData.pets) ~= "table" then fData.pets = {} end
         if type(fData.mutations) ~= "table" then fData.mutations = {} end
     
-        local Section = createSection(buyScroll, "🎯 Filter Sniper #" .. index, "buyFilter" .. index, 400)
+        local Section = createSection(buyScroll, "🎯 Filter Sniper #" .. index, "buyFilter" .. index, 300)
         Section.LayoutOrder = index + 1
 
         local toggleBtn = Instance.new("TextButton")
         toggleBtn.Size = UDim2.new(1, -20, 0, 26)
-        toggleBtn.Position = UDim2.new(0, 10, 0, 32)
+        toggleBtn.Position = UDim2.new(0, 10, 0, 28)
         toggleBtn.BackgroundColor3 = fData.enabled and C.success or Color3.fromRGB(70, 70, 85)
         toggleBtn.BorderSizePixel = 0
         toggleBtn.Font = Enum.Font.GothamBold
@@ -1780,7 +1940,7 @@ end
 
         local priceLbl = Instance.new("TextLabel")
         priceLbl.Size = UDim2.new(0.55, -15, 0, 16)
-        priceLbl.Position = UDim2.new(0, 10, 0, 66)
+        priceLbl.Position = UDim2.new(0, 10, 0, 59)
         priceLbl.Text = "Max Harga (Tokens, 0=All):"
         priceLbl.TextColor3 = C.textDim
         priceLbl.Font = Enum.Font.Gotham
@@ -1791,7 +1951,7 @@ end
 
         local priceInput = Instance.new("TextBox")
         priceInput.Size = UDim2.new(0.45, -15, 0, 20)
-        priceInput.Position = UDim2.new(0.55, 5, 0, 63)
+        priceInput.Position = UDim2.new(0.55, 5, 0, 80)
         priceInput.BackgroundColor3 = C.input
         priceInput.BorderSizePixel = 0
         priceInput.Font = Enum.Font.Gotham
@@ -1809,7 +1969,7 @@ end
 
         local weightLbl = Instance.new("TextLabel")
         weightLbl.Size = UDim2.new(0.55, -15, 0, 16)
-        weightLbl.Position = UDim2.new(0, 10, 0, 90)
+        weightLbl.Position = UDim2.new(0, 10, 0, 105)
         weightLbl.Text = "Min Weight (KG, 0=All):"
         weightLbl.TextColor3 = C.textDim
         weightLbl.Font = Enum.Font.Gotham
@@ -1820,7 +1980,7 @@ end
 
         local weightInput = Instance.new("TextBox")
         weightInput.Size = UDim2.new(0.45, -15, 0, 20)
-        weightInput.Position = UDim2.new(0.55, 5, 0, 87)
+        weightInput.Position = UDim2.new(0.55, 5, 0, 126)
         weightInput.BackgroundColor3 = C.input
         weightInput.BorderSizePixel = 0
         weightInput.Font = Enum.Font.Gotham
@@ -1838,7 +1998,7 @@ end
 
         local pickPetBtn = Instance.new("TextButton")
         pickPetBtn.Size = UDim2.new(1, -20, 0, 22)
-        pickPetBtn.Position = UDim2.new(0, 10, 0, 114)
+        pickPetBtn.Position = UDim2.new(0, 10, 0, 151)
         pickPetBtn.BackgroundColor3 = C.accent
         pickPetBtn.BorderSizePixel = 0
         pickPetBtn.Font = Enum.Font.GothamBold
@@ -1850,7 +2010,7 @@ end
 
         local selectedPetsLbl = Instance.new("TextLabel")
         selectedPetsLbl.Size = UDim2.new(1, -20, 0, 40)
-        selectedPetsLbl.Position = UDim2.new(0, 10, 0, 140)
+        selectedPetsLbl.Position = UDim2.new(0, 10, 0, 178)
         selectedPetsLbl.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
         selectedPetsLbl.BorderSizePixel = 0
         selectedPetsLbl.Font = Enum.Font.Gotham
@@ -1878,7 +2038,7 @@ end
 
         local pickMutBtn = Instance.new("TextButton")
         pickMutBtn.Size = UDim2.new(1, -20, 0, 22)
-        pickMutBtn.Position = UDim2.new(0, 10, 0, 186)
+        pickMutBtn.Position = UDim2.new(0, 10, 0, 223)
         pickMutBtn.BackgroundColor3 = C.accent
         pickMutBtn.BorderSizePixel = 0
         pickMutBtn.Font = Enum.Font.GothamBold
@@ -1890,7 +2050,7 @@ end
 
         local selectedMutLbl = Instance.new("TextLabel")
         selectedMutLbl.Size = UDim2.new(1, -20, 0, 40)
-        selectedMutLbl.Position = UDim2.new(0, 10, 0, 212)
+        selectedMutLbl.Position = UDim2.new(0, 10, 0, 250)
         selectedMutLbl.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
         selectedMutLbl.BorderSizePixel = 0
         selectedMutLbl.Font = Enum.Font.Gotham
@@ -2438,12 +2598,12 @@ end)
         if type(fData.pets) ~= "table" then fData.pets = {} end
         if type(fData.mutations) ~= "table" then fData.mutations = {} end
 
-        local Section = createSection(listScroll, "🎯 Filter Listing #" .. index, "listFilter" .. index, 250)
+        local Section = createSection(listScroll, "🎯 Filter Listing #" .. index, "listFilter" .. index, 300)
         Section.LayoutOrder = index + 1
 
         local toggleBtn = Instance.new("TextButton")
         toggleBtn.Size = UDim2.new(1, -20, 0, 26)
-        toggleBtn.Position = UDim2.new(0, 10, 0, 32)
+        toggleBtn.Position = UDim2.new(0, 10, 0, 28)
         toggleBtn.BackgroundColor3 = fData.enabled and C.success or Color3.fromRGB(70, 70, 85)
         toggleBtn.BorderSizePixel = 0
         toggleBtn.Font = Enum.Font.GothamBold
@@ -2462,7 +2622,7 @@ end)
 
         local priceLbl = Instance.new("TextLabel")
         priceLbl.Size = UDim2.new(0.55, -15, 0, 16)
-        priceLbl.Position = UDim2.new(0, 10, 0, 66)
+        priceLbl.Position = UDim2.new(0, 10, 0, 59)
         priceLbl.Text = "Harga Jual (Tokens):"
         priceLbl.TextColor3 = C.textDim
         priceLbl.Font = Enum.Font.Gotham
@@ -2473,7 +2633,7 @@ end)
 
         local priceInput = Instance.new("TextBox")
         priceInput.Size = UDim2.new(0.45, -15, 0, 20)
-        priceInput.Position = UDim2.new(0.55, 5, 0, 63)
+        priceInput.Position = UDim2.new(0.55, 5, 0, 80)
         priceInput.BackgroundColor3 = C.input
         priceInput.BorderSizePixel = 0
         priceInput.Font = Enum.Font.Gotham
@@ -2490,7 +2650,7 @@ end)
 
         local weightLbl = Instance.new("TextLabel")
         weightLbl.Size = UDim2.new(0.55, -15, 0, 16)
-        weightLbl.Position = UDim2.new(0, 10, 0, 90)
+        weightLbl.Position = UDim2.new(0, 10, 0, 105)
         weightLbl.Text = "Max Weight (KG, 0=All):"
         weightLbl.TextColor3 = C.textDim
         weightLbl.Font = Enum.Font.Gotham
@@ -2501,7 +2661,7 @@ end)
 
         local weightInput = Instance.new("TextBox")
         weightInput.Size = UDim2.new(0.45, -15, 0, 20)
-        weightInput.Position = UDim2.new(0.55, 5, 0, 87)
+        weightInput.Position = UDim2.new(0.55, 5, 0, 126)
         weightInput.BackgroundColor3 = C.input
         weightInput.BorderSizePixel = 0
         weightInput.Font = Enum.Font.Gotham
@@ -2518,7 +2678,7 @@ end)
 
         local pickPetBtn = Instance.new("TextButton")
         pickPetBtn.Size = UDim2.new(1, -20, 0, 22)
-        pickPetBtn.Position = UDim2.new(0, 10, 0, 114)
+        pickPetBtn.Position = UDim2.new(0, 10, 0, 151)
         pickPetBtn.BackgroundColor3 = C.accent
         pickPetBtn.BorderSizePixel = 0
         pickPetBtn.Font = Enum.Font.GothamBold
@@ -2530,7 +2690,7 @@ end)
 
         local selectedPetsLbl = Instance.new("TextLabel")
         selectedPetsLbl.Size = UDim2.new(1, -20, 0, 40)
-        selectedPetsLbl.Position = UDim2.new(0, 10, 0, 140)
+        selectedPetsLbl.Position = UDim2.new(0, 10, 0, 178)
         selectedPetsLbl.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
         selectedPetsLbl.BorderSizePixel = 0
         selectedPetsLbl.Font = Enum.Font.Gotham
@@ -2558,7 +2718,7 @@ end)
 
         local pickMutBtn = Instance.new("TextButton")
         pickMutBtn.Size = UDim2.new(1, -20, 0, 22)
-        pickMutBtn.Position = UDim2.new(0, 10, 0, 186)
+        pickMutBtn.Position = UDim2.new(0, 10, 0, 223)
         pickMutBtn.BackgroundColor3 = C.accent
         pickMutBtn.BorderSizePixel = 0
         pickMutBtn.Font = Enum.Font.GothamBold
@@ -2570,7 +2730,7 @@ end)
 
         local selectedMutLbl = Instance.new("TextLabel")
         selectedMutLbl.Size = UDim2.new(1, -20, 0, 40)
-        selectedMutLbl.Position = UDim2.new(0, 10, 0, 212)
+        selectedMutLbl.Position = UDim2.new(0, 10, 0, 250)
         selectedMutLbl.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
         selectedMutLbl.BorderSizePixel = 0
         selectedMutLbl.Font = Enum.Font.Gotham
