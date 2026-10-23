@@ -2855,9 +2855,9 @@ forceHopBtn.TextSize = 9
 forceHopBtn.Parent = HopSection
 Instance.new("UICorner", forceHopBtn).CornerRadius = UDim.new(0, 4)
 
--- ==================================================================
+-- ==============================================================
 -- AUTO HOP HELPER
--- ==================================================================
+-- ==============================================================
 local TeleportService = game:GetService("TeleportService")
 
 local function countActiveBooths()
@@ -2871,26 +2871,30 @@ local function countActiveBooths()
 end
 
 local function hopServer()
-    if not config.autoHopEnabled then return end
+    if not config.autoHopEnabled then return false end
+    
+    hopStatusLbl.Text = "Status: Mencari server ramai..."
+    print("[AutoHop] Mencari server baru...")
     
     local ok, serverList = pcall(function()
         return game:GetService("HttpService"):JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
     end)
     
-    if not ok or not serverList or not serverList.data then return end
+    if not ok or not serverList or not serverList.data then 
+        hopStatusLbl.Text = "Status: Gagal mengambil data server."
+        return false
+    end
     
     local currentJobId = game.JobId
     local candidateServers = {}
+    local minPlayers = config.autoHopMinBooths or 7
     
-    -- ⭐ FILTER: Cari server yang ramai
     for _, server in ipairs(serverList.data) do
-        -- Minimal 12 pemain (bisa kamu ubah angkanya)
-        if server.playing >= 12 and server.playing < server.maxPlayers and server.id ~= currentJobId then
+        if server.playing >= minPlayers and server.playing < server.maxPlayers and server.id ~= currentJobId then
             table.insert(candidateServers, server)
         end
     end
     
-    -- Jika tidak ada server ramai, gunakan server apa saja asal belum penuh
     if #candidateServers == 0 then
         for _, server in ipairs(serverList.data) do
             if server.playing < server.maxPlayers and server.id ~= currentJobId then
@@ -2899,33 +2903,65 @@ local function hopServer()
         end
     end
 
-    -- Pilih secara acak dari daftar kandidat agar tidak selalu masuk ke server yang sama
     if #candidateServers > 0 then
-        local randomIndex = math.random(1, #candidateServers)
-        local targetServer = candidateServers[randomIndex]
+        table.sort(candidateServers, function(a, b)
+            return a.playing > b.playing
+        end)
+
+        local topServers = {}
+        for i = 1, math.min(15, #candidateServers) do
+            table.insert(topServers, candidateServers[i])
+        end
+
+        local randomIndex = math.random(1, #topServers)
+        local targetServer = topServers[randomIndex]
         
-        print(string.format("[AutoHop] 🚀 Teleport ke server ramai (Pemain: %d/%d)", targetServer.playing, targetServer.maxPlayers))
+        hopStatusLbl.Text = string.format("Status: Hop ke server (%d/%d)...", targetServer.playing, targetServer.maxPlayers)
+        print(string.format("[AutoHop] Teleport ke server ramai (%d/%d)", targetServer.playing, targetServer.maxPlayers))
         
-        pcall(function()
+        local teleportSuccess, teleportErr = pcall(function()
             TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServer.id, player)
         end)
+        
+        if teleportSuccess then
+            return true
+        else
+            print("[AutoHop] ❌ Gagal hop (Server penuh/Error):", teleportErr)
+            hopStatusLbl.Text = "Status: Gagal hop, mencoba lagi..."
+            return false
+        end
     else
-        print("[AutoHop] ❌ Tidak ada server lain yang tersedia.")
+        hopStatusLbl.Text = "Status: Tidak ada server tersedia."
+        return false
     end
 end
-    
-forceHopBtn.MouseButton1Click:Connect(function()
-    hopStatusLbl.Text = "Status: Mencari server baru..."
-    hopServer()
-end)
 
 -- ==============================================================
--- LOGIKA LOOP AUTO HOP
+-- LOGIKA LOOP AUTO HOP (Revisi Total)
 -- ==============================================================
 local lastSellTime = tick()
 local checkHopThread = task.spawn(function()
+    -- ⭐ TAHAP 1: Cek awal 10 detik setelah masuk server
+    task.wait(10)
+    
+    if config.autoHopEnabled and isInTradeWorld() then
+        local activeBooths = countActiveBooths()
+        hopStatusLbl.Text = string.format("Status: Cek awal (%d booth)", activeBooths)
+        
+        if activeBooths < config.autoHopMinBooths then
+            -- Booth kurang, langsung hop!
+            hopServer()
+            return -- Hentikan loop karena akan teleport
+        else
+            -- Booth cukup, lanjut ke tahap 2
+            lastSellTime = tick() -- Mulai timer
+            hopStatusLbl.Text = "Status: Server ramai, timer berjalan..."
+        end
+    end
+
+    -- ⭐ TAHAP 2: Timer berjalan
     while screenGui.Parent do
-        task.wait(10) -- Cek tiap 10 detik
+        task.wait(5) -- Cek tiap 5 detik
         
         if config.autoHopEnabled and isInTradeWorld() then
             local currentTime = tick()
@@ -2933,20 +2969,21 @@ local checkHopThread = task.spawn(function()
             
             -- Update label status
             if hopStatusLbl and hopStatusLbl.Parent then
-                hopStatusLbl.Text = string.format("Status: %d menit tanpa penjualan", math.floor(minutesSinceLastSell))
+                hopStatusLbl.Text = string.format("Status: %d/%d menit tanpa penjualan", math.floor(minutesSinceLastSell), config.autoHopTime)
             end
 
             -- Cek apakah sudah melewati batas waktu
             if minutesSinceLastSell >= config.autoHopTime then
-                local activeBooths = countActiveBooths()
-                
-                if activeBooths < config.autoHopMinBooths then
-                    hopStatusLbl.Text = "Status: Server sepi ("..activeBooths.." booth). Hop..."
-                    hopServer()
-                    task.wait(5) -- Jeda sebelum teleport
+                hopStatusLbl.Text = "Status: Waktu habis! Hop..."
+                local success = hopServer()
+    
+                if success then
+                    task.wait(5) 
+                    break -- Keluar loop karena akan teleport
                 else
-                    -- Server cukup ramai, reset timer
-                    lastSellTime = currentTime
+                    -- Jika gagal, reset timer 1 menit agar tidak spam request API
+                    lastSellTime = tick() - (config.autoHopTime * 60) + 60 
+                    task.wait(10) -- Tunggu 10 detik sebelum mencoba lagi
                 end
             end
         end
@@ -2954,9 +2991,11 @@ local checkHopThread = task.spawn(function()
 end)
 
 -- Fungsi untuk mereset timer saat ada pet terjual
--- Panggil fungsi ini di dalam Event Listener AutoListing jika ada slot kosong
 _G.SniperHub.ResetHopTimer = function()
     lastSellTime = tick()
+    if hopStatusLbl and hopStatusLbl.Parent then
+        hopStatusLbl.Text = "Status: Timer di-reset (ada pembeli!)"
+    end
 end
     
     -- ==============================================================
