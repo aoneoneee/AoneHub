@@ -1,5 +1,5 @@
 -- ==================================================================
--- AONEHUB UNIVERSAL LOADER
+-- AONEHUB UNIVERSAL LOADER (FIXED REGISTER LIMIT)
 -- ==================================================================
 
 local Players = game:GetService("Players")
@@ -27,16 +27,10 @@ end
 _G.AoneHub_IsAlive = true
 
 -- ==================================================================
--- LOADER BERDASARKAN WORLD
+-- FUNGSI UNTUK MEMBUNGKUS SCRIPT (ANTI LOCAL REGISTER LIMIT)
 -- ==================================================================
-
-if isInTradeWorld then
-    -- ==============================================================
-    -- TRADE WORLD: Jalankan AoneHubTrade (Sniper Hub)
-    -- ==============================================================
-    warn("[AoneHub] 🌍 Terdeteksi Trade World. Menjalankan AoneHubTrade...")
+local function loadAoneHubTrade()
     
-    do
 -- ==================================================================
 -- SNIPER HUB — FULL v15 (Euclidean Distance Math)
 -- ==================================================================
@@ -3501,16 +3495,10 @@ end)
 task.delay(2, function()
     _G.SniperHub.SendWebhook("TradeActive", {})
 end)        
-        print("✅ AoneHubTrade loaded!")
-    end
+end
 
-else
-    -- ==============================================================
-    -- MAIN WORLD: Jalankan AoneHub (Script Utama)
-    -- ==============================================================
-    warn("[AoneHub] 🌍 Terdeteksi Main World. Menjalankan AoneHub...")
+local function loadAoneHubMain()
     
-    do
 -- ==================================================================
 -- SERVICES & REQUIREMENTS
 -- ==================================================================
@@ -15108,6 +15096,16 @@ task.spawn(function()
     end
 end)
 end
-print("✅ AoneHub loaded!")
-    end
+end
+
+-- ==================================================================
+-- LOADER BERDASARKAN WORLD
+-- ==================================================================
+
+if isInTradeWorld then
+    warn("[AoneHub] 🌍 Terdeteksi Trade World. Menjalankan AoneHubTrade...")
+    loadAoneHubTrade()
+else
+    warn("[AoneHub] 🌍 Terdeteksi Main World. Menjalankan AoneHub...")
+    loadAoneHubMain()
 end
