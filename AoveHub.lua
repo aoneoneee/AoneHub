@@ -178,29 +178,27 @@ local function sendDiscordWebhook(webhookType, data)
             data.petName, data.age or 1, data.weight or 0, tostring(data.price), data.mutation,
             buyerName, sellerName
         )
-    end
-
     elseif webhookType == "TradeActive" then
-    title = "🟢 Trade Aktif"
-    color = 5763719 -- Hijau
-    description = string.format(
-        "**Sesi Dimulai**\n" ..
-        "> Status : **Script Berjalan**\n" ..
-        "> Player : ||%s||\n" ..
-        "> Waktu : %s",
-        buyerName, os.date("%H:%M:%S")
-    )
-elseif webhookType == "TradeInactive" then
-    title = "🔴 Trade Nonaktif"
-    color = 16711680 -- Merah
-    description = string.format(
-        "**Sesi Berakhir**\n" ..
-        "> Status : **%s**\n" ..
-        "> Player : ||%s||\n" ..
-        "> Waktu : %s",
-        data.reason or "Script Dihentikan", buyerName, os.date("%H:%M:%S")
-    )
-end
+        title = "🟢 Trade Aktif"
+        color = 5763719 -- Hijau
+        description = string.format(
+            "**Sesi Dimulai**\n" ..
+            "> Status : **Script Berjalan**\n" ..
+            "> Player : ||%s||\n" ..
+            "> Waktu : %s",
+            buyerName, os.date("%H:%M:%S")
+        )
+    elseif webhookType == "TradeInactive" then
+        title = "🔴 Trade Nonaktif"
+        color = 16711680 -- Merah
+        description = string.format(
+            "**Sesi Berakhir**\n" ..
+            "> Status : **%s**\n" ..
+            "> Player : ||%s||\n" ..
+            "> Waktu : %s",
+            data.reason or "Script Dihentikan", buyerName, os.date("%H:%M:%S")
+        )
+    end
     
     local payload = {
         username = "AoneHub",
