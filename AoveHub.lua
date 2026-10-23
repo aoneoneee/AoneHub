@@ -17,8 +17,8 @@ local playerGui = player:WaitForChild("PlayerGui")
 -- ==================================================================
 -- KONSTANTA
 -- ==================================================================
-local SAVE_DIR  = "SniperHub"
-local SAVE_FILE = SAVE_DIR .. "/SniperHub_Config.json"
+local SAVE_DIR  = "AoneHubTrade"
+local SAVE_FILE = SAVE_DIR .. "/AoneHubTrade.json"
 
 local TradeWorldData = require(ReplicatedStorage.Data.TradeWorldData)
 local TRADE_WORLD_PLACE_ID = TradeWorldData.PlaceId
@@ -180,6 +180,28 @@ local function sendDiscordWebhook(webhookType, data)
         )
     end
 
+    elseif webhookType == "TradeActive" then
+    title = "🟢 Trade Aktif"
+    color = 5763719 -- Hijau
+    description = string.format(
+        "**Sesi Dimulai**\n" ..
+        "> Status : **Script Berjalan**\n" ..
+        "> Player : ||%s||\n" ..
+        "> Waktu : %s",
+        buyerName, os.date("%H:%M:%S")
+    )
+elseif webhookType == "TradeInactive" then
+    title = "🔴 Trade Nonaktif"
+    color = 16711680 -- Merah
+    description = string.format(
+        "**Sesi Berakhir**\n" ..
+        "> Status : **%s**\n" ..
+        "> Player : ||%s||\n" ..
+        "> Waktu : %s",
+        data.reason or "Script Dihentikan", buyerName, os.date("%H:%M:%S")
+    )
+end
+    
     local payload = {
         username = "AoneHub",
         embeds = {{
@@ -305,7 +327,7 @@ local function teleportToBooth(boothInstance)
     if not hrp then return end
 
     -- 1. Posisi tujuan
-    local offset = CFrame.new(0, -1, 6) 
+    local offset = CFrame.new(0, -1, 7) 
     local targetPos = (boothInstance:GetPivot() * offset).Position
     
     -- 2. Titik pusat booth (untuk arah pandang)
@@ -481,7 +503,7 @@ local oldGui = playerGui:FindFirstChild("SniperHub")
 if oldGui then oldGui:Destroy() end
 
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "SniperHub"
+screenGui.Name = "AoneHub"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
@@ -956,12 +978,23 @@ do
     mainLayout.Parent = mainScroll
 
     -- SECTION 1: STATUS
-    local StatusSection = createSection(mainScroll, "📊 Status", "mainStatus", 120)
+    local StatusSection = createSection(mainScroll, "⚙️ Konfigurasi Booth", "mainStatus", 275)
     StatusSection.LayoutOrder = 1
 
+    local StatusLbl = Instance.new("TextLabel")
+    StatusLbl.Size = UDim2.new(1, -20, 0, 16)
+    StatusLbl.Position = UDim2.new(0, 10, 0, 33)
+    StatusLbl.BackgroundTransparency = 1
+    StatusLbl.Font = Enum.Font.Gotham
+    StatusLbl.TextSize = 11
+    StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+    StatusLbl.TextColor3 = C.text
+    StatusLbl.Text = "📊 Status"
+    StatusLbl.Parent = StatusSection
+    
     local worldStatusLbl = Instance.new("TextLabel")
     worldStatusLbl.Size = UDim2.new(1, -20, 0, 16)
-    worldStatusLbl.Position = UDim2.new(0, 10, 0, 32)
+    worldStatusLbl.Position = UDim2.new(0, 10, 0, 54)
     worldStatusLbl.BackgroundTransparency = 1
     worldStatusLbl.Font = Enum.Font.Gotham
     worldStatusLbl.TextSize = 9
@@ -971,7 +1004,7 @@ do
 
     local ownedBoothLbl = Instance.new("TextLabel")
     ownedBoothLbl.Size = UDim2.new(1, -20, 0, 16)
-    ownedBoothLbl.Position = UDim2.new(0, 10, 0, 50)
+    ownedBoothLbl.Position = UDim2.new(0, 10, 0, 75)
     ownedBoothLbl.BackgroundTransparency = 1
     ownedBoothLbl.Font = Enum.Font.Gotham
     ownedBoothLbl.TextSize = 9
@@ -981,7 +1014,7 @@ do
 
     local mainStatusLbl = Instance.new("TextLabel")
     mainStatusLbl.Size = UDim2.new(1, -20, 0, 16)
-    mainStatusLbl.Position = UDim2.new(0, 10, 0, 68)
+    mainStatusLbl.Position = UDim2.new(0, 10, 0, 96)
     mainStatusLbl.BackgroundTransparency = 1
     mainStatusLbl.Font = Enum.Font.GothamBold
     mainStatusLbl.TextSize = 9
@@ -990,18 +1023,55 @@ do
     mainStatusLbl.Text = "Status: Idle"
     mainStatusLbl.Parent = StatusSection
 
-    local refreshStatusBtn = Instance.new("TextButton")
-    refreshStatusBtn.Size = UDim2.new(1, -20, 0, 22)
-    refreshStatusBtn.Position = UDim2.new(0, 10, 0, 90)
-    refreshStatusBtn.BackgroundColor3 = C.accent
-    refreshStatusBtn.BorderSizePixel = 0
-    refreshStatusBtn.Font = Enum.Font.GothamBold
-    refreshStatusBtn.Text = "🔄 Refresh Status"
-    refreshStatusBtn.TextColor3 = C.text
-    refreshStatusBtn.TextSize = 9
-    refreshStatusBtn.Parent = StatusSection
-    Instance.new("UICorner", refreshStatusBtn).CornerRadius = UDim.new(0, 4)
+    local startClaimBtn = Instance.new("TextButton")
+    startClaimBtn.Size = UDim2.new(1, -20, 0, 34)
+    startClaimBtn.Position = UDim2.new(0, 10, 0, 117)
+    startClaimBtn.BackgroundColor3 = C.success
+    startClaimBtn.BorderSizePixel = 0
+    startClaimBtn.Font = Enum.Font.GothamBold
+    startClaimBtn.Text = "▶️ MULAI CLAIM BOOTH"
+    startClaimBtn.TextColor3 = C.text
+    startClaimBtn.TextSize = 11
+    startClaimBtn.Parent = StatusSection
+    Instance.new("UICorner", startClaimBtn).CornerRadius = UDim.new(0, 5)
 
+    local priorityLbl = Instance.new("TextLabel")
+    priorityLbl.Size = UDim2.new(1, -20, 0, 14)
+    priorityLbl.Position = UDim2.new(0, 10, 0, 156)
+    priorityLbl.BackgroundTransparency = 1
+    priorityLbl.Font = Enum.Font.Gotham
+    priorityLbl.Text = "📍 Prioritas Posisi Booth:"
+    priorityLbl.TextColor3 = C.textDim
+    priorityLbl.TextSize = 8
+    priorityLbl.TextXAlignment = Enum.TextXAlignment.Left
+    priorityLbl.Parent = StatusSection
+
+    local PRIORITY_OPTIONS = {
+        {label = "⬆️ Paling Depan (Tengah Map)", value = "front"},
+        {label = "⬇️ Paling Belakang (Ujung Map)", value = "back"},
+        {label = "🎲 Random", value = "random"},
+    }
+    local priorityLabels = {
+        front  = "⬆️ Paling Depan",
+        back   = "⬇️ Paling Belakang",
+        random = "🎲 Random",
+    }
+
+    local priorityDropdown = createDropdown(
+        ConfigSection,
+        UDim2.new(0, 10, 0, 175),
+        priorityLabels[config.claimPriority] or "📍 Pilih Prioritas",
+        function(v) config.claimPriority = v; saveConfig() end,
+        PRIORITY_OPTIONS
+    )
+    priorityDropdown.HeaderButton.Text = priorityLabels[config.claimPriority] or "📍 Pilih Prioritas"
+
+    makeToggle(
+        StatusSection, 239,
+        "Apply Booth Skin", "claimSkinEnabled",
+        "🎨 Apply Skin: ON", "🎨 Apply Skin: OFF"
+    )
+    
     -- Ekspos callback update status ke global _G agar bisa dipanggil loop di atas
     _G.SniperHub.UpdateStatus = function(text, color)
         if mainStatusLbl and mainStatusLbl.Parent then
@@ -1041,71 +1111,6 @@ do
         end
     end)
 
-    -- SECTION 2: KONFIGURASI CLAIM
-    local ConfigSection = createSection(mainScroll, "⚙️ Konfigurasi Claim Booth", "mainConfig", 240)
-    ConfigSection.LayoutOrder = 2
-
-    local startClaimBtn = Instance.new("TextButton")
-    startClaimBtn.Size = UDim2.new(1, -20, 0, 34)
-    startClaimBtn.Position = UDim2.new(0, 10, 0, 32)
-    startClaimBtn.BackgroundColor3 = C.success
-    startClaimBtn.BorderSizePixel = 0
-    startClaimBtn.Font = Enum.Font.GothamBold
-    startClaimBtn.Text = "▶️ MULAI CLAIM BOOTH"
-    startClaimBtn.TextColor3 = C.text
-    startClaimBtn.TextSize = 11
-    startClaimBtn.Parent = ConfigSection
-    Instance.new("UICorner", startClaimBtn).CornerRadius = UDim.new(0, 5)
-
-    local priorityLbl = Instance.new("TextLabel")
-    priorityLbl.Size = UDim2.new(1, -20, 0, 14)
-    priorityLbl.Position = UDim2.new(0, 10, 0, 82)
-    priorityLbl.BackgroundTransparency = 1
-    priorityLbl.Font = Enum.Font.Gotham
-    priorityLbl.Text = "📍 Prioritas Posisi Booth:"
-    priorityLbl.TextColor3 = C.textDim
-    priorityLbl.TextSize = 8
-    priorityLbl.TextXAlignment = Enum.TextXAlignment.Left
-    priorityLbl.Parent = ConfigSection
-
-    local PRIORITY_OPTIONS = {
-        {label = "⬆️ Paling Depan (Tengah Map)", value = "front"},
-        {label = "⬇️ Paling Belakang (Ujung Map)", value = "back"},
-        {label = "🎲 Random", value = "random"},
-    }
-    local priorityLabels = {
-        front  = "⬆️ Paling Depan",
-        back   = "⬇️ Paling Belakang",
-        random = "🎲 Random",
-    }
-
-    local priorityDropdown = createDropdown(
-        ConfigSection,
-        UDim2.new(0, 10, 0, 98),
-        priorityLabels[config.claimPriority] or "📍 Pilih Prioritas",
-        function(v) config.claimPriority = v; saveConfig() end,
-        PRIORITY_OPTIONS
-    )
-    priorityDropdown.HeaderButton.Text = priorityLabels[config.claimPriority] or "📍 Pilih Prioritas"
-
-    makeToggle(
-        ConfigSection, 162,
-        "Apply Booth Skin", "claimSkinEnabled",
-        "🎨 Apply Skin: ON", "🎨 Apply Skin: OFF"
-    )
-
-    local hintLbl = Instance.new("TextLabel")
-    hintLbl.Size = UDim2.new(1, -20, 0, 24)
-    hintLbl.Position = UDim2.new(0, 10, 0, 200)
-    hintLbl.BackgroundTransparency = 1
-    hintLbl.Font = Enum.Font.Gotham
-    hintLbl.TextSize = 8
-    hintLbl.TextColor3 = C.textDim
-    hintLbl.TextWrapped = true
-    hintLbl.TextXAlignment = Enum.TextXAlignment.Left
-    hintLbl.Text = "ℹ️ Cek tiap 30 detik. Auto Re-Claim jika ada booth prioritas lebih baik. Auto teleport setelah claim."
-    hintLbl.Parent = ConfigSection
-
     local function syncClaimUI()
         local running = MainState.isClaimRunning
         startClaimBtn.Text = running and "⏹️ STOP CLAIM" or "▶️ MULAI CLAIM BOOTH"
@@ -1132,9 +1137,9 @@ do
         end
     end)
 
-    -- SECTION 3: DAFTAR SKIN
+    -- SECTION 2: DAFTAR SKIN
     local SkinSection = createSection(mainScroll, "🎨 Pilih Booth Skin", "mainSkin", 290)
-    SkinSection.LayoutOrder = 3
+    SkinSection.LayoutOrder = 2
 
     local skinSearch = Instance.new("TextBox")
     skinSearch.Size = UDim2.new(1, -20, 0, 22)
@@ -1545,7 +1550,7 @@ end
     -- ==============================================================
     -- SECTION 1: KONTROL UTAMA
     -- ==============================================================
-    local ControlSection = createSection(buyScroll, "⚙️ Kontrol Sniper", "buyControl", 110)
+    local ControlSection = createSection(buyScroll, "⚙️ Kontrol Sniper", "buyControl", 91)
     ControlSection.LayoutOrder = 1
 
     local startBuyBtn = Instance.new("TextButton")
@@ -1562,7 +1567,7 @@ end
 
     local tokenStatusLbl = Instance.new("TextLabel")
     tokenStatusLbl.Size = UDim2.new(1, -20, 0, 14)
-    tokenStatusLbl.Position = UDim2.new(0, 10, 0, 70)
+    tokenStatusLbl.Position = UDim2.new(0, 10, 0, 67)
     tokenStatusLbl.BackgroundTransparency = 1
     tokenStatusLbl.Font = Enum.Font.Gotham
     tokenStatusLbl.Text = "💰 Tokens: Loading..."
@@ -2207,7 +2212,7 @@ if not buyConnection then
     -- ==============================================================
     -- SECTION 1: KONTROL UTAMA
     -- ==============================================================
-    local CtrlSection = createSection(listScroll, "⚙️ Kontrol Auto Listing", "listControl", 130)
+    local CtrlSection = createSection(listScroll, "⚙️ Kontrol Auto Listing", "listControl", 105)
     CtrlSection.LayoutOrder = 1
 
     local startListBtn = Instance.new("TextButton")
@@ -2260,7 +2265,7 @@ end)
     
     local unlistAllBtn = Instance.new("TextButton")
     unlistAllBtn.Size = UDim2.new(1, -20, 0, 28)
-    unlistAllBtn.Position = UDim2.new(0, 10, 0, 72)
+    unlistAllBtn.Position = UDim2.new(0, 10, 0, 67)
     unlistAllBtn.BackgroundColor3 = C.danger
     unlistAllBtn.BorderSizePixel = 0
     unlistAllBtn.Font = Enum.Font.GothamBold
@@ -3046,7 +3051,6 @@ reconnectHint.Parent = ReconnectSection
 -- ==============================================================
 -- LOGIKA AUTO RECONNECT (Best-effort untuk Delta)
 -- ==============================================================
-local TeleportService = game:GetService("TeleportService")
 local GuiService = game:GetService("GuiService")
 local reconnectBusy = false
 local lastReconnectAttempt = 0
@@ -3055,6 +3059,9 @@ local RECONNECT_COOLDOWN = 8
 local function tryReconnect(reason)
     if not config.autoReconnectEnabled or reconnectBusy then return end
     if os.clock() - lastReconnectAttempt < RECONNECT_COOLDOWN then return end
+
+    -- ⭐ KIRIM WEBHOOK DISCONNECT
+    _G.SniperHub.SendWebhook("TradeInactive", { reason = "Terputus: " .. tostring(reason) })
 
     reconnectBusy = true
     lastReconnectAttempt = os.clock()
@@ -3207,6 +3214,16 @@ end)
 
 screenGui.Destroying:Connect(function()
     stopClaimLoop()
+    
+    -- ⭐ KIRIM WEBHOOK SAAT SCRIPT DIHENTIKAN
+    if _G.SniperHub.SendWebhook then
+        _G.SniperHub.SendWebhook("TradeInactive", { reason = "Script Di-close / GUI Destroyed" })
+    end
+end)
+
+-- ⭐ KIRIM WEBHOOK SAAT SCRIPT BARU DIBUKA
+task.delay(2, function()
+    _G.SniperHub.SendWebhook("TradeActive", {})
 end)
 
 print("✅ Sniper Hub loaded — Tab Main terisolasi dengan baik (Euclidean Distance).")
