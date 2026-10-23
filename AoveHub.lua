@@ -132,12 +132,15 @@ local function sendDiscordWebhook(webhookType, data)
     if not config.discordWebhookEnabled then return end
     if not config.discordWebhookUrl or config.discordWebhookUrl == "" then return end
     
+    -- Pastikan 'data' adalah tabel (jika nil, jadikan tabel kosong)
+    data = data or {}
+    
     local title, color, description
     local currentTime = os.date("%d/%m/%y, %H.%M | %m/%d/%Y %I:%M %p")
     
     -- Sensor nama (S********3)
     local function censorName(name)
-        if not name or #name < 3 then return name end
+        if not name or #name < 3 then return name or "Unknown" end
         local first, last = name:sub(1,1), name:sub(-1)
         local mid = string.rep("*", #name - 2)
         return first .. mid .. last
@@ -145,6 +148,14 @@ local function sendDiscordWebhook(webhookType, data)
 
     local buyerName = censorName(player.Name)
     local sellerName = data.sellerName and censorName(data.sellerName) or "Unknown"
+
+    -- ⭐ Ambil nilai dengan pengaman fallback (jika nil, ganti dengan nilai default)
+    local petName = tostring(data.petName or "Unknown")
+    local age = tonumber(data.age) or 1
+    local weight = tonumber(data.weight) or 0
+    local price = tostring(data.price or "0")
+    local mutation = tostring(data.mutation or "Normal")
+    local reason = tostring(data.reason or "Script Dihentikan")
 
     if webhookType == "Snipe" then
         title = "Snipe Alert! (Pet)"
@@ -159,7 +170,7 @@ local function sendDiscordWebhook(webhookType, data)
             "**Trade Info**\n" ..
             "> Buyer : ||%s||\n" ..
             "> Seller : ||%s||",
-            data.petName, data.age or 1, data.weight or 0, tostring(data.price), data.mutation,
+            petName, age, weight, price, mutation,
             buyerName, sellerName
         )
     elseif webhookType == "Sell" then
@@ -175,7 +186,7 @@ local function sendDiscordWebhook(webhookType, data)
             "**Trade Info**\n" ..
             "> Buyer : ||%s||\n" ..
             "> Seller : ||%s||",
-            data.petName, data.age or 1, data.weight or 0, tostring(data.price), data.mutation,
+            petName, age, weight, price, mutation,
             buyerName, sellerName
         )
     elseif webhookType == "TradeActive" then
@@ -196,9 +207,12 @@ local function sendDiscordWebhook(webhookType, data)
             "> Status : **%s**\n" ..
             "> Player : ||%s||\n" ..
             "> Waktu : %s",
-            data.reason or "Script Dihentikan", buyerName, os.date("%H:%M:%S")
+            reason, buyerName, os.date("%H:%M:%S")
         )
     end
+    
+    -- Jika tidak ada tipe yang cocok, hentikan eksekusi
+    if not title then return end
     
     local payload = {
         username = "AoneHub",
