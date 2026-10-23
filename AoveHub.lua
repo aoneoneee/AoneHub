@@ -14,6 +14,16 @@ local BuyListingRF = ReplicatedStorage.GameEvents.TradeEvents.Booths.BuyListing
 local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+-- ⭐ KILL SWITCH: Matikan script lama jika ada
+if _G.AoneHub_Active then
+    pcall(function()
+        _G.AoneHub_Active:Destroy() -- Jika script lama punya fungsi cleanup
+    end)
+    -- Paksa matikan variabel loop lama
+    _G.AoneHub_IsAlive = false 
+end
+_G.AoneHub_IsAlive = true
+
 -- ==================================================================
 -- KONSTANTA
 -- ==================================================================
@@ -389,6 +399,7 @@ local function startClaimLoop()
         task.wait(3)
 
         while MainState.isClaimRunning do
+            if not _G.AoneHub_IsAlive then return end
             local booths = getPhysicalBooths()
             if #booths == 0 then
                 if _G.SniperHub.UpdateStatus then
@@ -1702,6 +1713,12 @@ end
 local function startBuyLoop()
     if isBuying then return end
     isBuying = true
+        
+    if buyConnection then
+        buyConnection:Disconnect()
+        buyConnection = nil
+    end
+        
     table.clear(scannedListings) -- Reset data scan awal
     table.clear(recentlyFailed)
 
@@ -2333,6 +2350,11 @@ local function startBuyLoop()
     isListing = true
     table.clear(queue) -- Reset antrian setiap mulai baru
 
+    if buyConnection then
+        buyConnection:Disconnect()
+        buyConnection = nil
+    end
+        
     -- 1. SCAN AWAL: Kumpulkan pet yang lolos filter dan belum dilisting
     local pets = getMyInventoryPets()
     local listedUUIDs = getMyListedUUIDs()
@@ -3363,6 +3385,7 @@ local function StartAntiAFK()
             antiAFKActive = true
             
             while antiAFKActive and config.antiAfkEnabled and not isGuiDestroyed do
+                if not _G.AoneHub_IsAlive then return end
                 PerformAntiAFKAction()
                 local waitTime = 420 + math.random() * 180 -- 7 s/d 10 menit
                 local waited = 0
