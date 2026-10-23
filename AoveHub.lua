@@ -3148,20 +3148,31 @@ end
 -- ==============================================================
 -- LOGIKA AUTO RECONNECT (Checker)
 -- ==============================================================
+-- ⭐ TAMBAHKAN VARIABEL INI UNTUK DEBUG
+local simulatedDisconnect = false
+
 task.spawn(function()
     while screenGui.Parent do
         task.wait(5)
         if config.autoReconnectEnabled then
-            -- Cek apakah pemain terputus dari DataService (indikasi lag/desync)
-            local ok, data = pcall(function() return DataService:GetData() end)
+            local data = nil
+            local ok = false
             
-            -- Jika data tiba-tiba nil (padahal sebelumnya ada), kemungkinan besar koneksi terputus
+            -- ⭐ LOGIKA DEBUG: Jika simulasi menyala, paksa data menjadi nil
+            if simulatedDisconnect then
+                ok = false 
+                data = nil
+                print("[DEBUG] Simulasi koneksi terputus aktif!")
+            else
+                ok, data = pcall(function() return DataService:GetData() end)
+            end
+            
             if not ok or not data then
                 print("[AutoReconnect] ❌ Koneksi terputus terdeteksi, mencoba rejoin...")
                 pcall(function()
                     game:GetService("TeleportService"):Teleport(game.PlaceId, player)
                 end)
-                task.wait(10) -- Jeda sebelum cek lagi
+                task.wait(10)
             end
         end
     end
