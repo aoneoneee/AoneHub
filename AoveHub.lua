@@ -2873,17 +2873,44 @@ end
 local function hopServer()
     if not config.autoHopEnabled then return end
     
-    local serverList = game:GetService("HttpService"):JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
-    local currentJobId = game.JobId
+    local ok, serverList = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+    end)
     
+    if not ok or not serverList or not serverList.data then return end
+    
+    local currentJobId = game.JobId
+    local candidateServers = {}
+    
+    -- ⭐ FILTER: Cari server yang ramai
     for _, server in ipairs(serverList.data) do
-        if server.playing < server.maxPlayers and server.id ~= currentJobId then
-            -- Kirim teleport
-            pcall(function()
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, player)
-            end)
-            return
+        -- Minimal 12 pemain (bisa kamu ubah angkanya)
+        if server.playing >= 12 and server.playing < server.maxPlayers and server.id ~= currentJobId then
+            table.insert(candidateServers, server)
         end
+    end
+    
+    -- Jika tidak ada server ramai, gunakan server apa saja asal belum penuh
+    if #candidateServers == 0 then
+        for _, server in ipairs(serverList.data) do
+            if server.playing < server.maxPlayers and server.id ~= currentJobId then
+                table.insert(candidateServers, server)
+            end
+        end
+    end
+
+    -- Pilih secara acak dari daftar kandidat agar tidak selalu masuk ke server yang sama
+    if #candidateServers > 0 then
+        local randomIndex = math.random(1, #candidateServers)
+        local targetServer = candidateServers[randomIndex]
+        
+        print(string.format("[AutoHop] 🚀 Teleport ke server ramai (Pemain: %d/%d)", targetServer.playing, targetServer.maxPlayers))
+        
+        pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, targetServer.id, player)
+        end)
+    else
+        print("[AutoHop] ❌ Tidak ada server lain yang tersedia.")
     end
 end
     
