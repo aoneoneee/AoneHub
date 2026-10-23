@@ -1101,7 +1101,6 @@ do
         end
     end
 
-    refreshStatusBtn.MouseButton1Click:Connect(refreshOwnedBoothInfo)
     task.spawn(function()
         while screenGui.Parent do
             task.wait(2)
