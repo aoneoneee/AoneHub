@@ -3146,35 +3146,41 @@ if config.antiAfkEnabled then
 end
 
 -- ==============================================================
--- LOGIKA AUTO RECONNECT (Checker)
+-- LOGIKA AUTO RECONNECT (Network Checker)
 -- ==============================================================
--- ⭐ TAMBAHKAN VARIABEL INI UNTUK DEBUG
-local simulatedDisconnect = false
+local NetworkClient = game:GetService("NetworkClient")
 
 task.spawn(function()
     while screenGui.Parent do
-        task.wait(5)
+        task.wait(3)
+        
         if config.autoReconnectEnabled then
-            local data = nil
-            local ok = false
+            -- Cek apakah pemain terputus dari server
+            local isConnected = pcall(function()
+                -- Fungsi ini akan error jika koneksi benar-benar terputus
+                return game:GetService("ReplicatedStorage"):FindFirstChild("GameEvents") ~= nil
+            end)
             
-            -- ⭐ LOGIKA DEBUG: Jika simulasi menyala, paksa data menjadi nil
-            if simulatedDisconnect then
-                ok = false 
-                data = nil
-                print("[DEBUG] Simulasi koneksi terputus aktif!")
-            else
-                ok, data = pcall(function() return DataService:GetData() end)
-            end
-            
-            if not ok or not data then
-                print("[AutoReconnect] ❌ Koneksi terputus terdeteksi, mencoba rejoin...")
+            if not isConnected then
+                print("[AutoReconnect] ❌ Terputus dari server! Mencoba rejoin...")
+                -- Coba teleport kembali ke Place ID yang sama
                 pcall(function()
                     game:GetService("TeleportService"):Teleport(game.PlaceId, player)
                 end)
                 task.wait(10)
             end
         end
+    end
+end)
+
+-- ⭐ EVENT LISTENER: Jika Kick (Server menendang)
+game:GetService("Players").LocalPlayer.OnTeleport:Connect(function(teleportState)
+    if teleportState == Enum.TeleportState.Failed and config.autoReconnectEnabled then
+        print("[AutoReconnect] ⚠️ Teleport gagal! Mencoba rejoin...")
+        task.wait(5)
+        pcall(function()
+            game:GetService("TeleportService"):Teleport(game.PlaceId, player)
+        end)
     end
 end)
 end -- END OF TAB MISC BLOCK
