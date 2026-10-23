@@ -303,8 +303,19 @@ local function teleportToBooth(boothInstance)
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    local targetPos = (boothInstance:GetPivot() * CFrame.new(0, 5, 12)).Position
-    hrp.CFrame = CFrame.new(targetPos)
+    -- 1. Posisi tujuan
+    local offset = CFrame.new(0, -1, 5) 
+    local targetPos = (boothInstance:GetPivot() * offset).Position
+    
+    -- 2. Titik pusat booth (untuk arah pandang)
+    local centerPos = boothInstance:GetPivot().Position
+    
+    -- 3. Hitung arah pandang (dari posisi pemain ke tengah booth)
+    -- Vector3.new(0,1,0) adalah sumbu Up agar karakter tidak miring
+    local lookAtCFrame = CFrame.lookAt(targetPos, centerPos, Vector3.new(0, 1, 0))
+    
+    -- 4. Terapkan ke karakter
+    hrp.CFrame = lookAtCFrame
 end
 
 local function startClaimLoop()
@@ -390,6 +401,15 @@ local function startClaimLoop()
                         better = bestDist < myDist
                     elseif config.claimPriority == "back" then
                         better = bestDist > myDist
+                    end
+
+                    -- ⭐ TAMBAHKAN BATAS TOLERANSI DI SINI
+                    local THRESHOLD = 2 -- Jarak minimal (dalam stud) untuk memicu pindah
+
+                    if config.claimPriority == "front" then
+                        better = (myDist - bestDist) > THRESHOLD
+                    elseif config.claimPriority == "back" then
+                        better = (bestDist - myDist) > THRESHOLD
                     end
 
                     if better then
