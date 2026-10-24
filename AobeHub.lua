@@ -3550,32 +3550,6 @@ end)
 task.delay(2, function()
     _G.SniperHub.SendWebhook("TradeActive", {})
 end)
-
--- ⭐ KIRIM WEBHOOK & STOP LOOP SAAT CLIENT CLOSE (disconnect/kick/shutdown)
-game:BindToClose(function()
-    _G.AoneHub_IsAlive = false
-    isGuiDestroyed = true
-    isShuttingDown = true
-    
-    -- Stop semua loop
-    if stopBuyLoop then pcall(stopBuyLoop) end
-    if stopClaimLoop then pcall(stopClaimLoop) end
-    if cleanupReconnectListeners then pcall(cleanupReconnectListeners) end
-    
-    -- Kirim webhook dengan fork
-    if _G.SniperHub and _G.SniperHub.SendWebhook then
-        task.spawn(function()
-            pcall(function()
-                _G.SniperHub.SendWebhook("TradeInactive", { 
-                    reason = "Client close (disconnect/kick/shutdown)" 
-                })
-            end)
-        end)
-        
-        -- Beri waktu HTTP request selesai
-        task.wait(2)
-    end
-end)
     
 -- ⭐ KILL SWITCH UNTUK INSTANCE BERIKUTNYA
 _G.AoneHub_Cleanup = function()
