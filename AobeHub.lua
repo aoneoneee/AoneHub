@@ -49,6 +49,8 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 _G.AoneHub_IsAlive = true
 
+local cleanupReconnectListeners = nil
+    
 -- ==================================================================
 -- KONSTANTA
 -- ==================================================================
@@ -3412,12 +3414,12 @@ pcall(function()
 end)
 
 -- ⭐ Helper untuk disconnect semua
-local function cleanupReconnectListeners()
+cleanupReconnectListeners = function()
     if teleportFailedConn then pcall(function() teleportFailedConn:Disconnect() end) end
     if errorMsgConn then pcall(function() errorMsgConn:Disconnect() end) end
 end
-
-    -- ==============================================================
+        
+-- ==============================================================
 -- LOGIKA ANTI-AFK (AoneHub Style - Hotbar Safe)
 -- ==============================================================
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -3521,7 +3523,7 @@ closeBtn.MouseButton1Click:Connect(function()
     -- ⭐ Stop SEMUA loop dan listener
     if stopBuyLoop then pcall(stopBuyLoop) end
     if stopClaimLoop then pcall(stopClaimLoop) end
-    cleanupReconnectListeners()
+    if cleanupReconnectListeners then pcall(cleanupReconnectListeners) end
             
     _G.SniperHub.SendWebhook("TradeInactive", { reason = "Script Di-close (Tombol X)" })
     screenGui:Destroy()
@@ -3534,7 +3536,7 @@ screenGui.Destroying:Connect(function()
     -- ⭐ Stop SEMUA loop dan listener
     if stopBuyLoop then pcall(stopBuyLoop) end
     if stopClaimLoop then pcall(stopClaimLoop) end
-    cleanupReconnectListeners()
+    if cleanupReconnectListeners then pcall(cleanupReconnectListeners) end
     
     -- Hanya kirim jika belum dikirim oleh tombol X
     if not isShuttingDown then
@@ -3558,7 +3560,7 @@ game:BindToClose(function()
     -- Stop semua loop
     if stopBuyLoop then pcall(stopBuyLoop) end
     if stopClaimLoop then pcall(stopClaimLoop) end
-    cleanupReconnectListeners()
+    if cleanupReconnectListeners then pcall(cleanupReconnectListeners) end
     
     -- Kirim webhook dengan fork
     if _G.SniperHub and _G.SniperHub.SendWebhook then
@@ -3587,7 +3589,7 @@ _G.AoneHub_Cleanup = function()
     -- Stop AutoClaim
     if stopClaimLoop then pcall(stopClaimLoop) end
 
-    cleanupReconnectListeners()
+    if cleanupReconnectListeners then pcall(cleanupReconnectListeners) end
         
     -- Destroy GUI (akan trigger screenGui.Destroying → bersihkan sisanya)
     if screenGui then 
