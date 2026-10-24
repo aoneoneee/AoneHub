@@ -3391,16 +3391,15 @@ local function tryReconnect(reason)
 end
 
 -- Tangani kegagalan teleport dan coba lagi dengan jeda agar tidak spam.
-TeleportService.TeleportInitFailed:Connect(function(teleportPlayer, result, errorMessage, placeId)
+local teleportFailedConn = TeleportService.TeleportInitFailed:Connect(function(teleportPlayer, result, errorMessage, placeId)
     if teleportPlayer ~= player or not config.autoReconnectEnabled then return end
     warn("[AutoReconnect] Teleport gagal: " .. tostring(result) .. " | " .. tostring(errorMessage))
     tryReconnect("TeleportInitFailed")
 end)
 
--- Beberapa jenis error/disconnect dapat memunculkan pesan error Roblox.
--- Event ini tidak selalu tersedia/terpicu untuk semua disconnect atau kick.
+local errorMsgConn
 pcall(function()
-    GuiService.ErrorMessageChanged:Connect(function(message)
+    errorMsgConn = GuiService.ErrorMessageChanged:Connect(function(message)
         if type(message) ~= "string" or message == "" then return end
         local lowerMessage = message:lower()
         if lowerMessage:find("disconnect", 1, true)
@@ -3411,6 +3410,12 @@ pcall(function()
         end
     end)
 end)
+
+-- ⭐ Helper untuk disconnect semua
+local function cleanupReconnectListeners()
+    if teleportFailedConn then pcall(function() teleportFailedConn:Disconnect() end) end
+    if errorMsgConn then pcall(function() errorMsgConn:Disconnect() end) end
+end
 
     -- ==============================================================
 -- LOGIKA ANTI-AFK (AoneHub Style - Hotbar Safe)
@@ -3510,7 +3515,14 @@ end -- END OF TAB MISC BLOCK
 -- ==================================================================
 closeBtn.MouseButton1Click:Connect(function()
     isShuttingDown = true
-    stopClaimLoop()
+    isGuiDestroyed = true
+    _G.AoneHub_IsAlive = false
+    
+    -- ⭐ Stop SEMUA loop dan listener
+    if stopBuyLoop then pcall(stopBuyLoop) end
+    if stopClaimLoop then pcall(stopClaimLoop) end
+    cleanupReconnectListeners()
+            
     _G.SniperHub.SendWebhook("TradeInactive", { reason = "Script Di-close (Tombol X)" })
     screenGui:Destroy()
 end)
@@ -3518,7 +3530,11 @@ end)
 screenGui.Destroying:Connect(function()
     _G.AoneHub_IsAlive = false
     isGuiDestroyed = true
-    stopClaimLoop()
+    
+    -- ⭐ Stop SEMUA loop dan listener
+    if stopBuyLoop then pcall(stopBuyLoop) end
+    if stopClaimLoop then pcall(stopClaimLoop) end
+    cleanupReconnectListeners()
     
     -- Hanya kirim jika belum dikirim oleh tombol X
     if not isShuttingDown then
@@ -3533,6 +3549,32 @@ task.delay(2, function()
     _G.SniperHub.SendWebhook("TradeActive", {})
 end)
 
+-- ⭐ KIRIM WEBHOOK & STOP LOOP SAAT CLIENT CLOSE (disconnect/kick/shutdown)
+game:BindToClose(function()
+    _G.AoneHub_IsAlive = false
+    isGuiDestroyed = true
+    isShuttingDown = true
+    
+    -- Stop semua loop
+    if stopBuyLoop then pcall(stopBuyLoop) end
+    if stopClaimLoop then pcall(stopClaimLoop) end
+    cleanupReconnectListeners()
+    
+    -- Kirim webhook dengan fork
+    if _G.SniperHub and _G.SniperHub.SendWebhook then
+        task.spawn(function()
+            pcall(function()
+                _G.SniperHub.SendWebhook("TradeInactive", { 
+                    reason = "Client close (disconnect/kick/shutdown)" 
+                })
+            end)
+        end)
+        
+        -- Beri waktu HTTP request selesai
+        task.wait(2)
+    end
+end)
+    
 -- ⭐ KILL SWITCH UNTUK INSTANCE BERIKUTNYA
 _G.AoneHub_Cleanup = function()
     _G.AoneHub_IsAlive = false
@@ -3545,6 +3587,8 @@ _G.AoneHub_Cleanup = function()
     -- Stop AutoClaim
     if stopClaimLoop then pcall(stopClaimLoop) end
 
+    cleanupReconnectListeners()
+        
     -- Destroy GUI (akan trigger screenGui.Destroying → bersihkan sisanya)
     if screenGui then 
         pcall(function() screenGui:Destroy() end) 
