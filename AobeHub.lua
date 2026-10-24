@@ -2443,17 +2443,28 @@ if not buyConnection then
     local myId = "Player_" .. tostring(player.UserId)
 
     buyConnection = boothReceiver:GetPathSignal("Players/" .. myId .. "/Listings"):Connect(function()
+    print("[AutoListing DEBUG] 🔔 Listener triggered!")
     task.wait(2)
     
-    -- ⭐ SKIP kalau user sedang unlist
     if isUserUnlisting then
+        print("[AutoListing DEBUG] ⏭️ Skip: user unlisting")
         lastKnownListings = snapshotMyListings()
         return
     end
     
     local currentSnapshot = snapshotMyListings()
+    print("[AutoListing DEBUG] currentSnapshot size:", (function()
+        local c = 0
+        for _ in pairs(currentSnapshot) do c = c + 1 end
+        return c
+    end)())
+    print("[AutoListing DEBUG] lastKnownListings size:", (function()
+        local c = 0
+        for _ in pairs(lastKnownListings) do c = c + 1 end
+        return c
+    end)())
     
-    -- Cari UUID yang HILANG dari listing
+    -- Cari UUID yang HILANG
     local removedUUIDs = {}
     for listUUID, info in pairs(lastKnownListings) do
         if not currentSnapshot[listUUID] then
@@ -2461,14 +2472,16 @@ if not buyConnection then
         end
     end
     
-    -- ⭐ HANYA kirim webhook kalau ADA yang hilang DAN bukan user unlist
+    print("[AutoListing DEBUG] removedUUIDs:", #removedUUIDs)
+    
     if #removedUUIDs > 0 then
         if _G.SniperHub.ResetHopTimer then
             _G.SniperHub.ResetHopTimer()
         end
         
-        -- Ambil data dari snapshot yang hilang (info asli, bukan sampel dari queue)
         local sold = removedUUIDs[1]
+        print("[AutoListing DEBUG] Sending webhook for:", sold.petType, sold.price)
+        
         _G.SniperHub.SendWebhook("Sell", {
             petName = sold.petType or "Unknown",
             age = sold.age or 1,
