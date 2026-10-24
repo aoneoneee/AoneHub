@@ -2386,6 +2386,220 @@ local function snapshotMyListings()
     end
     return snapshot
 end
+
+-- ⭐ Snapshot: UUID yang sedang kamu list + UUID yang kamu miliki
+local function snapshotMyState()
+    local myState = {
+        listings = {},     -- [listUUID] = { itemId, petType, weight, ... }
+        ownedUUIDs = {},   -- [petUUID] = true (dari inventory + equipped)
+    }
+    
+    -- 1. Ambil listings kamu
+    local data = getBoothsData()
+    if data and data.Players then
+        local myId = "Player_" .. tostring(player.UserId)
+        local myData = data.Players[myId]
+        if myData and myData.Listings then
+            for listUUID, listing in pairs(myData.Listings) do
+                local petType, weight, level, mutation = "Unknown", 0, 1, "Normal"
+                local item = myData.Items and listing.ItemId and myData.Items[listing.ItemId]
+                if item then
+                    petType = item.PetType or (item.PetData and item.PetData.PetType) or "Unknown"
+                    weight = item.BaseWeight or (item.PetData and item.PetData.BaseWeight) or 0
+                    level = item.Level or (item.PetData and item.PetData.Level) or 1
+                    local rawMut = item.MutationType or (item.PetData and item.PetData.MutationType) or "m"
+                    if rawMut ~= "m" and rawMut ~= "Normal" then
+                        local mutReg = require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
+                        mutation = mutReg.EnumToPetMutation[rawMut] or rawMut
+                    end
+                end
+                myState.listings[listUUID] = {
+                    itemId = listing.ItemId,  -- ini UUID pet
+                    petType = petType,
+                    weight = weight,
+                    age = level,
+                    mutation = mutation,
+                    price = listing.Price,
+                }
+            end
+        end
+    end
+    
+    -- 2. Ambil UUID yang kamu miliki (inventory + equipped)
+    local petsData = DataService:GetData() and DataService:GetData().PetsData
+    if petsData then
+        -- Inventory
+        local inventory = petsData.PetInventory and petsData.PetInventory.Data
+        if inventory then
+            for uuid, _ in pairs(inventory) do
+                myState.ownedUUIDs[uuid] = true
+            end
+        end
+        -- Equipped
+        local equipped = petsData.EquippedPets
+        if equipped then
+            for _, uuid in ipairs(equipped) do
+                myState.ownedUUIDs[uuid] = true
+            end
+        end
+    end
+    
+    return myState
+end
+
+-- ⭐ Snapshot state lengkap: listings kamu + UUID yang kamu miliki
+local function snapshotSellState()
+    local state = {
+        listings = {},     -- [listUUID] = { itemId, petType, weight, age, mutation, price }
+        ownedUUIDs = {},   -- [petUUID] = true
+    }
+    
+    -- Listings kamu
+    local data = getBoothsData()
+    if data and data.Players then
+        local myId = "Player_" .. tostring(player.UserId)
+        local myData = data.Players[myId]
+        if myData and myData.Listings then
+            for listUUID, listing in pairs(myData.Listings) do
+                local petType, weight, age, mutation = "Unknown", 0, 1, "Normal"
+                local item = myData.Items and listing.ItemId and myData.Items[listing.ItemId]
+                if item then
+                    petType = item.PetType or (item.PetData and item.PetData.PetType) or "Unknown"
+                    weight = item.BaseWeight or (item.PetData and item.PetData.BaseWeight) or 0
+                    age = item.Level or (item.PetData and item.PetData.Level) or 1
+                    local rawMut = item.MutationType or (item.PetData and item.PetData.MutationType) or "m"
+                    if rawMut ~= "m" and rawMut ~= "Normal" then
+                        local mutReg = require(ReplicatedStorage.Data.PetRegistry.PetMutationRegistry)
+                        mutation = mutReg.EnumToPetMutation[rawMut] or rawMut
+                    end
+                end
+                state.listings[listUUID] = {
+                    itemId = listing.ItemId,
+                    petType = petType,
+                    weight = weight,
+                    age = age,
+                    mutation = mutation,
+                    price = listing.Price,
+                }
+            end
+        end
+    end
+    
+    -- Inventory + Equipped
+    local petsData = DataService:GetData() and DataService:GetData().PetsData
+    if petsData then
+        local inv = petsData.PetInventory and petsData.PetInventory.Data
+        if inv then
+            for uuid, _ in pairs(inv) do
+                state.ownedUUIDs[uuid] = true
+            end
+        end
+        if petsData.EquippedPets then
+            for _, uuid in ipairs(petsData.EquippedPets) do
+                state.ownedUUIDs[uuid] = true
+            end
+        end
+    end
+    
+    return state
+end
+        
+local sellMonitorConn = nil
+local lastSellState = nil
+
+local function startSellMonitor()
+    if sellMonitorConn then return end
+    
+    -- ⭐ Tunggu data booth sync dulu
+    task.wait(3)
+    
+    lastSellState = snapshotSellState()
+    
+    local myId = "Player_" .. tostring(player.UserId)
+    sellMonitorConn = boothReceiver:GetPathSignal("Players/" .. myId .. "/Listings"):Connect(function()
+        -- ⭐ Retry 5x @ 2 detik untuk tunggu inventory replication
+        local currentState = nil
+        local soldPets, unlistedPets = {}, {}
+        
+        for attempt = 1, 5 do
+            task.wait(2)
+            
+            currentState = snapshotSellState()
+            soldPets, unlistedPets = {}, {}
+            
+            -- Cari UUID yang hilang dari listings
+            for listUUID, info in pairs(lastSellState.listings) do
+                if not currentState.listings[listUUID] then
+                    local petUUID = info.itemId
+                    local stillOwned = petUUID and currentState.ownedUUIDs[petUUID] == true
+                    
+                    if stillOwned then
+                        table.insert(unlistedPets, { listUUID = listUUID, info = info })
+                    else
+                        table.insert(soldPets, { listUUID = listUUID, info = info })
+                    end
+                end
+            end
+            
+            -- Kalau semua sudah terklasifikasi (semua UUID hilang ketemu
+            -- status-nya: entah di inventory atau tidak), break retry
+            local totalRemoved = 0
+            for listUUID, _ in pairs(lastSellState.listings) do
+                if not currentState.listings[listUUID] then
+                    totalRemoved = totalRemoved + 1
+                end
+            end
+            if totalRemoved > 0 and #soldPets + #unlistedPets == totalRemoved then
+                break
+            end
+        end
+        
+        -- ⭐ KIRIM WEBHOOK hanya untuk yang BENAR-BENAR TERJUAL
+        if #soldPets > 0 then
+            for _, sold in ipairs(soldPets) do
+                _G.SniperHub.SendWebhook("Sell", {
+                    petName = sold.info.petType or "Unknown",
+                    age = sold.info.age or 1,
+                    weight = sold.info.weight or 0,
+                    price = sold.info.price or 0,
+                    mutation = sold.info.mutation or "Normal",
+                    sellerName = player.Name,
+                })
+            end
+            print(string.format("[Sell Monitor] 💰 %d pet TERJUAL", #soldPets))
+            
+            if _G.SniperHub.ResetHopTimer then
+                _G.SniperHub.ResetHopTimer()
+            end
+        end
+        
+        -- ⭐ Log unlist (tapi tidak kirim webhook)
+        if #unlistedPets > 0 then
+            print(string.format("[Sell Monitor] 🗑️ %d pet di-unlist (skip webhook)", #unlistedPets))
+        end
+        
+        lastSellState = currentState
+    end)
+    
+    print("[Sell Monitor] ✅ Aktif di background")
+end
+
+local function stopSellMonitor()
+    if sellMonitorConn then
+        sellMonitorConn:Disconnect()
+        sellMonitorConn = nil
+    end
+    lastSellState = nil
+    print("[Sell Monitor] ❌ Dimatikan")
+end
+
+-- ⭐ Auto-start sell monitor saat script load (kalau webhook enabled)
+if config.discordWebhookEnabled then
+    task.defer(function()
+        task.wait(3)  -- beri waktu script lain selesai load & booth data sync
+        startSellMonitor()
+    end)
+end
         
 local function startBuyLoop()
     if isListing then return end
@@ -2442,58 +2656,50 @@ local function startBuyLoop()
 if not buyConnection then
     local myId = "Player_" .. tostring(player.UserId)
 
-    buyConnection = boothReceiver:GetPathSignal("Players/" .. myId .. "/Listings"):Connect(function()
-    print("[AutoListing DEBUG] 🔔 Listener triggered!")
-    task.wait(2)
+    local lastMyState = snapshotMyState()
+
+buyConnection = boothReceiver:GetPathSignal("Players/" .. myId .. "/Listings"):Connect(function()
+    task.wait(3)  -- beri waktu replication
     
-    if isUserUnlisting then
-        print("[AutoListing DEBUG] ⏭️ Skip: user unlisting")
-        lastKnownListings = snapshotMyListings()
-        return
-    end
+    local currentMyState = snapshotMyState()
     
-    local currentSnapshot = snapshotMyListings()
-    print("[AutoListing DEBUG] currentSnapshot size:", (function()
-        local c = 0
-        for _ in pairs(currentSnapshot) do c = c + 1 end
-        return c
-    end)())
-    print("[AutoListing DEBUG] lastKnownListings size:", (function()
-        local c = 0
-        for _ in pairs(lastKnownListings) do c = c + 1 end
-        return c
-    end)())
-    
-    -- Cari UUID yang HILANG
+    -- ⭐ Cari UUID yang hilang dari listings
     local removedUUIDs = {}
-    for listUUID, info in pairs(lastKnownListings) do
-        if not currentSnapshot[listUUID] then
-            table.insert(removedUUIDs, info)
+    for listUUID, info in pairs(lastMyState.listings) do
+        if not currentMyState.listings[listUUID] then
+            table.insert(removedUUIDs, { listUUID = listUUID, info = info })
         end
     end
     
-    print("[AutoListing DEBUG] removedUUIDs:", #removedUUIDs)
+    -- ⭐ Untuk setiap UUID hilang, cek apakah masih kamu miliki
+    local soldPets = {}
+    local unlistedPets = {}
     
-    if #removedUUIDs > 0 then
+    for _, removed in ipairs(removedUUIDs) do
+        local petUUID = removed.info.itemId
+        local stillOwned = petUUID and currentMyState.ownedUUIDs[petUUID] == true
+        
+        if stillOwned then
+            -- Pet kembali ke inventory = UNLIST
+            table.insert(unlistedPets, removed)
+            print(string.format("[AutoListing] 🗑️ %s di-unlist (kembali ke inventory)", 
+                removed.info.petType or "?"))
+        else
+            -- Pet tidak di inventory, tidak di equipped = TERJUAL
+            table.insert(soldPets, removed)
+            print(string.format("[AutoListing] 💰 %s TERJUAL (hilang dari akun)", 
+                removed.info.petType or "?"))
+        end
+    end
+    
+    if #soldPets > 0 then
         if _G.SniperHub.ResetHopTimer then
             _G.SniperHub.ResetHopTimer()
         end
-        
-        local sold = removedUUIDs[1]
-        print("[AutoListing DEBUG] Sending webhook for:", sold.petType, sold.price)
-        
-        _G.SniperHub.SendWebhook("Sell", {
-            petName = sold.petType or "Unknown",
-            age = sold.age or 1,
-            weight = sold.weight or 0,
-            price = sold.price or 0,
-            mutation = sold.mutation or "Normal",
-            sellerName = player.Name
-        })
-        print("[AutoListing] 💰 " .. #removedUUIDs .. " Pet terjual!")
     end
     
-    lastKnownListings = currentSnapshot
+    -- Update baseline
+    lastMyState = currentMyState
     
     if isListing and #queue > 0 then
         processQueue()
@@ -3537,6 +3743,7 @@ closeBtn.MouseButton1Click:Connect(function()
     if stopBuyLoop then pcall(stopBuyLoop) end
     if stopClaimLoop then pcall(stopClaimLoop) end
     if cleanupReconnectListeners then pcall(cleanupReconnectListeners) end
+    if stopSellMonitor then pcall(stopSellMonitor) end
             
     _G.SniperHub.SendWebhook("TradeInactive", { reason = "Script Di-close (Tombol X)" })
     screenGui:Destroy()
@@ -3550,6 +3757,7 @@ screenGui.Destroying:Connect(function()
     if stopBuyLoop then pcall(stopBuyLoop) end
     if stopClaimLoop then pcall(stopClaimLoop) end
     if cleanupReconnectListeners then pcall(cleanupReconnectListeners) end
+    if stopSellMonitor then pcall(stopSellMonitor) end
     
     -- Hanya kirim jika belum dikirim oleh tombol X
     if not isShuttingDown then
@@ -3577,6 +3785,7 @@ _G.AoneHub_Cleanup = function()
     if stopClaimLoop then pcall(stopClaimLoop) end
 
     if cleanupReconnectListeners then pcall(cleanupReconnectListeners) end
+    if stopSellMonitor then pcall(stopSellMonitor) end
         
     -- Destroy GUI (akan trigger screenGui.Destroying → bersihkan sisanya)
     if screenGui then 
