@@ -13654,741 +13654,743 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
     end
     
     -- ══════════════════════════════════════════════════════════════
--- SECTION: FRUIT WEIGHT FARM
--- ══════════════════════════════════════════════════════════════
-do  -- SUB-BLOCK: FruitWeightFarm (isolated)
-    -- ============================================================
-    -- STATE ISOLATION (tidak bocor ke block lain)
-    -- ============================================================
-    local FWF_Config = {
-        maxWeight = 50,
-        shovelInterval = 0.5,
-        scanInterval = 10,
-        selectedFruits = {},
-    }
-    
-    local FWF_State = {
-        isRunning = false,
-        currentCycle = 0,
-        totalShoveled = 0,
-    }
-    
-    local FWF_UIRefs = {}
-    local RemoveItemRE = GameEvents:WaitForChild("Remove_Item")
-    local DeleteObjectRE = GameEvents:WaitForChild("DeleteObject")
-            
-    -- ⭐ LOAD dari AoneHub config
-if _G.AoneHub_Config then
-    if _G.AoneHub_Config.fwfMaxWeight then
-        FWF_Config.maxWeight = _G.AoneHub_Config.fwfMaxWeight
-    end
-    if _G.AoneHub_Config.fwfShovelInterval then
-        FWF_Config.shovelInterval = _G.AoneHub_Config.fwfShovelInterval
-    end
-    if _G.AoneHub_Config.fwfScanInterval then
-        FWF_Config.scanInterval = _G.AoneHub_Config.fwfScanInterval
-    end
-    if _G.AoneHub_Config.fwfSelectedFruits then
-        FWF_Config.selectedFruits = _G.AoneHub_Config.fwfSelectedFruits
-    end
-end
-
--- ⭐ SAVE ke AoneHub config setiap kali berubah
-local function FWF_SaveConfig()
-    if _G.AoneHub_Config and _G.AoneHub_SaveConfig then
-        _G.AoneHub_Config.fwfMaxWeight = FWF_Config.maxWeight
-        _G.AoneHub_Config.fwfShovelInterval = FWF_Config.shovelInterval
-        _G.AoneHub_Config.fwfScanInterval = FWF_Config.scanInterval
-        _G.AoneHub_Config.fwfSelectedFruits = FWF_Config.selectedFruits
-        _G.AoneHub_SaveConfig()
-    end
-end
-
-    -- ============================================================
-    -- HELPERS (self-contained, tidak butuh akses luar)
-    -- ============================================================
-    local FWF_ShovelToolName = "Shovel [Destroy Plants]"
-    
-    local function FWF_IsMyFruit(fruit)
-        local ancestor = fruit:FindFirstAncestor("Important")
-        if not ancestor then return false end
-        local data = ancestor:FindFirstChild("Data")
-        if not data then return false end
-        local owner = data:FindFirstChild("Owner")
-        if not owner or not owner.Value then return false end
-        return owner.Value == player.Name
-    end
-    
-    local function FWF_GetSeedValue(fruit)
-        local seedAttr = fruit:GetAttribute("Seed")
-        if seedAttr then return seedAttr end
-        local itemSeed = fruit:FindFirstChild("Item_Seed")
-        if itemSeed then return itemSeed.Value end
-        local plant = fruit:FindFirstAncestorWhichIsA("Model")
-        if plant then
-            local ps = plant:GetAttribute("Seed")
-            if ps then return ps end
-            local pis = plant:FindFirstChild("Item_Seed")
-            if pis then return pis.Value end
-        end
-        return nil
-    end
-    
-    local function FWF_PredictWeight(fruit)
-        local seedValue = FWF_GetSeedValue(fruit)
-        if not seedValue then return nil end
-        local plant = fruit:FindFirstAncestorWhichIsA("Model")
-        local plantName = plant and plant.Name or fruit.Name
+    -- SECTION: FRUIT WEIGHT FARM
+    -- ══════════════════════════════════════════════════════════════
+    do  -- SUB-BLOCK: FruitWeightFarm (isolated)
+        -- ============================================================
+        -- STATE ISOLATION (Tanpa 'local' agar tidak Out of Registers)
+        -- ============================================================
+        FWF_Config = {
+            maxWeight = 50,
+            shovelInterval = 0.5,
+            scanInterval = 10,
+            selectedFruits = {},
+        }
         
-        local baseWeight = nil
-        local CalculateWeightModule = nil
-        pcall(function()
-            CalculateWeightModule = require(ReplicatedStorage.Calculate_Weight)
-        end)
+        FWF_State = {
+            isRunning = false,
+            currentCycle = 0,
+            totalShoveled = 0,
+        }
         
-        if CalculateWeightModule and CalculateWeightModule.Calculate_Weight then
-            local ok, result = pcall(CalculateWeightModule.Calculate_Weight, seedValue, plantName)
-            if ok and result then baseWeight = result end
-        end
-        if not baseWeight then
-            local fw = fruit:FindFirstChild("Weight")
-            if fw and fw:IsA("NumberValue") then baseWeight = fw.Value end
-            if not baseWeight and plant then
-                local pw = plant:FindFirstChild("Weight")
-                if pw and pw:IsA("NumberValue") then baseWeight = pw.Value end
+        FWF_UIRefs = {}
+        
+        -- Ambil remote langsung (variable global)
+        RemoveItemRE = GameEvents:WaitForChild("Remove_Item")
+        DeleteObjectRE = GameEvents:WaitForChild("DeleteObject")
+                
+        -- ⭐ LOAD dari AoneHub config
+        if _G.AoneHub_Config then
+            if _G.AoneHub_Config.fwfMaxWeight then
+                FWF_Config.maxWeight = _G.AoneHub_Config.fwfMaxWeight
+            end
+            if _G.AoneHub_Config.fwfShovelInterval then
+                FWF_Config.shovelInterval = _G.AoneHub_Config.fwfShovelInterval
+            end
+            if _G.AoneHub_Config.fwfScanInterval then
+                FWF_Config.scanInterval = _G.AoneHub_Config.fwfScanInterval
+            end
+            if _G.AoneHub_Config.fwfSelectedFruits then
+                FWF_Config.selectedFruits = _G.AoneHub_Config.fwfSelectedFruits
             end
         end
-        if not baseWeight then baseWeight = fruit:GetAttribute("BaseWeight") end
-        if not baseWeight then return nil end
-        
-        local wm = fruit:GetAttribute("WeightMulti") or 1
-        if plant then wm = plant:GetAttribute("WeightMulti") or wm end
-        return baseWeight * wm
-    end
-    
-    local function FWF_FindShovelTool()
-        local bp = player:FindFirstChild("Backpack")
-        if bp then 
-            local t = bp:FindFirstChild(FWF_ShovelToolName)
-            if t then return t end 
+
+        -- ⭐ SAVE ke AoneHub config
+        function FWF_SaveConfig()
+            if _G.AoneHub_Config and _G.AoneHub_SaveConfig then
+                _G.AoneHub_Config.fwfMaxWeight = FWF_Config.maxWeight
+                _G.AoneHub_Config.fwfShovelInterval = FWF_Config.shovelInterval
+                _G.AoneHub_Config.fwfScanInterval = FWF_Config.scanInterval
+                _G.AoneHub_Config.fwfSelectedFruits = FWF_Config.selectedFruits
+                _G.AoneHub_SaveConfig()
+            end
         end
-        local char = player.Character
-        if char then 
-            local t = char:FindFirstChild(FWF_ShovelToolName)
-            if t then return t end 
-        end
-        return nil
-    end
-    
-    local function FWF_EquipShovel()
-        local char = player.Character
-        if char and char:FindFirstChild(FWF_ShovelToolName) then return true end
-        local shovel = FWF_FindShovelTool()
-        if not shovel then return false end
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not hum then return false end
-        pcall(function() hum:EquipTool(shovel) end)
-        task.wait(0.3)
-        return char:FindFirstChild(FWF_ShovelToolName) ~= nil
-    end
-    
-    local function FWF_ShovelFruit(fruit)
-        if not fruit or not fruit.Parent then return false end
-        if not FWF_IsMyFruit(fruit) then return false end
-        if not FWF_EquipShovel() then return false end
+
+        -- ============================================================
+        -- HELPERS
+        -- ============================================================
+        FWF_ShovelToolName = "Shovel [Destroy Plants]"
         
-        if fruit:FindFirstChild("Grow") then
-            local ok = pcall(function() RemoveItemRE:FireServer(fruit) end)
-            if ok then
+        function FWF_IsMyFruit(fruit)
+            local ancestor = fruit:FindFirstAncestor("Important")
+            if not ancestor then return false end
+            local data = ancestor:FindFirstChild("Data")
+            if not data then return false end
+            local owner = data:FindFirstChild("Owner")
+            if not owner or not owner.Value then return false end
+            return owner.Value == player.Name
+        end
+        
+        function FWF_GetSeedValue(fruit)
+            local seedAttr = fruit:GetAttribute("Seed")
+            if seedAttr then return seedAttr end
+            local itemSeed = fruit:FindFirstChild("Item_Seed")
+            if itemSeed then return itemSeed.Value end
+            local plant = fruit:FindFirstAncestorWhichIsA("Model")
+            if plant then
+                local ps = plant:GetAttribute("Seed")
+                if ps then return ps end
+                local pis = plant:FindFirstChild("Item_Seed")
+                if pis then return pis.Value end
+            end
+            return nil
+        end
+        
+        function FWF_PredictWeight(fruit)
+            local seedValue = FWF_GetSeedValue(fruit)
+            if not seedValue then return nil end
+            local plant = fruit:FindFirstAncestorWhichIsA("Model")
+            local plantName = plant and plant.Name or fruit.Name
+            
+            local baseWeight = nil
+            local CalculateWeightModule = nil
+            pcall(function()
+                CalculateWeightModule = require(ReplicatedStorage.Calculate_Weight)
+            end)
+            
+            if CalculateWeightModule and CalculateWeightModule.Calculate_Weight then
+                local ok, result = pcall(CalculateWeightModule.Calculate_Weight, seedValue, plantName)
+                if ok and result then baseWeight = result end
+            end
+            if not baseWeight then
+                local fw = fruit:FindFirstChild("Weight")
+                if fw and fw:IsA("NumberValue") then baseWeight = fw.Value end
+                if not baseWeight and plant then
+                    local pw = plant:FindFirstChild("Weight")
+                    if pw and pw:IsA("NumberValue") then baseWeight = pw.Value end
+                end
+            end
+            if not baseWeight then baseWeight = fruit:GetAttribute("BaseWeight") end
+            if not baseWeight then return nil end
+            
+            local wm = fruit:GetAttribute("WeightMulti") or 1
+            if plant then wm = plant:GetAttribute("WeightMulti") or wm end
+            return baseWeight * wm
+        end
+        
+        function FWF_FindShovelTool()
+            local bp = player:FindFirstChild("Backpack")
+            if bp then 
+                local t = bp:FindFirstChild(FWF_ShovelToolName)
+                if t then return t end 
+            end
+            local char = player.Character
+            if char then 
+                local t = char:FindFirstChild(FWF_ShovelToolName)
+                if t then return t end 
+            end
+            return nil
+        end
+        
+        function FWF_EquipShovel()
+            local char = player.Character
+            if char and char:FindFirstChild(FWF_ShovelToolName) then return true end
+            local shovel = FWF_FindShovelTool()
+            if not shovel then return false end
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if not hum then return false end
+            pcall(function() hum:EquipTool(shovel) end)
+            task.wait(0.3)
+            return char:FindFirstChild(FWF_ShovelToolName) ~= nil
+        end
+        
+        function FWF_ShovelFruit(fruit)
+            if not fruit or not fruit.Parent then return false end
+            if not FWF_IsMyFruit(fruit) then return false end
+            if not FWF_EquipShovel() then return false end
+            
+            if fruit:FindFirstChild("Grow") then
+                local ok = pcall(function() RemoveItemRE:FireServer(fruit) end)
+                if ok then
+                    task.wait(0.15)
+                    if not fruit.Parent then return true end
+                end
+            end
+            local ok2 = pcall(function() DeleteObjectRE:FireServer(fruit) end)
+            if ok2 then
                 task.wait(0.15)
                 if not fruit.Parent then return true end
             end
-        end
-        local ok2 = pcall(function() DeleteObjectRE:FireServer(fruit) end)
-        if ok2 then
+            local ok3 = pcall(function() RemoveItemRE:FireServer(fruit) end)
             task.wait(0.15)
-            if not fruit.Parent then return true end
+            return fruit.Parent == nil
         end
-        local ok3 = pcall(function() RemoveItemRE:FireServer(fruit) end)
-        task.wait(0.15)
-        return fruit.Parent == nil
-    end
-    
-    local function FWF_ScanFruits()
-        local results = { passed = {}, failed = {} }
-        for _, fruit in ipairs(CollectionService:GetTagged("Harvestable")) do
-            if not (fruit:IsA("Model") and FWF_IsMyFruit(fruit) and fruit.Parent) then continue end
-            local name = fruit.Name
-            if next(FWF_Config.selectedFruits) ~= nil and not FWF_Config.selectedFruits[name] then
-                continue
-            end
-            local weight = FWF_PredictWeight(fruit)
-            if not weight then continue end
-            local entry = { fruit = fruit, name = name, weight = weight }
-            if weight <= FWF_Config.maxWeight then
-                table.insert(results.failed, entry)
-            else
-                table.insert(results.passed, entry)
-            end
-        end
-        table.sort(results.passed, function(a, b) return a.weight > b.weight end)
-        table.sort(results.failed, function(a, b) return a.weight > b.weight end)
-        return results
-    end
-    
-    -- ============================================================
-    -- GET FRUIT NAMES
-    -- ============================================================
-    local function FWF_GetAllFruitNames()
-        local names, seen = {}, {}
-        local SeedData_local = nil
-        pcall(function()
-            SeedData_local = require(ReplicatedStorage.Data.SeedData)
-        end)
-        if SeedData_local then
-            for name, _ in pairs(SeedData_local) do
-                if not seen[name] then
-                    seen[name] = true
-                    table.insert(names, name)
+        
+        function FWF_ScanFruits()
+            local results = { passed = {}, failed = {} }
+            for _, fruit in ipairs(CollectionService:GetTagged("Harvestable")) do
+                if not (fruit:IsA("Model") and FWF_IsMyFruit(fruit) and fruit.Parent) then continue end
+                local name = fruit.Name
+                if next(FWF_Config.selectedFruits) ~= nil and not FWF_Config.selectedFruits[name] then
+                    continue
+                end
+                local weight = FWF_PredictWeight(fruit)
+                if not weight then continue end
+                local entry = { fruit = fruit, name = name, weight = weight }
+                if weight <= FWF_Config.maxWeight then
+                    table.insert(results.failed, entry)
+                else
+                    table.insert(results.passed, entry)
                 end
             end
+            table.sort(results.passed, function(a, b) return a.weight > b.weight end)
+            table.sort(results.failed, function(a, b) return a.weight > b.weight end)
+            return results
         end
-        if #names == 0 then
-            for _, f in ipairs(CollectionService:GetTagged("Harvestable")) do
-                if f:IsA("Model") and not seen[f.Name] then
-                    seen[f.Name] = true
-                    table.insert(names, f.Name)
+        
+        -- ============================================================
+        -- GET FRUIT NAMES
+        -- ============================================================
+        function FWF_GetAllFruitNames()
+            local names, seen = {}, {}
+            local SeedData_local = nil
+            pcall(function()
+                SeedData_local = require(ReplicatedStorage.Data.SeedData)
+            end)
+            if SeedData_local then
+                for name, _ in pairs(SeedData_local) do
+                    if not seen[name] then
+                        seen[name] = true
+                        table.insert(names, name)
+                    end
                 end
             end
-        end
-        table.sort(names)
-        return names
-    end
-    
-    local FWF_ALL_FRUIT_NAMES = FWF_GetAllFruitNames()
-    
-    -- ============================================================
-    -- MONITOR PANEL HELPERS
-    -- ============================================================
-    local function FWF_CreateMonitorPanel(parent, xPos, title, color)
-        local panel = Instance.new("Frame")
-        panel.Size = UDim2.new(0.5, -5, 1, 0)
-        panel.Position = UDim2.new(xPos, 0, 0, 0)
-        panel.BackgroundColor3 = C.section
-        panel.BorderSizePixel = 0
-        panel.Parent = parent
-        Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 6)
-        
-        local titleFrame = Instance.new("Frame")
-        titleFrame.Size = UDim2.new(1, 0, 0, 22)
-        titleFrame.BackgroundColor3 = color
-        titleFrame.BackgroundTransparency = 0.4
-        titleFrame.BorderSizePixel = 0
-        titleFrame.Parent = panel
-        Instance.new("UICorner", titleFrame).CornerRadius = UDim.new(0, 6)
-        
-        local titleFill = Instance.new("Frame")
-        titleFill.Size = UDim2.new(1, 0, 0.5, 0)
-        titleFill.Position = UDim2.new(0, 0, 0.5, 0)
-        titleFill.BackgroundColor3 = color
-        titleFill.BackgroundTransparency = 0.4
-        titleFill.BorderSizePixel = 0
-        titleFill.Parent = titleFrame
-        
-        local titleLbl = Instance.new("TextLabel")
-        titleLbl.Size = UDim2.new(1, -45, 1, 0)
-        titleLbl.Position = UDim2.new(0, 6, 0, 0)
-        titleLbl.BackgroundTransparency = 1
-        titleLbl.Text = title
-        titleLbl.TextColor3 = C.text
-        titleLbl.Font = Enum.Font.GothamBold
-        titleLbl.TextSize = 8
-        titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-        titleLbl.Parent = titleFrame
-        
-        local countLbl = Instance.new("TextLabel")
-        countLbl.Size = UDim2.new(0, 35, 1, 0)
-        countLbl.Position = UDim2.new(1, -38, 0, 0)
-        countLbl.BackgroundTransparency = 1
-        countLbl.Text = "0"
-        countLbl.TextColor3 = C.text
-        countLbl.Font = Enum.Font.GothamBold
-        countLbl.TextSize = 9
-        countLbl.TextXAlignment = Enum.TextXAlignment.Right
-        countLbl.Parent = titleFrame
-        
-        local bodyScroll = Instance.new("ScrollingFrame")
-        bodyScroll.Size = UDim2.new(1, -8, 1, -28)
-        bodyScroll.Position = UDim2.new(0, 4, 0, 24)
-        bodyScroll.BackgroundTransparency = 1
-        bodyScroll.BorderSizePixel = 0
-        bodyScroll.ScrollBarThickness = 3
-        bodyScroll.ScrollBarImageColor3 = C.accent
-        bodyScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-        bodyScroll.ScrollingDirection = Enum.ScrollingDirection.Y
-        bodyScroll.Parent = panel
-        
-        local bodyLayout = Instance.new("UIListLayout")
-        bodyLayout.Padding = UDim.new(0, 2)
-        bodyLayout.SortOrder = Enum.SortOrder.LayoutOrder
-        bodyLayout.Parent = bodyScroll
-        
-        return {
-            panel = panel,
-            bodyScroll = bodyScroll,
-            bodyLayout = bodyLayout,
-            countLbl = countLbl,
-            titleLbl = titleLbl,
-        }
-    end
-    
-    local function FWF_ClearAndRender(panelRef, entries, isPassed, emptyText)
-        for _, child in ipairs(panelRef.bodyScroll:GetChildren()) do
-            if child:IsA("Frame") or child:IsA("TextLabel") then
-                child:Destroy()
+            if #names == 0 then
+                for _, f in ipairs(CollectionService:GetTagged("Harvestable")) do
+                    if f:IsA("Model") and not seen[f.Name] then
+                        seen[f.Name] = true
+                        table.insert(names, f.Name)
+                    end
+                end
             end
+            table.sort(names)
+            return names
         end
         
-        if #entries == 0 then
-            local empty = Instance.new("TextLabel")
-            empty.Size = UDim2.new(1, -8, 0, 22)
-            empty.BackgroundTransparency = 1
-            empty.Text = emptyText or "✓ Kosong"
-            empty.TextColor3 = C.textDim
-            empty.Font = Enum.Font.Gotham
-            empty.TextSize = 8
-            empty.LayoutOrder = 0
-            empty.Parent = panelRef.bodyScroll
+        FWF_ALL_FRUIT_NAMES = FWF_GetAllFruitNames()
+        
+        -- ============================================================
+        -- MONITOR PANEL HELPERS
+        -- ============================================================
+        function FWF_CreateMonitorPanel(parent, xPos, title, color)
+            local panel = Instance.new("Frame")
+            panel.Size = UDim2.new(0.5, -5, 1, 0)
+            panel.Position = UDim2.new(xPos, 0, 0, 0)
+            panel.BackgroundColor3 = C.section
+            panel.BorderSizePixel = 0
+            panel.Parent = parent
+            Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 6)
+            
+            local titleFrame = Instance.new("Frame")
+            titleFrame.Size = UDim2.new(1, 0, 0, 22)
+            titleFrame.BackgroundColor3 = color
+            titleFrame.BackgroundTransparency = 0.4
+            titleFrame.BorderSizePixel = 0
+            titleFrame.Parent = panel
+            Instance.new("UICorner", titleFrame).CornerRadius = UDim.new(0, 6)
+            
+            local titleFill = Instance.new("Frame")
+            titleFill.Size = UDim2.new(1, 0, 0.5, 0)
+            titleFill.Position = UDim2.new(0, 0, 0.5, 0)
+            titleFill.BackgroundColor3 = color
+            titleFill.BackgroundTransparency = 0.4
+            titleFill.BorderSizePixel = 0
+            titleFill.Parent = titleFrame
+            
+            local titleLbl = Instance.new("TextLabel")
+            titleLbl.Size = UDim2.new(1, -45, 1, 0)
+            titleLbl.Position = UDim2.new(0, 6, 0, 0)
+            titleLbl.BackgroundTransparency = 1
+            titleLbl.Text = title
+            titleLbl.TextColor3 = C.text
+            titleLbl.Font = Enum.Font.GothamBold
+            titleLbl.TextSize = 8
+            titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+            titleLbl.Parent = titleFrame
+            
+            local countLbl = Instance.new("TextLabel")
+            countLbl.Size = UDim2.new(0, 35, 1, 0)
+            countLbl.Position = UDim2.new(1, -38, 0, 0)
+            countLbl.BackgroundTransparency = 1
+            countLbl.Text = "0"
+            countLbl.TextColor3 = C.text
+            countLbl.Font = Enum.Font.GothamBold
+            countLbl.TextSize = 9
+            countLbl.TextXAlignment = Enum.TextXAlignment.Right
+            countLbl.Parent = titleFrame
+            
+            local bodyScroll = Instance.new("ScrollingFrame")
+            bodyScroll.Size = UDim2.new(1, -8, 1, -28)
+            bodyScroll.Position = UDim2.new(0, 4, 0, 24)
+            bodyScroll.BackgroundTransparency = 1
+            bodyScroll.BorderSizePixel = 0
+            bodyScroll.ScrollBarThickness = 3
+            bodyScroll.ScrollBarImageColor3 = C.accent
+            bodyScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+            bodyScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+            bodyScroll.Parent = panel
+            
+            local bodyLayout = Instance.new("UIListLayout")
+            bodyLayout.Padding = UDim.new(0, 2)
+            bodyLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            bodyLayout.Parent = bodyScroll
+            
+            return {
+                panel = panel,
+                bodyScroll = bodyScroll,
+                bodyLayout = bodyLayout,
+                countLbl = countLbl,
+                titleLbl = titleLbl,
+            }
+        end
+        
+        function FWF_ClearAndRender(panelRef, entries, isPassed, emptyText)
+            for _, child in ipairs(panelRef.bodyScroll:GetChildren()) do
+                if child:IsA("Frame") or child:IsA("TextLabel") then
+                    child:Destroy()
+                end
+            end
+            
+            if #entries == 0 then
+                local empty = Instance.new("TextLabel")
+                empty.Size = UDim2.new(1, -8, 0, 22)
+                empty.BackgroundTransparency = 1
+                empty.Text = emptyText or "✓ Kosong"
+                empty.TextColor3 = C.textDim
+                empty.Font = Enum.Font.Gotham
+                empty.TextSize = 8
+                empty.LayoutOrder = 0
+                empty.Parent = panelRef.bodyScroll
+                task.defer(function()
+                    panelRef.bodyScroll.CanvasSize = UDim2.new(0, 0, 0, 26)
+                end)
+                return
+            end
+            
+            for i, entry in ipairs(entries) do
+                local row = Instance.new("Frame")
+                row.Size = UDim2.new(1, -4, 0, 20)
+                row.BackgroundColor3 = isPassed and C.itemPassed or Color3.fromRGB(90, 45, 45)
+                row.BorderSizePixel = 0
+                row.LayoutOrder = i
+                row.Parent = panelRef.bodyScroll
+                Instance.new("UICorner", row).CornerRadius = UDim.new(0, 3)
+                
+                local nameLbl = Instance.new("TextLabel")
+                nameLbl.Size = UDim2.new(0.6, 0, 1, 0)
+                nameLbl.Position = UDim2.new(0, 5, 0, 0)
+                nameLbl.BackgroundTransparency = 1
+                nameLbl.Text = entry.name
+                nameLbl.TextColor3 = C.text
+                nameLbl.Font = Enum.Font.GothamSemibold
+                nameLbl.TextSize = 8
+                nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+                nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+                nameLbl.Parent = row
+                
+                local weightLbl = Instance.new("TextLabel")
+                weightLbl.Size = UDim2.new(0.38, 0, 1, 0)
+                weightLbl.Position = UDim2.new(0.61, 0, 0, 0)
+                weightLbl.BackgroundTransparency = 1
+                weightLbl.Text = string.format("%.2f kg", entry.weight or 0)
+                weightLbl.TextColor3 = isPassed and Color3.fromRGB(150, 255, 150) or Color3.fromRGB(255, 150, 150)
+                weightLbl.Font = Enum.Font.GothamBold
+                weightLbl.TextSize = 8
+                weightLbl.TextXAlignment = Enum.TextXAlignment.Right
+                weightLbl.Parent = row
+                local pad = Instance.new("UIPadding")
+                pad.PaddingRight = UDim.new(0, 5)
+                pad.Parent = weightLbl
+            end
+            
+            local totalHeight = #entries * 22 + 6
             task.defer(function()
-                panelRef.bodyScroll.CanvasSize = UDim2.new(0, 0, 0, 26)
+                panelRef.bodyScroll.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
             end)
-            return
         end
         
-        for i, entry in ipairs(entries) do
-            local row = Instance.new("Frame")
-            row.Size = UDim2.new(1, -4, 0, 20)
-            row.BackgroundColor3 = isPassed and C.itemPassed or Color3.fromRGB(90, 45, 45)
-            row.BorderSizePixel = 0
-            row.LayoutOrder = i
-            row.Parent = panelRef.bodyScroll
-            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 3)
+        -- ============================================================
+        -- BUILD SECTION UI
+        -- ============================================================
+        FWF_Section = createSection(farmScroll, "⚖️ Fruit Weight Farm", "fruitWeightFarm")
+        FWF_Section.LayoutOrder = 4
+        FWF_Section.Size = UDim2.new(1, -10, 0, 580)
+        
+        -- ============================================================
+        -- CONFIG INPUTS
+        -- ============================================================
+        function FWF_MakeInputRow(parent, yPos, label, value, callback, minVal)
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.55, -15, 0, 20)
+            lbl.Position = UDim2.new(0, 10, 0, yPos)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = label
+            lbl.TextColor3 = C.textDim
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 9
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = parent
             
-            local nameLbl = Instance.new("TextLabel")
-            nameLbl.Size = UDim2.new(0.6, 0, 1, 0)
-            nameLbl.Position = UDim2.new(0, 5, 0, 0)
-            nameLbl.BackgroundTransparency = 1
-            nameLbl.Text = entry.name
-            nameLbl.TextColor3 = C.text
-            nameLbl.Font = Enum.Font.GothamSemibold
-            nameLbl.TextSize = 8
-            nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-            nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
-            nameLbl.Parent = row
-            
-            local weightLbl = Instance.new("TextLabel")
-            weightLbl.Size = UDim2.new(0.38, 0, 1, 0)
-            weightLbl.Position = UDim2.new(0.61, 0, 0, 0)
-            weightLbl.BackgroundTransparency = 1
-            weightLbl.Text = string.format("%.2f kg", entry.weight or 0)
-            weightLbl.TextColor3 = isPassed and Color3.fromRGB(150, 255, 150) or Color3.fromRGB(255, 150, 150)
-            weightLbl.Font = Enum.Font.GothamBold
-            weightLbl.TextSize = 8
-            weightLbl.TextXAlignment = Enum.TextXAlignment.Right
-            weightLbl.Parent = row
-            local pad = Instance.new("UIPadding")
-            pad.PaddingRight = UDim.new(0, 5)
-            pad.Parent = weightLbl
-        end
-        
-        local totalHeight = #entries * 22 + 6
-        task.defer(function()
-            panelRef.bodyScroll.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
-        end)
-    end
-    
-    -- ============================================================
-    -- BUILD SECTION UI
-    -- ============================================================
-    local FWF_Section = createSection(farmScroll, "⚖️ Fruit Weight Farm", "fruitWeightFarm")
-    FWF_Section.LayoutOrder = 4  -- sesuaikan posisi
-    FWF_Section.Size = UDim2.new(1, -10, 0, 580)
-    
-    -- ============================================================
-    -- CONFIG INPUTS
-    -- ============================================================
-    local function FWF_MakeInputRow(parent, yPos, label, value, callback, minVal)
-        local lbl = Instance.new("TextLabel")
-        lbl.Size = UDim2.new(0.55, -15, 0, 20)
-        lbl.Position = UDim2.new(0, 10, 0, yPos)
-        lbl.BackgroundTransparency = 1
-        lbl.Text = label
-        lbl.TextColor3 = C.textDim
-        lbl.Font = Enum.Font.Gotham
-        lbl.TextSize = 9
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
-        lbl.Parent = parent
-        
-        local box = Instance.new("TextBox")
-        box.Size = UDim2.new(0.45, -15, 0, 20)
-        box.Position = UDim2.new(0.55, 5, 0, yPos)
-        box.BackgroundColor3 = C.input
-        box.BorderSizePixel = 0
-        box.Font = Enum.Font.Gotham
-        box.Text = tostring(value)
-        box.TextColor3 = C.text
-        box.TextSize = 9
-        box.ClearTextOnFocus = false
-        box.Parent = parent
-        Instance.new("UICorner", box).CornerRadius = UDim.new(0, 3)
-        box.FocusLost:Connect(function()
-            local n = tonumber(box.Text)
-            if n and (minVal == nil or n >= minVal) then
-                callback(n)
-                box.Text = tostring(n)
-            else
-                box.Text = tostring(value)
-            end
-        end)
-        return box
-    end
-    
-    FWF_MakeInputRow(FWF_Section, 32, "⚖️ Max Weight (shovel ≤):", FWF_Config.maxWeight, function(n)
-        FWF_Config.maxWeight = math.max(0, n)
-        FWF_SaveConfig()
-    end, 0)
-    
-    FWF_MakeInputRow(FWF_Section, 56, "🔨 Interval Shovel (s):", FWF_Config.shovelInterval, function(n)
-        FWF_Config.shovelInterval = math.max(0.1, n)
-        FWF_SaveConfig()
-    end, 0.1)
-    
-    FWF_MakeInputRow(FWF_Section, 80, "🔍 Interval Scan (s):", FWF_Config.scanInterval, function(n)
-        FWF_Config.scanInterval = math.max(0.5, n)
-        FWF_SaveConfig()
-    end, 0.5)
-    
-    -- ============================================================
-    -- FRUIT FILTER
-    -- ============================================================
-    local fwfFilterTitle = Instance.new("TextLabel")
-    fwfFilterTitle.Size = UDim2.new(1, -20, 0, 16)
-    fwfFilterTitle.Position = UDim2.new(0, 10, 0, 108)
-    fwfFilterTitle.BackgroundTransparency = 1
-    fwfFilterTitle.Text = "🍎 Filter Buah (kosong = semua):"
-    fwfFilterTitle.TextColor3 = C.text
-    fwfFilterTitle.Font = Enum.Font.GothamBold
-    fwfFilterTitle.TextSize = 9
-    fwfFilterTitle.TextXAlignment = Enum.TextXAlignment.Left
-    fwfFilterTitle.Parent = FWF_Section
-    
-    local fwfSelAll = Instance.new("TextButton")
-    fwfSelAll.Size = UDim2.new(0.5, -15, 0, 20)
-    fwfSelAll.Position = UDim2.new(0, 10, 0, 128)
-    fwfSelAll.BackgroundColor3 = C.accent
-    fwfSelAll.Text = "✓ All"
-    fwfSelAll.TextColor3 = C.text
-    fwfSelAll.Font = Enum.Font.GothamBold
-    fwfSelAll.TextSize = 9
-    fwfSelAll.BorderSizePixel = 0
-    fwfSelAll.AutoButtonColor = false
-    fwfSelAll.Parent = FWF_Section
-    Instance.new("UICorner", fwfSelAll).CornerRadius = UDim.new(0, 3)
-    
-    local fwfSelClr = Instance.new("TextButton")
-    fwfSelClr.Size = UDim2.new(0.5, -15, 0, 20)
-    fwfSelClr.Position = UDim2.new(0.5, 5, 0, 128)
-    fwfSelClr.BackgroundColor3 = C.danger
-    fwfSelClr.Text = "✕ Clear"
-    fwfSelClr.TextColor3 = C.text
-    fwfSelClr.Font = Enum.Font.GothamBold
-    fwfSelClr.TextSize = 9
-    fwfSelClr.BorderSizePixel = 0
-    fwfSelClr.AutoButtonColor = false
-    fwfSelClr.Parent = FWF_Section
-    Instance.new("UICorner", fwfSelClr).CornerRadius = UDim.new(0, 3)
-    
-    local fwfSearch = Instance.new("TextBox")
-    fwfSearch.Size = UDim2.new(1, -20, 0, 20)
-    fwfSearch.Position = UDim2.new(0, 10, 0, 152)
-    fwfSearch.BackgroundColor3 = C.input
-    fwfSearch.BorderSizePixel = 0
-    fwfSearch.Font = Enum.Font.Gotham
-    fwfSearch.PlaceholderText = "🔍 Cari buah..."
-    fwfSearch.Text = ""
-    fwfSearch.TextColor3 = C.text
-    fwfSearch.TextSize = 9
-    fwfSearch.ClearTextOnFocus = false
-    fwfSearch.Parent = FWF_Section
-    Instance.new("UICorner", fwfSearch).CornerRadius = UDim.new(0, 4)
-    
-    local fwfListScroll = Instance.new("ScrollingFrame")
-    fwfListScroll.Size = UDim2.new(1, -20, 0, 140)
-    fwfListScroll.Position = UDim2.new(0, 10, 0, 176)
-    fwfListScroll.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
-    fwfListScroll.BorderSizePixel = 0
-    fwfListScroll.ScrollBarThickness = 4
-    fwfListScroll.ScrollBarImageColor3 = C.accent
-    fwfListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    fwfListScroll.ScrollingDirection = Enum.ScrollingDirection.Y
-    fwfListScroll.Parent = FWF_Section
-    Instance.new("UICorner", fwfListScroll).CornerRadius = UDim.new(0, 4)
-    
-    local fwfLayout = Instance.new("UIListLayout")
-    fwfLayout.Padding = UDim.new(0, 2)
-    fwfLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    fwfLayout.Parent = fwfListScroll
-    
-    local fwfRowBtns = {}
-    
-    local function FWF_RenderFruitList()
-        for _, b in ipairs(fwfRowBtns) do b:Destroy() end
-        fwfRowBtns = {}
-        
-        local search = fwfSearch.Text:lower()
-        local selectedList, unselectedList = {}, {}
-        
-        for _, name in ipairs(FWF_ALL_FRUIT_NAMES) do
-            if search == "" or name:lower():find(search, 1, true) then
-                if FWF_Config.selectedFruits[name] then
-                    table.insert(selectedList, name)
+            local box = Instance.new("TextBox")
+            box.Size = UDim2.new(0.45, -15, 0, 20)
+            box.Position = UDim2.new(0.55, 5, 0, yPos)
+            box.BackgroundColor3 = C.input
+            box.BorderSizePixel = 0
+            box.Font = Enum.Font.Gotham
+            box.Text = tostring(value)
+            box.TextColor3 = C.text
+            box.TextSize = 9
+            box.ClearTextOnFocus = false
+            box.Parent = parent
+            Instance.new("UICorner", box).CornerRadius = UDim.new(0, 3)
+            box.FocusLost:Connect(function()
+                local n = tonumber(box.Text)
+                if n and (minVal == nil or n >= minVal) then
+                    callback(n)
+                    box.Text = tostring(n)
                 else
-                    table.insert(unselectedList, name)
+                    box.Text = tostring(value)
                 end
-            end
-        end
-        
-        local displayList = {}
-        for _, name in ipairs(selectedList) do table.insert(displayList, name) end
-        for _, name in ipairs(unselectedList) do table.insert(displayList, name) end
-        
-        for i, name in ipairs(displayList) do
-            local isSel = FWF_Config.selectedFruits[name] == true
-            local btn = Instance.new("TextButton")
-            btn.Size = UDim2.new(1, -8, 0, 20)
-            btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
-            btn.BorderSizePixel = 0
-            btn.Font = Enum.Font.Gotham
-            btn.Text = string.format("%s %s", isSel and "✓" or "○", name)
-            btn.TextColor3 = C.text
-            btn.TextSize = 8
-            btn.TextXAlignment = Enum.TextXAlignment.Left
-            btn.LayoutOrder = i
-            btn.AutoButtonColor = false
-            btn.Parent = fwfListScroll
-            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
-            local pad = Instance.new("UIPadding")
-            pad.PaddingLeft = UDim.new(0, 6)
-            pad.Parent = btn
-            
-            btn.MouseButton1Click:Connect(function()
-                if FWF_Config.selectedFruits[name] then
-                    FWF_Config.selectedFruits[name] = nil
-                else
-                    FWF_Config.selectedFruits[name] = true
-                end
-                if fwfSearch.Text ~= "" then fwfSearch.Text = "" end
-                FWF_RenderFruitList()
-                FWF_SaveConfig()
             end)
+            return box
+        end
+        
+        FWF_MakeInputRow(FWF_Section, 32, "⚖️ Max Weight (shovel ≤):", FWF_Config.maxWeight, function(n)
+            FWF_Config.maxWeight = math.max(0, n)
+            FWF_SaveConfig()
+        end, 0)
+        
+        FWF_MakeInputRow(FWF_Section, 56, "🔨 Interval Shovel (s):", FWF_Config.shovelInterval, function(n)
+            FWF_Config.shovelInterval = math.max(0.1, n)
+            FWF_SaveConfig()
+        end, 0.1)
+        
+        FWF_MakeInputRow(FWF_Section, 80, "🔍 Interval Scan (s):", FWF_Config.scanInterval, function(n)
+            FWF_Config.scanInterval = math.max(0.5, n)
+            FWF_SaveConfig()
+        end, 0.5)
+        
+        -- ============================================================
+        -- FRUIT FILTER
+        -- ============================================================
+        local fwfFilterTitle = Instance.new("TextLabel")
+        fwfFilterTitle.Size = UDim2.new(1, -20, 0, 16)
+        fwfFilterTitle.Position = UDim2.new(0, 10, 0, 108)
+        fwfFilterTitle.BackgroundTransparency = 1
+        fwfFilterTitle.Text = "🍎 Filter Buah (kosong = semua):"
+        fwfFilterTitle.TextColor3 = C.text
+        fwfFilterTitle.Font = Enum.Font.GothamBold
+        fwfFilterTitle.TextSize = 9
+        fwfFilterTitle.TextXAlignment = Enum.TextXAlignment.Left
+        fwfFilterTitle.Parent = FWF_Section
+        
+        local fwfSelAll = Instance.new("TextButton")
+        fwfSelAll.Size = UDim2.new(0.5, -15, 0, 20)
+        fwfSelAll.Position = UDim2.new(0, 10, 0, 128)
+        fwfSelAll.BackgroundColor3 = C.accent
+        fwfSelAll.Text = "✓ All"
+        fwfSelAll.TextColor3 = C.text
+        fwfSelAll.Font = Enum.Font.GothamBold
+        fwfSelAll.TextSize = 9
+        fwfSelAll.BorderSizePixel = 0
+        fwfSelAll.AutoButtonColor = false
+        fwfSelAll.Parent = FWF_Section
+        Instance.new("UICorner", fwfSelAll).CornerRadius = UDim.new(0, 3)
+        
+        local fwfSelClr = Instance.new("TextButton")
+        fwfSelClr.Size = UDim2.new(0.5, -15, 0, 20)
+        fwfSelClr.Position = UDim2.new(0.5, 5, 0, 128)
+        fwfSelClr.BackgroundColor3 = C.danger
+        fwfSelClr.Text = "✕ Clear"
+        fwfSelClr.TextColor3 = C.text
+        fwfSelClr.Font = Enum.Font.GothamBold
+        fwfSelClr.TextSize = 9
+        fwfSelClr.BorderSizePixel = 0
+        fwfSelClr.AutoButtonColor = false
+        fwfSelClr.Parent = FWF_Section
+        Instance.new("UICorner", fwfSelClr).CornerRadius = UDim.new(0, 3)
+        
+        local fwfSearch = Instance.new("TextBox")
+        fwfSearch.Size = UDim2.new(1, -20, 0, 20)
+        fwfSearch.Position = UDim2.new(0, 10, 0, 152)
+        fwfSearch.BackgroundColor3 = C.input
+        fwfSearch.BorderSizePixel = 0
+        fwfSearch.Font = Enum.Font.Gotham
+        fwfSearch.PlaceholderText = "🔍 Cari buah..."
+        fwfSearch.Text = ""
+        fwfSearch.TextColor3 = C.text
+        fwfSearch.TextSize = 9
+        fwfSearch.ClearTextOnFocus = false
+        fwfSearch.Parent = FWF_Section
+        Instance.new("UICorner", fwfSearch).CornerRadius = UDim.new(0, 4)
+        
+        local fwfListScroll = Instance.new("ScrollingFrame")
+        fwfListScroll.Size = UDim2.new(1, -20, 0, 140)
+        fwfListScroll.Position = UDim2.new(0, 10, 0, 176)
+        fwfListScroll.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+        fwfListScroll.BorderSizePixel = 0
+        fwfListScroll.ScrollBarThickness = 4
+        fwfListScroll.ScrollBarImageColor3 = C.accent
+        fwfListScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+        fwfListScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+        fwfListScroll.Parent = FWF_Section
+        Instance.new("UICorner", fwfListScroll).CornerRadius = UDim.new(0, 4)
+        
+        local fwfLayout = Instance.new("UIListLayout")
+        fwfLayout.Padding = UDim.new(0, 2)
+        fwfLayout.SortOrder = Enum.SortOrder.LayoutOrder
+        fwfLayout.Parent = fwfListScroll
+        
+        local fwfRowBtns = {}
+        
+        local function FWF_RenderFruitList()
+            for _, b in ipairs(fwfRowBtns) do b:Destroy() end
+            fwfRowBtns = {}
             
-            table.insert(fwfRowBtns, btn)
-        end
-        
-        task.defer(function()
-            fwfListScroll.CanvasSize = UDim2.new(0, 0, 0, #displayList * 22 + 6)
-        end)
-    end
-    
-    fwfSearch:GetPropertyChangedSignal("Text"):Connect(FWF_RenderFruitList)
-    
-    fwfSelAll.MouseButton1Click:Connect(function()
-        for _, name in ipairs(FWF_ALL_FRUIT_NAMES) do
-            FWF_Config.selectedFruits[name] = true
-        end
-        FWF_RenderFruitList()
-        FWF_SaveConfig()
-    end)
-    
-    fwfSelClr.MouseButton1Click:Connect(function()
-        FWF_Config.selectedFruits = {}
-        FWF_RenderFruitList()
-        FWF_SaveConfig()
-    end)
-    
-    FWF_RenderFruitList()
-    
-    -- ============================================================
-    -- MONITOR (2 PANEL)
-    -- ============================================================
-    local fwfMonitorTitle = Instance.new("TextLabel")
-    fwfMonitorTitle.Size = UDim2.new(1, -20, 0, 16)
-    fwfMonitorTitle.Position = UDim2.new(0, 10, 0, 322)
-    fwfMonitorTitle.BackgroundTransparency = 1
-    fwfMonitorTitle.Text = "📊 Monitor (refresh setelah scan):"
-    fwfMonitorTitle.TextColor3 = C.text
-    fwfMonitorTitle.Font = Enum.Font.GothamBold
-    fwfMonitorTitle.TextSize = 9
-    fwfMonitorTitle.TextXAlignment = Enum.TextXAlignment.Left
-    fwfMonitorTitle.Parent = FWF_Section
-    
-    local fwfMonitorContainer = Instance.new("Frame")
-    fwfMonitorContainer.Size = UDim2.new(1, -20, 0, 160)
-    fwfMonitorContainer.Position = UDim2.new(0, 10, 0, 342)
-    fwfMonitorContainer.BackgroundTransparency = 1
-    fwfMonitorContainer.Parent = FWF_Section
-    
-    FWF_UIRefs.leftPanel = FWF_CreateMonitorPanel(
-        fwfMonitorContainer, 0, "❌ Akan Di-Shovel", C.danger
-    )
-    FWF_UIRefs.rightPanel = FWF_CreateMonitorPanel(
-        fwfMonitorContainer, 0.5, "✅ Disimpan", C.success
-    )
-    
-    -- ============================================================
-    -- START BUTTON
-    -- ============================================================
-    local fwfStartBtn = Instance.new("TextButton")
-    fwfStartBtn.Size = UDim2.new(1, -20, 0, 28)
-    fwfStartBtn.Position = UDim2.new(0, 10, 0, 510)
-    fwfStartBtn.BackgroundColor3 = C.success
-    fwfStartBtn.BorderSizePixel = 0
-    fwfStartBtn.Font = Enum.Font.GothamBold
-    fwfStartBtn.Text = "▶️ START"
-    fwfStartBtn.TextColor3 = C.text
-    fwfStartBtn.TextSize = 10
-    fwfStartBtn.AutoButtonColor = false
-    fwfStartBtn.Parent = FWF_Section
-    Instance.new("UICorner", fwfStartBtn).CornerRadius = UDim.new(0, 5)
-    FWF_UIRefs.startBtn = fwfStartBtn
-    
-    local fwfStatusLbl = Instance.new("TextLabel")
-    fwfStatusLbl.Size = UDim2.new(1, -20, 0, 14)
-    fwfStatusLbl.Position = UDim2.new(0, 10, 0, 542)
-    fwfStatusLbl.BackgroundTransparency = 1
-    fwfStatusLbl.Text = "Status: Idle"
-    fwfStatusLbl.TextColor3 = C.textDim
-    fwfStatusLbl.Font = Enum.Font.Gotham
-    fwfStatusLbl.TextSize = 8
-    fwfStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
-    fwfStatusLbl.Parent = FWF_Section
-    FWF_UIRefs.statusLbl = fwfStatusLbl
-    
-    -- ============================================================
-    -- RENDER MONITOR
-    -- ============================================================
-    local function FWF_RenderMonitor(results)
-        FWF_UIRefs.leftPanel.countLbl.Text = tostring(#results.failed)
-        FWF_UIRefs.leftPanel.titleLbl.Text = string.format("❌ Akan Di-Shovel (%d)", #results.failed)
-        FWF_ClearAndRender(FWF_UIRefs.leftPanel, results.failed, false, "✓ Tidak ada")
-        
-        FWF_UIRefs.rightPanel.countLbl.Text = tostring(#results.passed)
-        FWF_UIRefs.rightPanel.titleLbl.Text = string.format("✅ Disimpan (%d)", #results.passed)
-        FWF_ClearAndRender(FWF_UIRefs.rightPanel, results.passed, true, "✓ Tidak ada")
-    end
-    
-    local function FWF_SetStatus(text, color)
-        if FWF_UIRefs.statusLbl then
-            FWF_UIRefs.statusLbl.Text = text
-            FWF_UIRefs.statusLbl.TextColor3 = color or C.textDim
-        end
-        print("[FruitWeightFarm]", text)
-    end
-    
-    -- ============================================================
-    -- MAIN LOOP
-    -- ============================================================
-    local function FWF_StartLoop()
-        if FWF_State.isRunning then return end
-        FWF_State.isRunning = true
-        FWF_State.currentCycle = 0
-        FWF_State.totalShoveled = 0
-        
-        FWF_UIRefs.startBtn.Text = "⏹️ STOP"
-        FWF_UIRefs.startBtn.BackgroundColor3 = C.danger
-        
-        task.spawn(function()
-            while FWF_State.isRunning do
-                FWF_State.currentCycle = FWF_State.currentCycle + 1
-                
-                if not FWF_FindShovelTool() then
-                    FWF_SetStatus("⚠️ Tidak ada Shovel [Destroy Plants]!", C.warning)
-                    task.wait(2)
-                    continue
-                end
-                
-                FWF_SetStatus(string.format("🔄 Cycle %d - Scanning...", FWF_State.currentCycle), C.accent)
-                local results = FWF_ScanFruits()
-                FWF_RenderMonitor(results)
-                
-                FWF_SetStatus(string.format(
-                    "📊 Cycle %d | Shovel: %d | Simpan: %d",
-                    FWF_State.currentCycle, #results.failed, #results.passed
-                ), C.accent)
-                
-                if #results.failed == 0 then
-                    FWF_SetStatus(string.format(
-                        "✅ Tidak ada yang ≤ %.1f kg. Wait %ss...",
-                        FWF_Config.maxWeight, FWF_Config.scanInterval
-                    ), C.success)
-                    task.wait(FWF_Config.scanInterval)
-                    continue
-                end
-                
-                FWF_SetStatus(string.format("🔨 Shuvel %d buah...", #results.failed), C.warning)
-                
-                local shovelCount = 0
-                for i, entry in ipairs(results.failed) do
-                    if not FWF_State.isRunning then break end
-                    if not entry.fruit or not entry.fruit.Parent then continue end
-                    
-                    local ok = FWF_ShovelFruit(entry.fruit)
-                    if ok then
-                        shovelCount = shovelCount + 1
-                        FWF_State.totalShoveled = FWF_State.totalShoveled + 1
-                        FWF_SetStatus(string.format(
-                            "🔨 [%d/%d] %s (%.2f kg)",
-                            i, #results.failed, entry.name, entry.weight
-                        ), C.warning)
+            local search = fwfSearch.Text:lower()
+            local selectedList, unselectedList = {}, {}
+            
+            for _, name in ipairs(FWF_ALL_FRUIT_NAMES) do
+                if search == "" or name:lower():find(search, 1, true) then
+                    if FWF_Config.selectedFruits[name] then
+                        table.insert(selectedList, name)
                     else
-                        FWF_SetStatus(string.format(
-                            "❌ [%d/%d] %s gagal",
-                            i, #results.failed, entry.name
-                        ), C.danger)
+                        table.insert(unselectedList, name)
+                    end
+                end
+            end
+            
+            local displayList = {}
+            for _, name in ipairs(selectedList) do table.insert(displayList, name) end
+            for _, name in ipairs(unselectedList) do table.insert(displayList, name) end
+            
+            for i, name in ipairs(displayList) do
+                local isSel = FWF_Config.selectedFruits[name] == true
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(1, -8, 0, 20)
+                btn.BackgroundColor3 = isSel and C.success or Color3.fromRGB(55, 55, 70)
+                btn.BorderSizePixel = 0
+                btn.Font = Enum.Font.Gotham
+                btn.Text = string.format("%s %s", isSel and "✓" or "○", name)
+                btn.TextColor3 = C.text
+                btn.TextSize = 8
+                btn.TextXAlignment = Enum.TextXAlignment.Left
+                btn.LayoutOrder = i
+                btn.AutoButtonColor = false
+                btn.Parent = fwfListScroll
+                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+                local pad = Instance.new("UIPadding")
+                pad.PaddingLeft = UDim.new(0, 6)
+                pad.Parent = btn
+                
+                btn.MouseButton1Click:Connect(function()
+                    if FWF_Config.selectedFruits[name] then
+                        FWF_Config.selectedFruits[name] = nil
+                    else
+                        FWF_Config.selectedFruits[name] = true
+                    end
+                    if fwfSearch.Text ~= "" then fwfSearch.Text = "" end
+                    FWF_RenderFruitList()
+                    FWF_SaveConfig()
+                end)
+                
+                table.insert(fwfRowBtns, btn)
+            end
+            
+            task.defer(function()
+                fwfListScroll.CanvasSize = UDim2.new(0, 0, 0, #displayList * 22 + 6)
+            end)
+        end
+        
+        fwfSearch:GetPropertyChangedSignal("Text"):Connect(FWF_RenderFruitList)
+        
+        fwfSelAll.MouseButton1Click:Connect(function()
+            for _, name in ipairs(FWF_ALL_FRUIT_NAMES) do
+                FWF_Config.selectedFruits[name] = true
+            end
+            FWF_RenderFruitList()
+            FWF_SaveConfig()
+        end)
+        
+        fwfSelClr.MouseButton1Click:Connect(function()
+            FWF_Config.selectedFruits = {}
+            FWF_RenderFruitList()
+            FWF_SaveConfig()
+        end)
+        
+        FWF_RenderFruitList()
+        
+        -- ============================================================
+        -- MONITOR (2 PANEL)
+        -- ============================================================
+        local fwfMonitorTitle = Instance.new("TextLabel")
+        fwfMonitorTitle.Size = UDim2.new(1, -20, 0, 16)
+        fwfMonitorTitle.Position = UDim2.new(0, 10, 0, 322)
+        fwfMonitorTitle.BackgroundTransparency = 1
+        fwfMonitorTitle.Text = "📊 Monitor (refresh setelah scan):"
+        fwfMonitorTitle.TextColor3 = C.text
+        fwfMonitorTitle.Font = Enum.Font.GothamBold
+        fwfMonitorTitle.TextSize = 9
+        fwfMonitorTitle.TextXAlignment = Enum.TextXAlignment.Left
+        fwfMonitorTitle.Parent = FWF_Section
+        
+        local fwfMonitorContainer = Instance.new("Frame")
+        fwfMonitorContainer.Size = UDim2.new(1, -20, 0, 160)
+        fwfMonitorContainer.Position = UDim2.new(0, 10, 0, 342)
+        fwfMonitorContainer.BackgroundTransparency = 1
+        fwfMonitorContainer.Parent = FWF_Section
+        
+        FWF_UIRefs.leftPanel = FWF_CreateMonitorPanel(
+            fwfMonitorContainer, 0, "❌ Akan Di-Shovel", C.danger
+        )
+        FWF_UIRefs.rightPanel = FWF_CreateMonitorPanel(
+            fwfMonitorContainer, 0.5, "✅ Disimpan", C.success
+        )
+        
+        -- ============================================================
+        -- START BUTTON
+        -- ============================================================
+        local fwfStartBtn = Instance.new("TextButton")
+        fwfStartBtn.Size = UDim2.new(1, -20, 0, 28)
+        fwfStartBtn.Position = UDim2.new(0, 10, 0, 510)
+        fwfStartBtn.BackgroundColor3 = C.success
+        fwfStartBtn.BorderSizePixel = 0
+        fwfStartBtn.Font = Enum.Font.GothamBold
+        fwfStartBtn.Text = "▶️ START"
+        fwfStartBtn.TextColor3 = C.text
+        fwfStartBtn.TextSize = 10
+        fwfStartBtn.AutoButtonColor = false
+        fwfStartBtn.Parent = FWF_Section
+        Instance.new("UICorner", fwfStartBtn).CornerRadius = UDim.new(0, 5)
+        FWF_UIRefs.startBtn = fwfStartBtn
+        
+        local fwfStatusLbl = Instance.new("TextLabel")
+        fwfStatusLbl.Size = UDim2.new(1, -20, 0, 14)
+        fwfStatusLbl.Position = UDim2.new(0, 10, 0, 542)
+        fwfStatusLbl.BackgroundTransparency = 1
+        fwfStatusLbl.Text = "Status: Idle"
+        fwfStatusLbl.TextColor3 = C.textDim
+        fwfStatusLbl.Font = Enum.Font.Gotham
+        fwfStatusLbl.TextSize = 8
+        fwfStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+        fwfStatusLbl.Parent = FWF_Section
+        FWF_UIRefs.statusLbl = fwfStatusLbl
+        
+        -- ============================================================
+        -- RENDER MONITOR
+        -- ============================================================
+        local function FWF_RenderMonitor(results)
+            FWF_UIRefs.leftPanel.countLbl.Text = tostring(#results.failed)
+            FWF_UIRefs.leftPanel.titleLbl.Text = string.format("❌ Akan Di-Shovel (%d)", #results.failed)
+            FWF_ClearAndRender(FWF_UIRefs.leftPanel, results.failed, false, "✓ Tidak ada")
+            
+            FWF_UIRefs.rightPanel.countLbl.Text = tostring(#results.passed)
+            FWF_UIRefs.rightPanel.titleLbl.Text = string.format("✅ Disimpan (%d)", #results.passed)
+            FWF_ClearAndRender(FWF_UIRefs.rightPanel, results.passed, true, "✓ Tidak ada")
+        end
+        
+        local function FWF_SetStatus(text, color)
+            if FWF_UIRefs.statusLbl then
+                FWF_UIRefs.statusLbl.Text = text
+                FWF_UIRefs.statusLbl.TextColor3 = color or C.textDim
+            end
+            print("[FruitWeightFarm]", text)
+        end
+        
+        -- ============================================================
+        -- MAIN LOOP
+        -- ============================================================
+        local function FWF_StartLoop()
+            if FWF_State.isRunning then return end
+            FWF_State.isRunning = true
+            FWF_State.currentCycle = 0
+            FWF_State.totalShoveled = 0
+            
+            FWF_UIRefs.startBtn.Text = "⏹️ STOP"
+            FWF_UIRefs.startBtn.BackgroundColor3 = C.danger
+            
+            task.spawn(function()
+                while FWF_State.isRunning do
+                    FWF_State.currentCycle = FWF_State.currentCycle + 1
+                    
+                    if not FWF_FindShovelTool() then
+                        FWF_SetStatus("⚠️ Tidak ada Shovel [Destroy Plants]!", C.warning)
+                        task.wait(2)
+                        continue
                     end
                     
-                    task.wait(FWF_Config.shovelInterval)
+                    FWF_SetStatus(string.format("🔄 Cycle %d - Scanning...", FWF_State.currentCycle), C.accent)
+                    local results = FWF_ScanFruits()
+                    FWF_RenderMonitor(results)
+                    
+                    FWF_SetStatus(string.format(
+                        "📊 Cycle %d | Shovel: %d | Simpan: %d",
+                        FWF_State.currentCycle, #results.failed, #results.passed
+                    ), C.accent)
+                    
+                    if #results.failed == 0 then
+                        FWF_SetStatus(string.format(
+                            "✅ Tidak ada yang ≤ %.1f kg. Wait %ss...",
+                            FWF_Config.maxWeight, FWF_Config.scanInterval
+                        ), C.success)
+                        task.wait(FWF_Config.scanInterval)
+                        continue
+                    end
+                    
+                    FWF_SetStatus(string.format("🔨 Shuvel %d buah...", #results.failed), C.warning)
+                    
+                    local shovelCount = 0
+                    for i, entry in ipairs(results.failed) do
+                        if not FWF_State.isRunning then break end
+                        if not entry.fruit or not entry.fruit.Parent then continue end
+                        
+                        local ok = FWF_ShovelFruit(entry.fruit)
+                        if ok then
+                            shovelCount = shovelCount + 1
+                            FWF_State.totalShoveled = FWF_State.totalShoveled + 1
+                            FWF_SetStatus(string.format(
+                                "🔨 [%d/%d] %s (%.2f kg)",
+                                i, #results.failed, entry.name, entry.weight
+                            ), C.warning)
+                        else
+                            FWF_SetStatus(string.format(
+                                "❌ [%d/%d] %s gagal",
+                                i, #results.failed, entry.name
+                            ), C.danger)
+                        end
+                        
+                        task.wait(FWF_Config.shovelInterval)
+                    end
+                    
+                    FWF_SetStatus(string.format(
+                        "✅ Cycle %d selesai. Shovel: %d | Total: %d",
+                        FWF_State.currentCycle, shovelCount, FWF_State.totalShoveled
+                    ), C.success)
+                    
+                    task.wait(FWF_Config.scanInterval)
                 end
                 
-                FWF_SetStatus(string.format(
-                    "✅ Cycle %d selesai. Shovel: %d | Total: %d",
-                    FWF_State.currentCycle, shovelCount, FWF_State.totalShoveled
-                ), C.success)
-                
-                task.wait(FWF_Config.scanInterval)
+                FWF_UIRefs.startBtn.Text = "▶️ START"
+                FWF_UIRefs.startBtn.BackgroundColor3 = C.success
+                FWF_SetStatus("⏹️ Stopped", C.textDim)
+            end)
+        end
+        
+        -- ============================================================
+        -- HOOK BUTTON
+        -- ============================================================
+        fwfStartBtn.MouseButton1Click:Connect(function()
+            if FWF_State.isRunning then
+                FWF_State.isRunning = false
+                FWF_SetStatus("⏹️ Stopping...", C.warning)
+            else
+                if next(FWF_Config.selectedFruits) == nil then
+                    FWF_SetStatus("ℹ️ Tidak ada filter, akan scan SEMUA", C.accent)
+                end
+                FWF_StartLoop()
             end
-            
-            FWF_UIRefs.startBtn.Text = "▶️ START"
-            FWF_UIRefs.startBtn.BackgroundColor3 = C.success
-            FWF_SetStatus("⏹️ Stopped", C.textDim)
         end)
     end
-    
-    -- ============================================================
-    -- HOOK BUTTON
-    -- ============================================================
-    fwfStartBtn.MouseButton1Click:Connect(function()
-        if FWF_State.isRunning then
-            FWF_State.isRunning = false
-            FWF_SetStatus("⏹️ Stopping...", C.warning)
-        else
-            if next(FWF_Config.selectedFruits) == nil then
-                FWF_SetStatus("ℹ️ Tidak ada filter, akan scan SEMUA", C.accent)
-            end
-            FWF_StartLoop()
-        end
-    end)
-end
 end -- BLOCK 14C
 -- ==================================================================
 -- BLOCK 15A: AUTO CRAFTING — HELPERS (isolated)
