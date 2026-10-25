@@ -13647,7 +13647,10 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
     local farmScroll = _G.AoneHub_registry.farmScroll
     local createSection = _G.AoneHub_registry.createSection
     local C = _G.AoneHub_registry.C
-    
+    -- Apakah ada baris ini di dalam sub-block FWF?
+    local RemoveItemRE = GameEvents:WaitForChild("Remove_Item")
+    local DeleteObjectRE = GameEvents:WaitForChild("DeleteObject")
+        
     if not farmScroll or not createSection then
         warn("[AoneHub] FruitWeightFarm: registry tidak lengkap")
         return
@@ -13656,7 +13659,7 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
     -- ══════════════════════════════════════════════════════════════
 -- SECTION: FRUIT WEIGHT FARM
 -- ══════════════════════════════════════════════════════════════
-do -- SUB-BLOCK: FruitWeightFarm (isolated)
+    -- SUB-BLOCK: FruitWeightFarm (isolated)
     -- ============================================================
     -- STATE ISOLATION (tidak bocor ke block lain)
     -- ============================================================
@@ -14386,9 +14389,6 @@ end
             FWF_StartLoop()
         end
     end)
-    
-    print("✅ [FruitWeightFarm] Section loaded")
-end -- SUB-BLOCK: FruitWeightFarm
 end -- BLOCK 14C
 -- ==================================================================
 -- BLOCK 15A: AUTO CRAFTING — HELPERS (isolated)
