@@ -3815,19 +3815,21 @@ end  -- ← end penutup loadAoneHubTrade
 
 local function loadAoneHubMain()
     
--- [PATCH 2A] Cleanup instance lama (execute 2x protection)
+-- [PATCH 2A-FIX] Cleanup instance lama (execute 2x protection)
+-- ⭐ pakai _G saja, TIDAK tambah local variable di scope ini
 if _G.AoneHub_MainCleanup then
     pcall(_G.AoneHub_MainCleanup)
     _G.AoneHub_MainCleanup = nil
 end
-local oldMainGui = playerGui:FindFirstChild("AoneHub")
-if oldMainGui then
-    pcall(function() oldMainGui:Destroy() end)
+do
+    local oldGui = playerGui:FindFirstChild("AoneHub")
+    if oldGui then
+        pcall(function() oldGui:Destroy() end)
+    end
 end
 
--- Instance ID untuk guard config
-local MY_INSTANCE_ID = tostring(os.time()) .. "_" .. tostring(math.random(1, 999999))
-_G.AoneHub_InstanceId = MY_INSTANCE_ID
+-- Instance ID disimpan di _G — tidak butuh local
+_G.AoneHub_InstanceId = tostring(os.time()) .. "_" .. tostring(math.random(1, 999999))
 
 -- ==================================================================
 -- SERVICES & REQUIREMENTS
@@ -4118,9 +4120,12 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
             return false
         end
 
+        -- ⭐ Simpan instance ID lokal supaya saveConfig tahu miliknya siapa
+        -- (dideklarasi di scope loadAoneHubMain via task.defer di Patch 2B)
         function saveConfig()
-            -- [PATCH 5] Guard: hanya instance aktif yang boleh save
-            if _G.AoneHub_InstanceId and _G.AoneHub_InstanceId ~= MY_INSTANCE_ID then
+            -- [PATCH 5-FIX] Guard: hanya instance aktif yang boleh save
+            -- Bandingkan dengan instance ID yang di-set saat runtime
+            if _G.AoneHub_MySaveId and _G.AoneHub_MySaveId ~= _G.AoneHub_InstanceId then
                 return
             end
     
@@ -10569,36 +10574,60 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
             end
         end
     end
-
-
-    print("✅ AoneHub Auto Leveling loaded! Config:", SAVE_FILE)
+        print("✅ AoneHub Auto Leveling loaded! Config:", SAVE_FILE)
 end -- BLOCK 10
 
--- [PATCH 2B] Kill switch untuk instance berikutnya
+-- [PATCH 2B-FIX] Kill switch — pakai _G saja, tidak tambah local
 task.defer(function()
+    -- ⭐ Simpan instance ID milik instance INI ke _G khusus
+    _G.AoneHub_MySaveId = _G.AoneHub_InstanceId
+    
     _G.AoneHub_MainCleanup = function()
-        if _G.AoneHub_InstanceId ~= MY_INSTANCE_ID then
+        -- Cek: masih instance aktif?
+        if _G.AoneHub_MySaveId ~= _G.AoneHub_InstanceId then
             return
         end
-        isGuiDestroyed = true
-        isLeveling = false
-        isRunning = false
-        isGiftPetRunning = false
-        giftPetUserStarted = false
-        isAutoShovelRunning = false
-        isAutoCollectRunning = false
-        rainbowMode = false
-        if rainbowTask then pcall(task.cancel, rainbowTask) rainbowTask = nil end
+        
+        -- Set flag via _G (tidak bisa akses local isRunning dll dari sini!)
+        -- ⚠️ Karena isRunning, isLeveling, dll adalah local di scope ini,
+        -- kita HARUS akses lewat closure. Tapi closure tetap tidak menambah
+        -- local slot di parent scope — hanya di scope task.defer ini.
+        if _G.AoneHub_SetFlag then
+            pcall(_G.AoneHub_SetFlag, "isGuiDestroyed", true)
+            pcall(_G.AoneHub_SetFlag, "isLeveling", false)
+            pcall(_G.AoneHub_SetFlag, "isRunning", false)
+            pcall(_G.AoneHub_SetFlag, "isGiftPetRunning", false)
+            pcall(_G.AoneHub_SetFlag, "giftPetUserStarted", false)
+            pcall(_G.AoneHub_SetFlag, "isAutoShovelRunning", false)
+            pcall(_G.AoneHub_SetFlag, "isAutoCollectRunning", false)
+            pcall(_G.AoneHub_SetFlag, "rainbowMode", false)
+        end
+        
         if AutoMutation_Shared and AutoMutation_Shared.state then
             AutoMutation_Shared.state.isRunning = false
         end
         if AutoBuyBackend and AutoBuyBackend.stop then
             pcall(AutoBuyBackend.stop)
         end
+        
         local gui = playerGui:FindFirstChild("AoneHub")
         if gui then pcall(function() gui:Destroy() end) end
     end
 end)
+
+-- ⭐ Expose setter untuk flag supaya kill switch bisa akses
+-- (didefinisikan sebagai function, bukan local variable)
+_G.AoneHub_SetFlag = function(flagName, value)
+    if flagName == "isGuiDestroyed" then isGuiDestroyed = value
+    elseif flagName == "isLeveling" then isLeveling = value
+    elseif flagName == "isRunning" then isRunning = value
+    elseif flagName == "isGiftPetRunning" then isGiftPetRunning = value
+    elseif flagName == "giftPetUserStarted" then giftPetUserStarted = value
+    elseif flagName == "isAutoShovelRunning" then isAutoShovelRunning = value
+    elseif flagName == "isAutoCollectRunning" then isAutoCollectRunning = value
+    elseif flagName == "rainbowMode" then rainbowMode = value
+    end
+end
 
 -- shared: diisi di BLOCK 11 (TAB HATCH)
 local statusLabel, refreshEggList, refreshUnwantedList, populateMutationhaList
