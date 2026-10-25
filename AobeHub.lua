@@ -7021,21 +7021,6 @@ return true
             mutationStr = #mutationList > 0 and table.concat(mutationList, ","):lower() or "",
         }
     end
-
-    -- ⭐ FUNGSI BARU: Cek apakah buah sudah matang
-    local function isFruitReady(fruit)
-        local grow = fruit:FindFirstChild("Grow")
-        if not grow then return false end
-    
-        local age = grow:FindFirstChild("Age")
-        if not age then return false end
-    
-        local maxAge = fruit:GetAttribute("MaxAge")
-        if not maxAge then return false end
-    
-        -- Return true jika umur sudah mencapai maksimal
-        return age.Value >= maxAge
-    end
             
     local function isFruit(object)
         if not object or not object:IsA("Model") then return false end
@@ -7072,25 +7057,28 @@ return true
     end
 
     function scanFruits()
-        local farm = getMyFarmForShovel()
-        if not farm then return {}, {} end
-
         local matched, allFound = {}, {}
-        for _, desc in ipairs(farm:GetDescendants()) do
-            if isFruit(desc) then
-                local info = getFruitInfo(desc)
+    
+        -- ⭐ GUNAKAN COLLECTIONSERVICE (Sama seperti Debug Scanner)
+        for _, fruit in ipairs(CollectionService:GetTagged("Harvestable")) do
+            if fruit:IsA("Model") and IsMyFruit(fruit) then
+                local info = getFruitInfo(fruit)
+            
                 if info and info.name ~= "" then
                     table.insert(allFound, info)
                 
-                    -- ⭐ Tambahkan isFruitReady(desc) ke dalam filter
-                    if isFruitReady(desc) and matchTargetFruit(info) and matchWeight(info) and matchMutation(info) then
+                    -- Filter (Nama, Weight, Mutation)
+                    -- Kita TIDAK PERLU cek isReady/Age lagi, karena 
+                    -- jika ada di tag Harvestable, berarti sudah ready 100%.
+                    if matchTargetFruit(info) and matchWeight(info) and matchMutation(info) then
                         table.insert(matched, info)
                     end
                 end
             end
         end
-        return matched, allFound
-    end
+    
+    return matched, allFound
+            end
 
     local function autoSellFruit()
         if not autoCollectSellEnabled then
