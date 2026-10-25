@@ -13675,9 +13675,9 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
         
         FWF_UIRefs = {}
         
-        -- Ambil remote langsung (variable global)
-        RemoveItemRE = GameEvents:WaitForChild("Remove_Item")
-        DeleteObjectRE = GameEvents:WaitForChild("DeleteObject")
+        -- Ambil langsung dari ReplicatedStorage agar tidak error nil
+        RemoveItemRE = ReplicatedStorage:WaitForChild("GameEvents"):WaitForChild("Remove_Item")
+        DeleteObjectRE = ReplicatedStorage:WaitForChild("GameEvents"):WaitForChild("DeleteObject")
                 
         -- ⭐ LOAD dari AoneHub config
         if _G.AoneHub_Config then
