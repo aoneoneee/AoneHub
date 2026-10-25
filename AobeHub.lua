@@ -6933,29 +6933,39 @@ return true
     end
 
     function loadFruitList()
-        local ok, fruitData = pcall(function()
-            return require(ReplicatedStorage.Modules.PlantTraitsData.Fruit)
+        local names, seen = {}, {}
+    
+        -- ⭐ Ambil dari SeedData (Sumber FWF)
+        local SeedData_local = nil
+        pcall(function()
+            SeedData_local = require(ReplicatedStorage.Data.SeedData)
         end)
-        if ok and fruitData and fruitData.Plants then
-            for _, fruitName in ipairs(fruitData.Plants) do
-                KNOWN_FRUITS[fruitName:lower()] = fruitName
+    
+        if SeedData_local then
+            for name, _ in pairs(SeedData_local) do
+                if not seen[name] then
+                    seen[name] = true
+                    table.insert(names, name)
+                end
             end
-            return
         end
-        -- Fallback
-        warn("[Auto Collect] Fallback fruits")
-        local FALLBACK = {
-            "Apple","Banana","Blueberry","Cherry","Coconut",
-            "Cranberry","Dragon Fruit","Durian","Grape","Lemon",
-            "Lime","Mango","Papaya","Passionfruit","Peach","Pear",
-            "Pineapple","Raspberry","Strawberry","Watermelon",
-            "Starfruit","Kiwi","Tomato","Pumpkin","Corn","Carrot",
-        }
-        for _, name in ipairs(FALLBACK) do
-            KNOWN_FRUITS[name:lower()] = name
+    
+        -- Fallback jika SeedData kosong
+        if #names == 0 then
+            for _, f in ipairs(CollectionService:GetTagged("Harvestable")) do
+                if f:IsA("Model") and not seen[f.Name] then
+                    seen[f.Name] = true
+                    table.insert(names, f.Name)
+                end
+            end
+        end
+    
+        -- Masukkan ke table KNOWN_FRUITS
+        for _, fruitName in ipairs(names) do
+            KNOWN_FRUITS[fruitName:lower()] = fruitName
         end
     end
-
+            
     function getFruitCapacity()
         if not DataService then return 0, 0 end
         local data = DataService:GetData()
@@ -7012,6 +7022,21 @@ return true
         }
     end
 
+    -- ⭐ FUNGSI BARU: Cek apakah buah sudah matang
+    local function isFruitReady(fruit)
+        local grow = fruit:FindFirstChild("Grow")
+        if not grow then return false end
+    
+        local age = grow:FindFirstChild("Age")
+        if not age then return false end
+    
+        local maxAge = fruit:GetAttribute("MaxAge")
+        if not maxAge then return false end
+    
+        -- Return true jika umur sudah mencapai maksimal
+        return age.Value >= maxAge
+    end
+            
     local function isFruit(object)
         if not object or not object:IsA("Model") then return false end
         local nameLower = object.Name:lower()
@@ -7056,7 +7081,9 @@ return true
                 local info = getFruitInfo(desc)
                 if info and info.name ~= "" then
                     table.insert(allFound, info)
-                    if matchTargetFruit(info) and matchWeight(info) and matchMutation(info) then
+                
+                    -- ⭐ Tambahkan isFruitReady(desc) ke dalam filter
+                    if isFruitReady(desc) and matchTargetFruit(info) and matchWeight(info) and matchMutation(info) then
                         table.insert(matched, info)
                     end
                 end
@@ -7168,7 +7195,8 @@ return true
 
                 if #matched == 0 then
                     if autoCollectStatus then
-                        autoCollectStatus(string.format("⏳ Tidak ada cocok (%d found, %d/%d)",
+                        -- Tampilkan total buah yang ada di kebun vs yang siap panen
+                        autoCollectStatus(string.format("⏳ Menunggu matang (%d total, %d/%d slot)",
                             #allFound, current, max))
                     end
                     continue
@@ -12921,12 +12949,12 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- ==================================================================
     local CollectSection = createSection(farmScroll, "🍓 Auto Collect Fruit", "autoCollect")
     CollectSection.LayoutOrder = 2
-    CollectSection.Size = UDim2.new(1, -10, 0, 260)
+    CollectSection.Size = UDim2.new(1, -10, 0, 221)
 
     -- Info label
     local collectInfoLabel = Instance.new("TextLabel")
     collectInfoLabel.Size = UDim2.new(1, -20, 0, 24)
-    collectInfoLabel.Position = UDim2.new(0, 10, 0, 32)
+    collectInfoLabel.Position = UDim2.new(0, 10, 0, 28)
     collectInfoLabel.BackgroundTransparency = 1
     collectInfoLabel.Font = Enum.Font.Gotham
     collectInfoLabel.TextSize = 8
@@ -12939,7 +12967,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- Tombol Buka List Buah
     local openFruitListBtn = Instance.new("TextButton")
     openFruitListBtn.Size = UDim2.new(0.5, -15, 0, 26)
-    openFruitListBtn.Position = UDim2.new(0, 10, 0, 62)
+    openFruitListBtn.Position = UDim2.new(0, 10, 0, 57)
     openFruitListBtn.BackgroundColor3 = C.accent
     openFruitListBtn.BorderSizePixel = 0
     openFruitListBtn.Font = Enum.Font.GothamBold
@@ -12953,7 +12981,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- Tombol Buka List Mutation
     local openMutListBtn = Instance.new("TextButton")
     openMutListBtn.Size = UDim2.new(0.5, -15, 0, 26)
-    openMutListBtn.Position = UDim2.new(0.5, 5, 0, 62)
+    openMutListBtn.Position = UDim2.new(0.5, 5, 0, 57)
     openMutListBtn.BackgroundColor3 = C.accent
     openMutListBtn.BorderSizePixel = 0
     openMutListBtn.Font = Enum.Font.GothamBold
@@ -12967,7 +12995,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- Input max weight
     local maxWeightLbl = Instance.new("TextLabel")
     maxWeightLbl.Size = UDim2.new(0.55, -15, 0, 14)
-    maxWeightLbl.Position = UDim2.new(0, 10, 0, 96)
+    maxWeightLbl.Position = UDim2.new(0, 10, 0, 88)
     maxWeightLbl.BackgroundTransparency = 1
     maxWeightLbl.Text = "⚖️ Max Weight (0 = unlimited):"
     maxWeightLbl.TextColor3 = C.textDim
@@ -12978,7 +13006,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
 
     local maxWeightInput = Instance.new("TextBox")
     maxWeightInput.Size = UDim2.new(0.45, -15, 0, 20)
-    maxWeightInput.Position = UDim2.new(0.55, 5, 0, 93)
+    maxWeightInput.Position = UDim2.new(0.55, 5, 0, 85)
     maxWeightInput.BackgroundColor3 = Color3.fromRGB(55, 55, 70)
     maxWeightInput.BorderSizePixel = 0
     maxWeightInput.Font = Enum.Font.Gotham
@@ -12999,7 +13027,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- Toggle Auto Sell
     local autoSellToggle = Instance.new("TextButton")
     autoSellToggle.Size = UDim2.new(1, -20, 0, 26)
-    autoSellToggle.Position = UDim2.new(0, 10, 0, 122)
+    autoSellToggle.Position = UDim2.new(0, 10, 0, 110)
     autoSellToggle.BackgroundColor3 = autoCollectSellEnabled and C.success or Color3.fromRGB(70, 70, 85)
     autoSellToggle.BorderSizePixel = 0
     autoSellToggle.Font = Enum.Font.GothamBold
@@ -13025,7 +13053,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- Info kapasitas
     local capacityLabel = Instance.new("TextLabel")
     capacityLabel.Size = UDim2.new(1, -20, 0, 14)
-    capacityLabel.Position = UDim2.new(0, 10, 0, 155)
+    capacityLabel.Position = UDim2.new(0, 10, 0, 141)
     capacityLabel.BackgroundTransparency = 1
     capacityLabel.Text = "📦 Fruit: -/-"
     capacityLabel.TextColor3 = C.textDim
@@ -13051,7 +13079,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- Tombol START
     local AutoCollectBtn = Instance.new("TextButton")
     AutoCollectBtn.Size = UDim2.new(1, -20, 0, 32)
-    AutoCollectBtn.Position = UDim2.new(0, 10, 0, 178)
+    AutoCollectBtn.Position = UDim2.new(0, 10, 0, 160)
     AutoCollectBtn.BackgroundColor3 = C.success
     AutoCollectBtn.BorderSizePixel = 0
     AutoCollectBtn.Font = Enum.Font.GothamBold
@@ -13065,7 +13093,7 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     -- Status
     local AutoCollectStatusLbl = Instance.new("TextLabel")
     AutoCollectStatusLbl.Size = UDim2.new(1, -20, 0, 14)
-    AutoCollectStatusLbl.Position = UDim2.new(0, 10, 0, 215)
+    AutoCollectStatusLbl.Position = UDim2.new(0, 10, 0, 197)
     AutoCollectStatusLbl.BackgroundTransparency = 1
     AutoCollectStatusLbl.Text = "Status: Idle"
     AutoCollectStatusLbl.TextColor3 = C.textDim
@@ -13797,8 +13825,14 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
         function FWF_ShovelFruit(fruit)
             if not fruit or not fruit.Parent then return false end
             if not FWF_IsMyFruit(fruit) then return false end
+    
+            -- ⭐ Cek favorit sebelum shovel
+            if fruit:GetAttribute("Favorited") then 
+                return false 
+            end
+    
             if not FWF_EquipShovel() then return false end
-            
+
             if fruit:FindFirstChild("Grow") then
                 local ok = pcall(function() RemoveItemRE:FireServer(fruit) end)
                 if ok then
@@ -13820,6 +13854,10 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
             local results = { passed = {}, failed = {} }
             for _, fruit in ipairs(CollectionService:GetTagged("Harvestable")) do
                 if not (fruit:IsA("Model") and FWF_IsMyFruit(fruit) and fruit.Parent) then continue end
+        
+                -- ⭐ Tambahkan baris ini untuk skip buah favorit
+                if fruit:GetAttribute("Favorited") then continue end
+        
                 local name = fruit.Name
                 if next(FWF_Config.selectedFruits) ~= nil and not FWF_Config.selectedFruits[name] then
                     continue
@@ -15979,11 +16017,11 @@ end
     local presetSection = createSection(amScroll)
     presetSection.LayoutOrder = 4
     -- ⭐ Perbesar tinggi section agar dropdown muat
-    presetSection.Size = UDim2.new(1, -10, 0, 83)
+    presetSection.Size = UDim2.new(1, -10, 0, 65)
     
     local startAMBtn = Instance.new("TextButton")
     startAMBtn.Size = UDim2.new(1, -20, 0, 26)
-    startAMBtn.Position = UDim2.new(0, 10, 0, 28)
+    startAMBtn.Position = UDim2.new(0, 10, 0, 10)
     startAMBtn.BackgroundColor3 = C.success
     startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
     startAMBtn.TextColor3 = C.text
@@ -15994,7 +16032,7 @@ end
 
     local amStatusLbl = Instance.new("TextLabel")
     amStatusLbl.Size = UDim2.new(1, -20, 0, 14)
-    amStatusLbl.Position = UDim2.new(0, 10, 0, 59)
+    amStatusLbl.Position = UDim2.new(0, 10, 0, 41)
     amStatusLbl.BackgroundTransparency = 1
     amStatusLbl.Text = "Status: Idle"
     amStatusLbl.TextColor3 = C.textDim
