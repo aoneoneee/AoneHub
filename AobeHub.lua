@@ -15124,41 +15124,50 @@ do
     end
 
     -- ============================================================
-    -- START / STOP FUNCTIONS
-    -- ============================================================
-    local function startPanel(key)
-        local ref = acPanelRefs[key]
-        local st = acState[key]
-        if not ref or not st then return end
+-- START / STOP FUNCTIONS
+-- ============================================================
+local function startPanel(key)
+    local ref = acPanelRefs[key]
+    local st = acState[key]
+    if not ref or not st then return end
 
-        st.workbench = H.findWB(ref.cfg.machineType)
-        if not st.workbench then
-            setStatus(key, "Workbench not found", C.warning)
-            return
-        end
-        if not st.selectedRecipe then
-            setStatus(key, "Select recipe first!", C.warning)
-            return
-        end
-
-        st.running = true
-        st.failCount = 0
-        ref.startBtn.Text = "STOP"
-        ref.startBtn.BackgroundColor3 = C.danger
-        runLoop(key)
+    st.workbench = H.findWB(ref.cfg.machineType)
+    if not st.workbench then
+        setStatus(key, "Workbench not found", C.warning)
+        return
+    end
+    if not st.selectedRecipe then
+        setStatus(key, "Select recipe first!", C.warning)
+        return
     end
 
-    local function stopPanel(key)
-        local ref = acPanelRefs[key]
-        local st = acState[key]
-        if not ref or not st then return end
+    st.running = true
+    st.failCount = 0
+    ref.startBtn.Text = "STOP"
+    ref.startBtn.BackgroundColor3 = C.danger
+    
+    -- ⭐ TAMBAHKAN INI: Simpan status ke config
+    config[ref.cfg.configRunningKey] = true
+    saveConfig()
+    
+    runLoop(key)
+end
 
-        st.running = false
-        st.failCount = 0
-        ref.startBtn.Text = "START"
-        ref.startBtn.BackgroundColor3 = C.success
-        setStatus(key, "Stopped", C.textDim)
-    end
+local function stopPanel(key)
+    local ref = acPanelRefs[key]
+    local st = acState[key]
+    if not ref or not st then return end
+
+    st.running = false
+    st.failCount = 0
+    ref.startBtn.Text = "START"
+    ref.startBtn.BackgroundColor3 = C.success
+    setStatus(key, "Stopped", C.textDim)
+    
+    -- ⭐ TAMBAHKAN INI: Hapus/simpan status OFF ke config
+    config[ref.cfg.configRunningKey] = false
+    saveConfig()
+end
 
     -- ============================================================
     -- EVENT HANDLERS
@@ -15184,55 +15193,54 @@ do
     end
 
     -- ============================================================
-    -- INIT
-    -- ============================================================
-    task.spawn(function()
-        task.wait(0.5)
+-- INIT
+-- ============================================================
+task.spawn(function()
+    task.wait(0.5)
 
-        for _, cfg in ipairs(WORKBENCH_LIST) do
-            local key = cfg.key
-            local st = acState[key]
+    for _, cfg in ipairs(WORKBENCH_LIST) do
+        local key = cfg.key
+        local st = acState[key]
 
-            -- Render list (selected akan di atas)
-            renderList(key)
+        -- Render list (selected akan di atas)
+        renderList(key)
 
-            -- Cek workbench
-            local wb = H.findWB(cfg.machineType)
-            if wb then
-                st.workbench = wb
-                local status, info = H.getMachineStatus(wb)
-                if status == "waiting" and info then
-                    local rem = info.timeRemaining or 0
-                    local remStr = string.format("%dm%ds",
-                        math.floor(rem / 60), math.floor(rem % 60))
-                    setStatus(key, "Crafting (" .. remStr .. ")", C.accent)
-                elseif status == "done" then
-                    setStatus(key, "Ready to claim", C.warning)
-                else
-                    setStatus(key, "Ready", C.success)
-                end
+        -- Cek workbench
+        local wb = H.findWB(cfg.machineType)
+        if wb then
+            st.workbench = wb
+            local status, info = H.getMachineStatus(wb)
+            if status == "waiting" and info then
+                local rem = info.timeRemaining or 0
+                local remStr = string.format("%dm%ds",
+                    math.floor(rem / 60), math.floor(rem % 60))
+                setStatus(key, "Crafting (" .. remStr .. ")", C.accent)
+            elseif status == "done" then
+                setStatus(key, "Ready to claim", C.warning)
             else
-                setStatus(key, "Workbench not found", C.warning)
+                setStatus(key, "Ready", C.success)
             end
+        else
+            setStatus(key, "Workbench not found", C.warning)
         end
+    end
 
-        -- ⭐ AUTO-START: Kalau config ON & resep ada → langsung start
-        task.wait(1)
-        for _, cfg in ipairs(WORKBENCH_LIST) do
-            local key = cfg.key
-            local st = acState[key]
-            local isAutoStartOn = config[cfg.configRunningKey] == true
+    -- ⭐ TAMBAHKAN BLOK AUTO-START INI:
+    task.wait(1)
+    for _, cfg in ipairs(WORKBENCH_LIST) do
+        local key = cfg.key
+        local st = acState[key]
+        local isAutoStartOn = config[cfg.configRunningKey] == true
 
-            if isAutoStartOn and st.selectedRecipe then
-                print(string.format("[AutoCraft] Auto-start %s: %s", key, st.selectedRecipe))
-                startPanel(key)
-            elseif isAutoStartOn and not st.selectedRecipe then
-                setStatus(key, "Auto-start ON tapi item belum dipilih", C.warning)
-                print(string.format("[AutoCraft] Auto-start %s gagal: item belum dipilih", key))
-            end
+        if isAutoStartOn and st.selectedRecipe then
+            print(string.format("[AutoCraft] Auto-start %s: %s", key, st.selectedRecipe))
+            startPanel(key) -- Ini akan otomatis mengubah tombol menjadi STOP
+        elseif isAutoStartOn and not st.selectedRecipe then
+            setStatus(key, "Auto-start ON tapi resep belum dipilih", C.warning)
+            print(string.format("[AutoCraft] Auto-start %s gagal: resep kosong", key))
         end
-    end)
-
+    end
+end)
     -- ============================================================
     -- AUTO REFRESH STATUS
     -- ============================================================
