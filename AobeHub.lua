@@ -15702,7 +15702,7 @@ do
     -- ============================================================
     local cfgSection = createSection(amScroll, "⚙️ Configuration", "amConfig")
     cfgSection.LayoutOrder = 1
-    cfgSection.Size = UDim2.new(1, -10, 0, 80)
+    cfgSection.Size = UDim2.new(1, -10, 0, 211)
     
     local minLvlLbl = Instance.new("TextLabel")
     minLvlLbl.Size = UDim2.new(0.5, -15, 0, 16)
@@ -15729,13 +15729,129 @@ do
     
     minLvlBox.FocusLost:Connect(function()
         local n = tonumber(minLvlBox.Text)
-        if n and n >= 1 and n <= 9999 then
+        if n and n >= 50 and n <= 9999 then
             state.minLevel = math.floor(n)
             L.saveState()
         else
             minLvlBox.Text = tostring(state.minLevel)
         end
     end)
+
+    local presetButtons = {}
+
+    -- ⭐ Helper untuk membuat baris dropdown preset + slot
+    local function createPresetRow(yPos, label, presetKey, slotKey)
+    -- Label
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -20, 0, 12)
+    lbl.Position = UDim2.new(0, 10, 0, yPos)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = label
+    lbl.TextColor3 = C.textDim
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 8
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = cfgSection
+
+    -- ⭐ Dropdown Dinamis untuk Preset
+    local dropdown = createDynamicDropdown(
+        cfgSection,
+        UDim2.new(0, 10, 0, yPos + 14),
+        state[presetKey] and string.format("📂 %s", state[presetKey]) or "📂 Pilih preset...",
+        cfgSection,
+        211, -- base height (bisa disesuaikan)
+        amScroll
+    )
+    
+    -- Simpan referensi
+    presetButtons[presetKey] = dropdown
+    presetButtons[slotKey] = nil -- slot button akan dibuat manual
+
+    -- Callback saat dropdown dibuka (populate list)
+    dropdown.HeaderButton.MouseButton1Click:Connect(function()
+        if not dropdown.IsOpen() then
+            local names = S.getPresetNamesFromAoneHub()
+            -- Clear existing
+            for _, child in pairs(dropdown.ListScroll:GetChildren()) do
+                if child:IsA("TextButton") then child:Destroy() end
+            end
+            
+            local isClaim = (presetKey == "claimPreset")
+            local list = {}
+            if isClaim then table.insert(list, "") end
+            for _, n in ipairs(names) do table.insert(list, n) end
+
+            if #list == 0 then
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(1, -4, 0, dropdown.ItemHeight)
+                btn.BackgroundColor3 = Color3.fromRGB(65, 65, 80)
+                btn.Text = "❌ Tidak ada preset"
+                btn.TextColor3 = C.text
+                btn.TextSize = 8
+                btn.Parent = dropdown.ListScroll
+                return
+            end
+            for i, presetName in ipairs(list) do
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(1, -4, 0, dropdown.ItemHeight)
+                btn.BackgroundColor3 = (state[presetKey] == presetName) and C.success or Color3.fromRGB(65, 65, 80)
+                btn.Text = presetName == "" and "❌ (Kosong)" or string.format("📁 %s", presetName)
+                btn.TextColor3 = C.text
+                btn.TextSize = 8
+                btn.TextXAlignment = Enum.TextXAlignment.Left
+                btn.LayoutOrder = i
+                btn.ZIndex = 12
+                btn.Parent = dropdown.ListScroll
+                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
+                local pad = Instance.new("UIPadding")
+                pad.PaddingLeft = UDim.new(0, 6)
+                pad.Parent = btn
+
+                btn.MouseButton1Click:Connect(function()
+                    if presetName == "" then
+                        state[presetKey] = nil
+                        dropdown.HeaderButton.Text = "📂 Pilih preset..."
+                    else
+                        state[presetKey] = presetName
+                        dropdown.HeaderButton.Text = string.format("📂 %s", presetName)
+                    end
+                    L.saveState()
+                    dropdown.Close()
+                end)
+            end
+            dropdown.UpdateSize()
+        end
+    end)
+
+    -- ⭐ Tombol Slot (tetap manual)
+    local slotBtn = Instance.new("TextButton")
+    slotBtn.Size = UDim2.new(0.28, -15, 0, 28) -- Sesuaikan tinggi dengan dropdown header (28px)
+    slotBtn.Position = UDim2.new(0.72, 5, 0, yPos + 14)
+    slotBtn.BackgroundColor3 = C.accent
+    slotBtn.BorderSizePixel = 0
+    slotBtn.Font = Enum.Font.GothamBold
+    slotBtn.Text = "Slot " .. tostring(state[slotKey])
+    slotBtn.TextColor3 = C.text
+    slotBtn.TextSize = 8
+    slotBtn.AutoButtonColor = false
+    slotBtn.ZIndex = 5
+    slotBtn.Parent = cfgSection
+    Instance.new("UICorner", slotBtn).CornerRadius = UDim.new(0, 3)
+    
+    presetButtons[slotKey] = slotBtn
+
+    slotBtn.MouseButton1Click:Connect(function()
+        local next = (state[slotKey] or 1) + 1
+        if next > 3 then next = 1 end
+        state[slotKey] = next
+        slotBtn.Text = "Slot " .. tostring(next)
+        L.saveState()
+    end)
+end
+
+    createPresetRow(51, "Tim Leveling (wajib)", "levelingPreset", "levelingSlot")
+    createPresetRow(101, "Tim Machine (wajib)", "machinePreset", "machineSlot") -- ⭐ Jarak diperlebar
+    createPresetRow(151, "Tim Claim (opsional)", "claimPreset", "claimSlot")  -- ⭐ Jarak diperlebar
 
     -- ============================================================
     -- SECTION 2: PET TARGET
@@ -15860,131 +15976,14 @@ do
     -- ============================================================
     -- SECTION 4: PRESET & CONTROL
     -- ============================================================
-    local presetSection = createSection(amScroll, "⚙️ Preset & Kontrol", "amPreset")
+    local presetSection = createSection(amScroll)
     presetSection.LayoutOrder = 4
     -- ⭐ Perbesar tinggi section agar dropdown muat
-    presetSection.Size = UDim2.new(1, -10, 0, 270)
+    presetSection.Size = UDim2.new(1, -10, 0, 83)
     
-    local presetButtons = {}
-
-    -- ⭐ Helper untuk membuat baris dropdown preset + slot
-    local function createPresetRow(yPos, label, presetKey, slotKey)
-    -- Label
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -20, 0, 12)
-    lbl.Position = UDim2.new(0, 10, 0, yPos)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = label
-    lbl.TextColor3 = C.textDim
-    lbl.Font = Enum.Font.GothamBold
-    lbl.TextSize = 8
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = presetSection
-
-    -- ⭐ Dropdown Dinamis untuk Preset
-    local dropdown = createDynamicDropdown(
-        presetSection,
-        UDim2.new(0, 10, 0, yPos + 14),
-        state[presetKey] and string.format("📂 %s", state[presetKey]) or "📂 Pilih preset...",
-        presetSection,
-        200, -- base height (bisa disesuaikan)
-        amScroll
-    )
-    
-    -- Simpan referensi
-    presetButtons[presetKey] = dropdown
-    presetButtons[slotKey] = nil -- slot button akan dibuat manual
-
-    -- Callback saat dropdown dibuka (populate list)
-    dropdown.HeaderButton.MouseButton1Click:Connect(function()
-        if not dropdown.IsOpen() then
-            local names = S.getPresetNamesFromAoneHub()
-            -- Clear existing
-            for _, child in pairs(dropdown.ListScroll:GetChildren()) do
-                if child:IsA("TextButton") then child:Destroy() end
-            end
-            
-            local isClaim = (presetKey == "claimPreset")
-            local list = {}
-            if isClaim then table.insert(list, "") end
-            for _, n in ipairs(names) do table.insert(list, n) end
-
-            if #list == 0 then
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, -4, 0, dropdown.ItemHeight)
-                btn.BackgroundColor3 = Color3.fromRGB(65, 65, 80)
-                btn.Text = "❌ Tidak ada preset"
-                btn.TextColor3 = C.text
-                btn.TextSize = 8
-                btn.Parent = dropdown.ListScroll
-                return
-            end
-
-            for i, presetName in ipairs(list) do
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, -4, 0, dropdown.ItemHeight)
-                btn.BackgroundColor3 = (state[presetKey] == presetName) and C.success or Color3.fromRGB(65, 65, 80)
-                btn.Text = presetName == "" and "❌ (Kosong)" or string.format("📁 %s", presetName)
-                btn.TextColor3 = C.text
-                btn.TextSize = 8
-                btn.TextXAlignment = Enum.TextXAlignment.Left
-                btn.LayoutOrder = i
-                btn.ZIndex = 12
-                btn.Parent = dropdown.ListScroll
-                Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 3)
-                local pad = Instance.new("UIPadding")
-                pad.PaddingLeft = UDim.new(0, 6)
-                pad.Parent = btn
-
-                btn.MouseButton1Click:Connect(function()
-                    if presetName == "" then
-                        state[presetKey] = nil
-                        dropdown.HeaderButton.Text = "📂 Pilih preset..."
-                    else
-                        state[presetKey] = presetName
-                        dropdown.HeaderButton.Text = string.format("📂 %s", presetName)
-                    end
-                    L.saveState()
-                    dropdown.Close()
-                end)
-            end
-            dropdown.UpdateSize()
-        end
-    end)
-
-    -- ⭐ Tombol Slot (tetap manual)
-    local slotBtn = Instance.new("TextButton")
-    slotBtn.Size = UDim2.new(0.28, -15, 0, 28) -- Sesuaikan tinggi dengan dropdown header (28px)
-    slotBtn.Position = UDim2.new(0.72, 5, 0, yPos + 14)
-    slotBtn.BackgroundColor3 = C.accent
-    slotBtn.BorderSizePixel = 0
-    slotBtn.Font = Enum.Font.GothamBold
-    slotBtn.Text = "Slot " .. tostring(state[slotKey])
-    slotBtn.TextColor3 = C.text
-    slotBtn.TextSize = 8
-    slotBtn.AutoButtonColor = false
-    slotBtn.ZIndex = 5
-    slotBtn.Parent = presetSection
-    Instance.new("UICorner", slotBtn).CornerRadius = UDim.new(0, 3)
-    
-    presetButtons[slotKey] = slotBtn
-
-    slotBtn.MouseButton1Click:Connect(function()
-        local next = (state[slotKey] or 1) + 1
-        if next > 3 then next = 1 end
-        state[slotKey] = next
-        slotBtn.Text = "Slot " .. tostring(next)
-        L.saveState()
-    end)
-end
-
-    createPresetRow(28, "Tim Leveling (wajib)", "levelingPreset", "levelingSlot")
-    createPresetRow(78, "Tim Machine (wajib)", "machinePreset", "machineSlot") -- ⭐ Jarak diperlebar
-    createPresetRow(128, "Tim Claim (opsional)", "claimPreset", "claimSlot")  -- ⭐ Jarak diperlebar
-
     local startAMBtn = Instance.new("TextButton")
     startAMBtn.Size = UDim2.new(1, -20, 0, 26)
-    startAMBtn.Position = UDim2.new(0, 10, 0, 215)
+    startAMBtn.Position = UDim2.new(0, 10, 0, 28)
     startAMBtn.BackgroundColor3 = C.success
     startAMBtn.Text = "▶️ MULAI AUTO MUTATION"
     startAMBtn.TextColor3 = C.text
@@ -15995,7 +15994,7 @@ end
 
     local amStatusLbl = Instance.new("TextLabel")
     amStatusLbl.Size = UDim2.new(1, -20, 0, 14)
-    amStatusLbl.Position = UDim2.new(0, 10, 0, 245)
+    amStatusLbl.Position = UDim2.new(0, 10, 0, 59)
     amStatusLbl.BackgroundTransparency = 1
     amStatusLbl.Text = "Status: Idle"
     amStatusLbl.TextColor3 = C.textDim
