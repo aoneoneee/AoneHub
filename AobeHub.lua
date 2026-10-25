@@ -50,6 +50,11 @@ local playerGui = player:WaitForChild("PlayerGui")
 _G.AoneHub_IsAlive = true
 
 local cleanupReconnectListeners = nil
+
+-- [PATCH 1A] Expose cleanup functions dari do-end block
+local cleanupAutoBuy = nil
+local cleanupAutoListing = nil
+local cleanupSellMonitor = nil
     
 -- ==================================================================
 -- KONSTANTA
@@ -1792,6 +1797,9 @@ local function stopBuyLoop()
     end
     print("[AutoBuy] ❌ Event Listener Dimatikan.")
 end
+
+-- [PATCH 1B] Expose ke scope atas loadAoneHubTrade
+cleanupAutoBuy = stopBuyLoop
     
     -- ==============================================================
     -- SECTION 1: KONTROL UTAMA
@@ -2324,7 +2332,8 @@ local function processQueue()
     isProcessingQueue = true
     
     task.spawn(function()
-        while #queue > 0 and isListing do
+        -- [PATCH 7] Guard isGuiDestroyed
+        while #queue > 0 and isListing and not isGuiDestroyed do
             -- Cek kapasitas saat ini
             local currentListings = getMyCurrentListingCount()
             if currentListings >= 50 then
@@ -2591,6 +2600,18 @@ local function stopSellMonitor()
     end
     lastSellState = nil
     print("[Sell Monitor] ❌ Dimatikan")
+end
+
+-- [PATCH 1C] Expose cleanup functions ke scope atas loadAoneHubTrade
+cleanupSellMonitor = stopSellMonitor
+cleanupAutoListing = function()
+    isListing = false
+    if buyConnection then
+        buyConnection:Disconnect()
+        buyConnection = nil
+    end
+    table.clear(queue)
+    print("[AutoListing] ❌ Cleanup via close handler")
 end
 
 -- ⭐ Auto-start sell monitor saat script load (kalau webhook enabled)
@@ -3739,11 +3760,12 @@ closeBtn.MouseButton1Click:Connect(function()
     isGuiDestroyed = true
     _G.AoneHub_IsAlive = false
     
-    -- ⭐ Stop SEMUA loop dan listener
-    if stopBuyLoop then pcall(stopBuyLoop) end
+    -- [PATCH 1D] Stop SEMUA loop dan listener
+    if cleanupAutoBuy then pcall(cleanupAutoBuy) end
+    if cleanupAutoListing then pcall(cleanupAutoListing) end
+    if cleanupSellMonitor then pcall(cleanupSellMonitor) end
     if stopClaimLoop then pcall(stopClaimLoop) end
     if cleanupReconnectListeners then pcall(cleanupReconnectListeners) end
-    if stopSellMonitor then pcall(stopSellMonitor) end
             
     _G.SniperHub.SendWebhook("TradeInactive", { reason = "Script Di-close (Tombol X)" })
     screenGui:Destroy()
@@ -3753,13 +3775,13 @@ screenGui.Destroying:Connect(function()
     _G.AoneHub_IsAlive = false
     isGuiDestroyed = true
     
-    -- ⭐ Stop SEMUA loop dan listener
-    if stopBuyLoop then pcall(stopBuyLoop) end
+    -- [PATCH 1E] Stop SEMUA loop dan listener
+    if cleanupAutoBuy then pcall(cleanupAutoBuy) end
+    if cleanupAutoListing then pcall(cleanupAutoListing) end
+    if cleanupSellMonitor then pcall(cleanupSellMonitor) end
     if stopClaimLoop then pcall(stopClaimLoop) end
     if cleanupReconnectListeners then pcall(cleanupReconnectListeners) end
-    if stopSellMonitor then pcall(stopSellMonitor) end
     
-    -- Hanya kirim jika belum dikirim oleh tombol X
     if not isShuttingDown then
         if _G.SniperHub.SendWebhook then
             _G.SniperHub.SendWebhook("TradeInactive", { reason = "GUI Destroyed / Script Dimatikan" })
@@ -3778,16 +3800,13 @@ _G.AoneHub_Cleanup = function()
     isGuiDestroyed = true
     isShuttingDown = true
 
-    -- Stop AutoListing
-    if stopBuyLoop then pcall(stopBuyLoop) end
-
-    -- Stop AutoClaim
+    -- [PATCH 1F] Stop SEMUA loop dan listener
+    if cleanupAutoBuy then pcall(cleanupAutoBuy) end
+    if cleanupAutoListing then pcall(cleanupAutoListing) end
+    if cleanupSellMonitor then pcall(cleanupSellMonitor) end
     if stopClaimLoop then pcall(stopClaimLoop) end
-
     if cleanupReconnectListeners then pcall(cleanupReconnectListeners) end
-    if stopSellMonitor then pcall(stopSellMonitor) end
         
-    -- Destroy GUI (akan trigger screenGui.Destroying → bersihkan sisanya)
     if screenGui then 
         pcall(function() screenGui:Destroy() end) 
     end
@@ -3796,6 +3815,20 @@ end  -- ← end penutup loadAoneHubTrade
 
 local function loadAoneHubMain()
     
+-- [PATCH 2A] Cleanup instance lama (execute 2x protection)
+if _G.AoneHub_MainCleanup then
+    pcall(_G.AoneHub_MainCleanup)
+    _G.AoneHub_MainCleanup = nil
+end
+local oldMainGui = playerGui:FindFirstChild("AoneHub")
+if oldMainGui then
+    pcall(function() oldMainGui:Destroy() end)
+end
+
+-- Instance ID untuk guard config
+local MY_INSTANCE_ID = tostring(os.time()) .. "_" .. tostring(math.random(1, 999999))
+_G.AoneHub_InstanceId = MY_INSTANCE_ID
+
 -- ==================================================================
 -- SERVICES & REQUIREMENTS
 -- ==================================================================
@@ -4086,6 +4119,11 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         end
 
         function saveConfig()
+            -- [PATCH 5] Guard: hanya instance aktif yang boleh save
+            if _G.AoneHub_InstanceId and _G.AoneHub_InstanceId ~= MY_INSTANCE_ID then
+                return
+            end
+    
             local data = {}
             for k, v in pairs(config) do
                 if k ~= "eggGridOffsets" then
@@ -5769,7 +5807,8 @@ end
             end
 
             for i, pet in ipairs(toGift) do
-                if not isGiftPetRunning then break end
+                -- [PATCH 4B] Guard isGuiDestroyed
+                if not isGiftPetRunning or isGuiDestroyed then break end
                 print(string.format("[Gift Pet] [%d/%d] %s", i, #toGift, pet.name))
                 autoGiftOnePet(pet.name, config.giftPetTarget)
             end
@@ -6162,7 +6201,9 @@ return true
             isAutoAcceptActive = true
 
             task.spawn(function()
-                while #giftQueue > 0 do
+                -- [PATCH 4A] Guard isGuiDestroyed + config check
+                while #giftQueue > 0 and not isGuiDestroyed do
+                    if not config.giftEnabled then break end
                     local gift = table.remove(giftQueue, 1)
                     print(string.format("[Gift] Process: %s | %s", gift.id, gift.pet))
 
@@ -6192,7 +6233,6 @@ return true
                 isProcessingGiftQueue = false
                 isAutoAcceptActive = false
 
-                -- ⭐ SETELAH SEMUA GIFT ACCEPTED: Cek pet sharing 3x @ 10s
                 -- ⭐ SETELAH SEMUA GIFT ACCEPTED: Cek pet sharing 3x @ 10s
                 if isLeveling and not isCheckingPetSharing then
                     local anySharing = config.petSharingWeightPet or config.petSharingMutationPet
@@ -7173,6 +7213,10 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
     screenGui.Destroying:Connect(function()
         isGuiDestroyed = true
         isLeveling = false
+        -- [PATCH 3] Stop Auto Hatch & Auto Gift
+        isRunning = false
+        isGiftPetRunning = false
+        giftPetUserStarted = false
         isAutoShovelRunning = false
         isAutoCollectRunning = false
 
@@ -7183,7 +7227,7 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
         if AutoBuyBackend and AutoBuyBackend.stop then
             AutoBuyBackend.stop()
         end
-        
+    
         rainbowMode = false
         if rainbowTask then
             task.cancel(rainbowTask)
@@ -7322,6 +7366,12 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
     closeBtn.MouseButton1Click:Connect(function()
         isGuiDestroyed = true
         isLeveling = false
+        -- [PATCH 6] Reset flag sebelum Destroy()
+        isRunning = false
+        isGiftPetRunning = false
+        giftPetUserStarted = false
+        isAutoShovelRunning = false
+        isAutoCollectRunning = false
 
         if AutoMutation_Shared and AutoMutation_Shared.state then
             AutoMutation_Shared.state.isRunning = false
@@ -7330,7 +7380,7 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
         if AutoBuyBackend and AutoBuyBackend.stop then
             AutoBuyBackend.stop()
         end
-            
+        
         screenGui:Destroy()
     end)
 
@@ -10523,6 +10573,32 @@ do -- BLOCK 10: MAIN LOGIC AUTO LEVELING, TAB SWITCHING, INITIAL SETUP
 
     print("✅ AoneHub Auto Leveling loaded! Config:", SAVE_FILE)
 end -- BLOCK 10
+
+-- [PATCH 2B] Kill switch untuk instance berikutnya
+task.defer(function()
+    _G.AoneHub_MainCleanup = function()
+        if _G.AoneHub_InstanceId ~= MY_INSTANCE_ID then
+            return
+        end
+        isGuiDestroyed = true
+        isLeveling = false
+        isRunning = false
+        isGiftPetRunning = false
+        giftPetUserStarted = false
+        isAutoShovelRunning = false
+        isAutoCollectRunning = false
+        rainbowMode = false
+        if rainbowTask then pcall(task.cancel, rainbowTask) rainbowTask = nil end
+        if AutoMutation_Shared and AutoMutation_Shared.state then
+            AutoMutation_Shared.state.isRunning = false
+        end
+        if AutoBuyBackend and AutoBuyBackend.stop then
+            pcall(AutoBuyBackend.stop)
+        end
+        local gui = playerGui:FindFirstChild("AoneHub")
+        if gui then pcall(function() gui:Destroy() end) end
+    end
+end)
 
 -- shared: diisi di BLOCK 11 (TAB HATCH)
 local statusLabel, refreshEggList, refreshUnwantedList, populateMutationhaList
