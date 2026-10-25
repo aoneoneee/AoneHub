@@ -4053,7 +4053,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
 
             -- Auto Collect
             autoCollectMaxWeight = 0,
-            autoCollectInterval = 2,
+            autoCollectInterval = 10,
             autoCollectSellEnabled = true,
             autoCollectDelayAfterTeleport = 1,
             autoCollectDelayAfterSell = 3,
@@ -4301,7 +4301,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         autoCollectSelectedFruits = {}     -- set: ["strawberry"] = true
         autoCollectSelectedMutations = {}  -- set: ["glimmering"] = true
         autoCollectMaxWeight = 0
-        autoCollectInterval = 2
+        autoCollectInterval = 10
         autoCollectSellEnabled = true
         autoCollectDelayAfterTeleport = 1
         autoCollectDelayAfterSell = 3
@@ -7208,11 +7208,6 @@ return true
                 local matched, allFound = scanFruits()
 
                 if #matched == 0 then
-                    if autoCollectStatus then
-                        -- Tampilkan total buah yang ada di kebun vs yang siap panen
-                        autoCollectStatus(string.format("⏳ Menunggu matang (%d total, %d/%d slot)",
-                            #allFound, current, max))
-                    end
                     continue
                 end
 
