@@ -7056,6 +7056,18 @@ return true
         return false
     end
 
+    local function IsMyFruit(fruit)
+        local ancestor = fruit:FindFirstAncestor("Important")
+        if not ancestor then return false end
+    
+        local data = ancestor:FindFirstChild("Data")
+        if not data then return false end
+    
+        local owner = data:FindFirstChild("Owner")
+        if not owner or not owner.Value then return false end
+        return owner.Value == player.Name
+    end
+
     function scanFruits()
         local matched, allFound = {}, {}
     
