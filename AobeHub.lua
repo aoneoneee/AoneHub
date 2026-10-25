@@ -7068,10 +7068,26 @@ return true
         return owner.Value == player.Name
     end
 
+    local function isFruitReady(fruit)
+        -- Wajib punya tag Harvestable
+        if not fruit:HasTag("Harvestable") then return false end
+    
+        -- Wajib punya Grow & Age
+        local grow = fruit:FindFirstChild("Grow")
+        if not grow then return false end
+        local ageValue = grow:FindFirstChild("Age")
+        local maxAge = fruit:GetAttribute("MaxAge")
+    
+        if not ageValue or not maxAge then return false end
+    
+        -- Wajib 100% matang
+        return ageValue.Value >= maxAge
+    end
+            
     function scanFruits()
         local matched, allFound = {}, {}
     
-        -- ⭐ GUNAKAN COLLECTIONSERVICE (Sama seperti Debug Scanner)
+        -- Kita tetap pakai GetTagged agar lebih ringan dari GetDescendants
         for _, fruit in ipairs(CollectionService:GetTagged("Harvestable")) do
             if fruit:IsA("Model") and IsMyFruit(fruit) then
                 local info = getFruitInfo(fruit)
@@ -7079,18 +7095,16 @@ return true
                 if info and info.name ~= "" then
                     table.insert(allFound, info)
                 
-                    -- Filter (Nama, Weight, Mutation)
-                    -- Kita TIDAK PERLU cek isReady/Age lagi, karena 
-                    -- jika ada di tag Harvestable, berarti sudah ready 100%.
-                    if matchTargetFruit(info) and matchWeight(info) and matchMutation(info) then
+                    -- ⭐ FILTER GABUNGAN: Harus lolos isFruitReady (Tag + 100%)
+                    if isFruitReady(fruit) and matchTargetFruit(info) and matchWeight(info) and matchMutation(info) then
                         table.insert(matched, info)
                     end
                 end
             end
         end
     
-    return matched, allFound
-            end
+        return matched, allFound
+    end
 
     local function autoSellFruit()
         if not autoCollectSellEnabled then
