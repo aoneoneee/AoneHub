@@ -10666,6 +10666,129 @@ _G.AoneHub_SetFlag = function(flagName, value)
     end
 end
 
+-- ==================================================================
+-- ============= TAB EVENT (AUTO-LOAD DARI GITHUB) ==================
+-- ==================================================================
+do
+    local eventTab = tabFrames["Event"]
+
+    -- ⭐ GANTI DENGAN URL RAW GITHUB KAMU
+    local GITHUB_URL = "https://raw.githubusercontent.com/AoneOneHub/AoneHub/refs/heads/main/AoneHubEvent.lua"
+
+    -- Container Utama Event Tab
+    local eventScroll = Instance.new("ScrollingFrame")
+    eventScroll.Size = UDim2.new(1, -10, 1, -10)
+    eventScroll.Position = UDim2.new(0, 5, 0, 5)
+    eventScroll.BackgroundTransparency = 1
+    eventScroll.BorderSizePixel = 0
+    eventScroll.ScrollBarThickness = 4
+    eventScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 100)
+    eventScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    eventScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    eventScroll.Parent = eventTab
+
+    local eventLayout = Instance.new("UIListLayout")
+    eventLayout.Padding = UDim.new(0, 6)
+    eventLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    eventLayout.Parent = eventScroll
+
+    -- Loading Indicator
+    local loadingLbl = Instance.new("TextLabel")
+    loadingLbl.Size = UDim2.new(1, -20, 0, 60)
+    loadingLbl.Position = UDim2.new(0, 10, 0, 20)
+    loadingLbl.BackgroundTransparency = 1
+    loadingLbl.Text = "⏳ Memuat Event Script dari GitHub..."
+    loadingLbl.TextColor3 = C.textDim
+    loadingLbl.Font = Enum.Font.GothamBold
+    loadingLbl.TextSize = 10
+    loadingLbl.TextWrapped = true
+    loadingLbl.Parent = eventScroll
+    loadingLbl.LayoutOrder = 0
+
+    -- ⭐ Fungsi Fetch (mendukung berbagai executor)
+    local function fetchUrl(url)
+        if game.HttpGet then
+            return game.HttpGet(game, url)
+        elseif game.HttpGetAsync then
+            return game.HttpGetAsync(game, url)
+        elseif syn and syn.request then
+            return syn.request({Url = url, Method = "GET"}).Body
+        elseif request then
+            return request({Url = url, Method = "GET"}).Body
+        elseif http_request then
+            return http_request({Url = url, Method = "GET"}).Body
+        end
+        error("Executor tidak mendukung HTTP request")
+    end
+
+    -- ⭐ Fungsi Loader
+    local function loadEventScript()
+        -- Bersihkan konten lama (kecuali loading label)
+        for _, child in ipairs(eventScroll:GetChildren()) do
+            if child:IsA("GuiObject") and child ~= loadingLbl then
+                child:Destroy()
+            end
+        end
+
+        -- Reset loading state
+        if loadingLbl and loadingLbl.Parent then
+            loadingLbl.Text = "⏳ Memuat Event Script..."
+            loadingLbl.TextColor3 = C.textDim
+            loadingLbl.Visible = true
+        end
+
+        if isGuiDestroyed then return end
+
+        -- Set Context untuk script GitHub
+        _G.AoneHub_Event_Context = {
+            Scroll = eventScroll,
+            CreateSection = createSection,
+            Colors = C,
+            Layout = eventLayout,
+        }
+
+        -- Fetch & Execute
+        local success, err = pcall(function()
+            local source = fetchUrl(GITHUB_URL)
+            local func = loadstring(source, "AoneHub_Event_Module")
+            if not func then
+                error("Gagal compile script (loadstring nil)")
+            end
+            func()
+        end)
+
+        if loadingLbl and loadingLbl.Parent then
+            loadingLbl.Visible = false
+        end
+
+        if not success then
+            if loadingLbl and loadingLbl.Parent then
+                loadingLbl.Text = "❌ Gagal memuat Event Script:\n" .. tostring(err)
+                loadingLbl.TextColor3 = C.danger
+                loadingLbl.Size = UDim2.new(1, -20, 0, 100)
+                loadingLbl.Visible = true
+            end
+            warn("[AoneHub] Event Script Error: " .. tostring(err))
+        else
+            print("[AoneHub] ✅ Event Script loaded from GitHub.")
+        end
+    end
+
+    -- ⭐ AUTO-LOAD (delay 3 detik agar AoneHub selesai init)
+    task.spawn(function()
+        task.wait(3)
+        if isGuiDestroyed then return end
+        loadEventScript()
+    end)
+
+    -- ⭐ Expose reload function (bisa dipanggil dari console)
+    _G.AoneHub_ReloadEvent = function()
+        if isGuiDestroyed then return end
+        print("[AoneHub] Reloading Event Script...")
+        task.spawn(loadEventScript)
+    end
+end -- END OF TAB EVENT BLOCK
+    
 -- shared: diisi di BLOCK 11 (TAB HATCH)
 local statusLabel, refreshEggList, refreshUnwantedList, populateMutationhaList
 
