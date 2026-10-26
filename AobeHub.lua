@@ -4302,7 +4302,7 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
         autoCollectSelectedMutations = {}  -- set: ["glimmering"] = true
         autoCollectMaxWeight = 0
         autoCollectInterval = 10
-        autoCollectSellEnabled = true
+        autoCollectSellEnabled = config.autoCollectSellEnabled or true
         autoCollectDelayAfterTeleport = 1
         autoCollectDelayAfterSell = 3
         autoCollectDelayAfterReturn = 1
@@ -4332,6 +4332,12 @@ do -- GROUP: BACKEND (logic, state, helper, data) (BLOCK 1-5)
 
         colorIndex = 1
 
+        -- ⭐ Expose setter agar bisa dikontrol dari Script GitHub Tab Event
+        _G.AoneHub_SetAutoSellFruit = function(state)
+            autoCollectSellEnabled = state
+            config.autoCollectSellEnabled = state
+            saveConfig()
+        end
         -- ==================================================================
         -- STATISTICS TRACKING
         -- ==================================================================
