@@ -10729,6 +10729,12 @@ do
 
     -- ⭐ Fungsi Loader
     local function loadEventScript()
+        -- [PATCH] Matikan script event sebelumnya agar tidak bentrok
+        if _G.AoneHub_Event_Cleanup then
+            pcall(_G.AoneHub_Event_Cleanup)
+            _G.AoneHub_Event_Cleanup = nil
+        end
+
         -- Bersihkan konten lama (kecuali loading label)
         for _, child in ipairs(eventScroll:GetChildren()) do
             if child:IsA("GuiObject") and child ~= loadingLbl then
