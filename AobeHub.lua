@@ -7090,25 +7090,37 @@ return true
         return ageValue.Value >= maxAge
     end
             
+    local ignoredFruits = setmetatable({}, {__mode = "k"})
+    local IGNORE_TIME = 60 
+
     function scanFruits()
         local matched, allFound = {}, {}
+        local currentTime = tick()
     
-        -- Kita tetap pakai GetTagged agar lebih ringan dari GetDescendants
-        for _, fruit in ipairs(CollectionService:GetTagged("Harvestable")) do
-            if fruit:IsA("Model") and IsMyFruit(fruit) then
-                local info = getFruitInfo(fruit)
+        for _, desc in ipairs(CollectionService:GetTagged("Harvestable")) do
+            if desc:IsDescendantOf(farm) then
             
+                -- ⭐ CEK CACHE: Ambil data lengkap dari cache
+                local cachedData = ignoredFruits[desc]
+                if cachedData and (currentTime - cachedData.time) < IGNORE_TIME then
+                    table.insert(allFound, cachedData.info) -- Tetap tampilkan info aslinya di UI
+                    continue
+                end
+            
+                local info = getFruitInfo(desc)
                 if info and info.name ~= "" then
                     table.insert(allFound, info)
                 
-                    -- ⭐ FILTER GABUNGAN: Harus lolos isFruitReady (Tag + 100%)
-                    if isFruitReady(fruit) and matchTargetFruit(info) and matchWeight(info) and matchMutation(info) then
+                    if matchTargetFruit(info) and matchWeight(info) and matchMutation(info) then
                         table.insert(matched, info)
+                        ignoredFruits[desc] = nil 
+                    else
+                        -- ⭐ SIMPAN INFO LENGKAP KE CACHE
+                        ignoredFruits[desc] = { time = currentTime, info = info } 
                     end
                 end
             end
         end
-    
         return matched, allFound
     end
 
@@ -13846,6 +13858,10 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
         }
         
         FWF_UIRefs = {}
+
+        -- ⭐ TAMBAHKAN 2 BARIS INI (Cache Berat Badan)
+        FWF_IgnoredFruits = setmetatable({}, {__mode = "k"})
+        local FWF_IGNORE_TIME = 60 -- Simpan cache berat selama 60 detik
         
         -- Ambil langsung dari ReplicatedStorage agar tidak error nil
         RemoveItemRE = ReplicatedStorage:WaitForChild("GameEvents"):WaitForChild("Remove_Item")
@@ -13996,18 +14012,33 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
         
         function FWF_ScanFruits()
             local results = { passed = {}, failed = {} }
+            local currentTime = tick() 
+    
             for _, fruit in ipairs(CollectionService:GetTagged("Harvestable")) do
                 if not (fruit:IsA("Model") and FWF_IsMyFruit(fruit) and fruit.Parent) then continue end
-        
-                -- ⭐ Tambahkan baris ini untuk skip buah favorit
                 if fruit:GetAttribute("Favorited") then continue end
-        
+
                 local name = fruit.Name
                 if next(FWF_Config.selectedFruits) ~= nil and not FWF_Config.selectedFruits[name] then
                     continue
                 end
-                local weight = FWF_PredictWeight(fruit)
+        
+                -- ⭐ LOGIKA CACHE FWF
+                local weight = nil
+                local cachedData = FWF_IgnoredFruits[fruit]
+        
+                if cachedData and (currentTime - cachedData.time) < FWF_IGNORE_TIME then
+                    weight = cachedData.weight -- Ambil berat dari cache (tanpa hitung ulang)
+                else
+                    weight = FWF_PredictWeight(fruit) -- Hitung berat baru
+                    if weight then
+                        FWF_IgnoredFruits[fruit] = { weight = weight, time = currentTime }
+                    end
+                end
+
                 if not weight then continue end
+        
+                -- Masukkan ke tabel passed/failed (untuk dirender ke UI)
                 local entry = { fruit = fruit, name = name, weight = weight }
                 if weight <= FWF_Config.maxWeight then
                     table.insert(results.failed, entry)
@@ -14015,6 +14046,7 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
                     table.insert(results.passed, entry)
                 end
             end
+    
             table.sort(results.passed, function(a, b) return a.weight > b.weight end)
             table.sort(results.failed, function(a, b) return a.weight > b.weight end)
             return results
@@ -14239,6 +14271,7 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
         
         FWF_MakeInputRow(FWF_Section, 32, "⚖️ Max Weight (shovel ≤):", FWF_Config.maxWeight, function(n)
             FWF_Config.maxWeight = math.max(0, n)
+            table.clear(FWF_IgnoredFruits) -- ⭐ Reset cache karena target berubah
             FWF_SaveConfig()
         end, 0)
         
