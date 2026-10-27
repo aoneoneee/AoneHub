@@ -7090,37 +7090,43 @@ return true
         return ageValue.Value >= maxAge
     end
             
+    -- ⭐ CACHE BLACKLIST: Menyimpan buah yang tidak cocok filter
     local ignoredFruits = setmetatable({}, {__mode = "k"})
-    local IGNORE_TIME = 60 
+    local IGNORE_TIME = 60 -- Detik sebelum buah di-blacklist dicek ulang
 
     function scanFruits()
         local matched, allFound = {}, {}
         local currentTime = tick()
     
-        for _, desc in ipairs(CollectionService:GetTagged("Harvestable")) do
-            if desc:IsDescendantOf(farm) then
+        -- Kita tetap pakai GetTagged agar lebih ringan dari GetDescendants
+        for _, fruit in ipairs(CollectionService:GetTagged("Harvestable")) do
+            -- 1. Pastikan ini buah milik kita (IsMyFruit)
+            if fruit:IsA("Model") and IsMyFruit(fruit) then
             
-                -- ⭐ CEK CACHE: Ambil data lengkap dari cache
-                local cachedData = ignoredFruits[desc]
+                -- 2. CEK CACHE: Jika ditolak < 30 detik lalu, skip perhitungan berat
+                local cachedData = ignoredFruits[fruit]
                 if cachedData and (currentTime - cachedData.time) < IGNORE_TIME then
-                    table.insert(allFound, cachedData.info) -- Tetap tampilkan info aslinya di UI
+                    table.insert(allFound, cachedData.info) -- Tetap masukkan ke allFound untuk monitor
                     continue
                 end
             
-                local info = getFruitInfo(desc)
+                -- 3. Ambil info buah
+                local info = getFruitInfo(fruit)
                 if info and info.name ~= "" then
                     table.insert(allFound, info)
                 
-                    if matchTargetFruit(info) and matchWeight(info) and matchMutation(info) then
+                    -- 4. FILTER GABUNGAN: Harus matang (isFruitReady) + lolos target/weight/mutasi
+                    if isFruitReady(fruit) and matchTargetFruit(info) and matchWeight(info) and matchMutation(info) then
                         table.insert(matched, info)
-                        ignoredFruits[desc] = nil 
+                        ignoredFruits[fruit] = nil -- Jika lolos, hapus dari cache
                     else
-                        -- ⭐ SIMPAN INFO LENGKAP KE CACHE
-                        ignoredFruits[desc] = { time = currentTime, info = info } 
+                        -- 5. SIMPAN KE CACHE: Jika gagal, simpan info dan waktu
+                        ignoredFruits[fruit] = { time = currentTime, info = info } 
                     end
                 end
             end
         end
+
         return matched, allFound
     end
 
