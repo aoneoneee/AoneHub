@@ -14509,173 +14509,170 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
         )
         
         -- ============================================================
-        -- START BUTTON
-        -- ============================================================
-        local fwfStartBtn = Instance.new("TextButton")
-        fwfStartBtn.Size = UDim2.new(1, -20, 0, 28)
-        fwfStartBtn.Position = UDim2.new(0, 10, 0, 510)
-        fwfStartBtn.BackgroundColor3 = C.success
-        fwfStartBtn.BorderSizePixel = 0
-        fwfStartBtn.Font = Enum.Font.GothamBold
-        fwfStartBtn.Text = "▶️ START"
-        fwfStartBtn.TextColor3 = C.text
-        fwfStartBtn.TextSize = 10
-        fwfStartBtn.AutoButtonColor = false
-        fwfStartBtn.Parent = FWF_Section
-        Instance.new("UICorner", fwfStartBtn).CornerRadius = UDim.new(0, 5)
-        FWF_UIRefs.startBtn = fwfStartBtn
-        
-        local fwfStatusLbl = Instance.new("TextLabel")
-        fwfStatusLbl.Size = UDim2.new(1, -20, 0, 14)
-        fwfStatusLbl.Position = UDim2.new(0, 10, 0, 542)
-        fwfStatusLbl.BackgroundTransparency = 1
-        fwfStatusLbl.Text = "Status: Idle"
-        fwfStatusLbl.TextColor3 = C.textDim
-        fwfStatusLbl.Font = Enum.Font.Gotham
-        fwfStatusLbl.TextSize = 8
-        fwfStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
-        fwfStatusLbl.Parent = FWF_Section
-        FWF_UIRefs.statusLbl = fwfStatusLbl
-        
-        -- ============================================================
-        -- RENDER MONITOR
-        -- ============================================================
-        local function FWF_RenderMonitor(results)
-            FWF_UIRefs.leftPanel.countLbl.Text = tostring(#results.failed)
-            FWF_UIRefs.leftPanel.titleLbl.Text = string.format("❌ Akan Di-Shovel (%d)", #results.failed)
-            FWF_ClearAndRender(FWF_UIRefs.leftPanel, results.failed, false, "✓ Tidak ada")
+-- START BUTTON
+-- ============================================================
+local fwfStartBtn = Instance.new("TextButton")
+fwfStartBtn.Size = UDim2.new(1, -20, 0, 28)
+fwfStartBtn.Position = UDim2.new(0, 10, 0, 510)
+fwfStartBtn.BackgroundColor3 = C.success
+fwfStartBtn.BorderSizePixel = 0
+fwfStartBtn.Font = Enum.Font.GothamBold
+fwfStartBtn.Text = "▶️ START"
+fwfStartBtn.TextColor3 = C.text
+fwfStartBtn.TextSize = 10
+fwfStartBtn.AutoButtonColor = false
+fwfStartBtn.Parent = FWF_Section
+Instance.new("UICorner", fwfStartBtn).CornerRadius = UDim.new(0, 5)
+FWF_UIRefs.startBtn = fwfStartBtn
+
+local fwfStatusLbl = Instance.new("TextLabel")
+fwfStatusLbl.Size = UDim2.new(1, -20, 0, 14)
+fwfStatusLbl.Position = UDim2.new(0, 10, 0, 542)
+fwfStatusLbl.BackgroundTransparency = 1
+fwfStatusLbl.Text = "Status: Idle"
+fwfStatusLbl.TextColor3 = C.textDim
+fwfStatusLbl.Font = Enum.Font.Gotham
+fwfStatusLbl.TextSize = 8
+fwfStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
+fwfStatusLbl.Parent = FWF_Section
+FWF_UIRefs.statusLbl = fwfStatusLbl
+
+-- ============================================================
+-- RENDER MONITOR
+-- ============================================================
+local function FWF_RenderMonitor(results)
+    FWF_UIRefs.leftPanel.countLbl.Text = tostring(#results.failed)
+    FWF_UIRefs.leftPanel.titleLbl.Text = string.format("❌ Akan Di-Shovel (%d)", #results.failed)
+    FWF_ClearAndRender(FWF_UIRefs.leftPanel, results.failed, false, "✓ Tidak ada")
+    
+    FWF_UIRefs.rightPanel.countLbl.Text = tostring(#results.passed)
+    FWF_UIRefs.rightPanel.titleLbl.Text = string.format("✅ Disimpan (%d)", #results.passed)
+    FWF_ClearAndRender(FWF_UIRefs.rightPanel, results.passed, true, "✓ Tidak ada")
+end
+
+local function FWF_SetStatus(text, color)
+    if FWF_UIRefs.statusLbl then
+        FWF_UIRefs.statusLbl.Text = text
+        FWF_UIRefs.statusLbl.TextColor3 = color or C.textDim
+    end
+    print("[FruitWeightFarm]", text)
+end
+
+-- ============================================================
+-- MAIN LOOP
+-- ============================================================
+local function FWF_StartLoop()
+    if FWF_State.isRunning then return end
+    FWF_State.isRunning = true
+    FWF_State.currentCycle = 0
+    FWF_State.totalShoveled = 0
+    
+    FWF_UIRefs.startBtn.Text = "⏹️ STOP"
+    FWF_UIRefs.startBtn.BackgroundColor3 = C.danger
+    
+    task.spawn(function()
+        -- ⭐ TAMBAHKAN `and not isGuiDestroyed`
+        while FWF_State.isRunning and not isGuiDestroyed do
+            FWF_State.currentCycle = FWF_State.currentCycle + 1
             
-            FWF_UIRefs.rightPanel.countLbl.Text = tostring(#results.passed)
-            FWF_UIRefs.rightPanel.titleLbl.Text = string.format("✅ Disimpan (%d)", #results.passed)
-            FWF_ClearAndRender(FWF_UIRefs.rightPanel, results.passed, true, "✓ Tidak ada")
-        end
-        
-        local function FWF_SetStatus(text, color)
-            if FWF_UIRefs.statusLbl then
-                FWF_UIRefs.statusLbl.Text = text
-                FWF_UIRefs.statusLbl.TextColor3 = color or C.textDim
+            if not FWF_FindShovelTool() then
+                FWF_SetStatus("⚠️ Tidak ada Shovel [Destroy Plants]!", C.warning)
+                task.wait(2)
+                continue
             end
-            print("[FruitWeightFarm]", text)
-        end
-        
-        -- ============================================================
-        -- MAIN LOOP
-        -- ============================================================
-        local function FWF_StartLoop()
-            if FWF_State.isRunning then return end
-            FWF_State.isRunning = true
-            FWF_State.currentCycle = 0
-            FWF_State.totalShoveled = 0
-    
-            FWF_UIRefs.startBtn.Text = "⏹️ STOP"
-            FWF_UIRefs.startBtn.BackgroundColor3 = C.danger
-    
-            task.spawn(function()
-                -- ⭐ TAMBAHKAN `and not isGuiDestroyed` DI SINI
-                while FWF_State.isRunning and not isGuiDestroyed do
-                    FWF_State.currentCycle = FWF_State.currentCycle + 1
-                    
-                    if not FWF_FindShovelTool() then
-                        FWF_SetStatus("⚠️ Tidak ada Shovel [Destroy Plants]!", C.warning)
-                        task.wait(2)
-                        continue
-                    end
-                    
-                    FWF_SetStatus(string.format("🔄 Cycle %d - Scanning...", FWF_State.currentCycle), C.accent)
-                    local results = FWF_ScanFruits()
-                    FWF_RenderMonitor(results)
-                    
+            
+            FWF_SetStatus(string.format("🔄 Cycle %d - Scanning...", FWF_State.currentCycle), C.accent)
+            local results = FWF_ScanFruits()
+            FWF_RenderMonitor(results)
+            
+            FWF_SetStatus(string.format(
+                "📊 Cycle %d | Shovel: %d | Simpan: %d",
+                FWF_State.currentCycle, #results.failed, #results.passed
+            ), C.accent)
+            
+            if #results.failed == 0 then
+                FWF_SetStatus(string.format(
+                    "✅ Tidak ada yang ≤ %.1f kg. Wait %ss...",
+                    FWF_Config.maxWeight, FWF_Config.scanInterval
+                ), C.success)
+                task.wait(FWF_Config.scanInterval)
+                continue
+            end
+            
+            FWF_SetStatus(string.format("🔨 Shuvel %d buah...", #results.failed), C.warning)
+            
+            local shovelCount = 0
+            for i, entry in ipairs(results.failed) do
+                if not FWF_State.isRunning or isGuiDestroyed then break end
+                if not entry.fruit or not entry.fruit.Parent then continue end
+                
+                local ok = FWF_ShovelFruit(entry.fruit)
+                if ok then
+                    shovelCount = shovelCount + 1
+                    FWF_State.totalShoveled = FWF_State.totalShoveled + 1
                     FWF_SetStatus(string.format(
-                        "📊 Cycle %d | Shovel: %d | Simpan: %d",
-                        FWF_State.currentCycle, #results.failed, #results.passed
-                    ), C.accent)
-                    
-                    if #results.failed == 0 then
-                        FWF_SetStatus(string.format(
-                            "✅ Tidak ada yang ≤ %.1f kg. Wait %ss...",
-                            FWF_Config.maxWeight, FWF_Config.scanInterval
-                        ), C.success)
-                        task.wait(FWF_Config.scanInterval)
-                        continue
-                    end
-                    
-                    FWF_SetStatus(string.format("🔨 Shuvel %d buah...", #results.failed), C.warning)
-                    
-                    local shovelCount = 0
-                    for i, entry in ipairs(results.failed) do
-                        if not FWF_State.isRunning then break end
-                        if not entry.fruit or not entry.fruit.Parent then continue end
-                        
-                        local ok = FWF_ShovelFruit(entry.fruit)
-                        if ok then
-                            shovelCount = shovelCount + 1
-                            FWF_State.totalShoveled = FWF_State.totalShoveled + 1
-                            FWF_SetStatus(string.format(
-                                "🔨 [%d/%d] %s (%.2f kg)",
-                                i, #results.failed, entry.name, entry.weight
-                            ), C.warning)
-                        else
-                            FWF_SetStatus(string.format(
-                                "❌ [%d/%d] %s gagal",
-                                i, #results.failed, entry.name
-                            ), C.danger)
-                        end
-                        
-                        task.wait(FWF_Config.shovelInterval)
-                    end
-                    
+                        "🔨 [%d/%d] %s (%.2f kg)",
+                        i, #results.failed, entry.name, entry.weight
+                    ), C.warning)
+                else
                     FWF_SetStatus(string.format(
-                        "✅ Cycle %d selesai. Shovel: %d | Total: %d",
-                        FWF_State.currentCycle, shovelCount, FWF_State.totalShoveled
-                    ), C.success)
-                    
-                    task.wait(FWF_Config.scanInterval)
+                        "❌ [%d/%d] %s gagal",
+                        i, #results.failed, entry.name
+                    ), C.danger)
                 end
                 
-                FWF_UIRefs.startBtn.Text = "▶️ START"
-                FWF_UIRefs.startBtn.BackgroundColor3 = C.success
-                FWF_SetStatus("⏹️ Stopped", C.textDim)
-            end)
+                task.wait(FWF_Config.shovelInterval)
+            end
+            
+            FWF_SetStatus(string.format(
+                "✅ Cycle %d selesai. Shovel: %d | Total: %d",
+                FWF_State.currentCycle, shovelCount, FWF_State.totalShoveled
+            ), C.success)
+            
+            task.wait(FWF_Config.scanInterval)
         end
         
-        -- ============================================================
-        -- HOOK BUTTON
-        -- ============================================================
-        local function toggleFWF()
-            if FWF_State.isRunning then
-                FWF_State.isRunning = false
-                FWF_SetStatus("⏹️ Stopping...", C.warning)
-    
-                -- ⭐ Simpan OFF ke config
-                if _G.AoneHub_Config then
-                    _G.AoneHub_Config.fwfEnabled = false
-                    if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
-                end
-            else
-                if next(FWF_Config.selectedFruits) == nil then
-                    FWF_SetStatus("ℹ️ Tidak ada filter, akan scan SEMUA", C.accent)
-                end
-    
-                -- ⭐ Simpan ON ke config
-                if _G.AoneHub_Config then
-                    _G.AoneHub_Config.fwfEnabled = true
-                    if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
-                end
-    
-                FWF_StartLoop()
-            end
-        end
-
-        fwfStartBtn.MouseButton1Click:Connect(toggleFWF)
-    end
-
-    -- ⭐ AUTO-START YANG BENAR
-    task.delay(3, function()
-        if _G.AoneHub_Config and _G.AoneHub_Config.fwfEnabled and not FWF_State.isRunning then
-            print("[AoneHub] Auto-starting FWF...")
-            toggleFWF() -- Panggil fungsinya langsung
-        end
+        FWF_UIRefs.startBtn.Text = "▶️ START"
+        FWF_UIRefs.startBtn.BackgroundColor3 = C.success
+        FWF_SetStatus("⏹️ Stopped", C.textDim)
     end)
+end
+
+-- ============================================================
+-- HOOK BUTTON & AUTO-START
+-- ============================================================
+local function toggleFWF()
+    if FWF_State.isRunning then
+        FWF_State.isRunning = false
+        FWF_SetStatus("⏹️ Stopping...", C.warning)
+
+        if _G.AoneHub_Config then
+            _G.AoneHub_Config.fwfEnabled = false
+            if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
+        end
+    else
+        if next(FWF_Config.selectedFruits) == nil then
+            FWF_SetStatus("ℹ️ Tidak ada filter, akan scan SEMUA", C.accent)
+        end
+
+        if _G.AoneHub_Config then
+            _G.AoneHub_Config.fwfEnabled = true
+            if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
+        end
+
+        FWF_StartLoop()
+    end
+end
+
+fwfStartBtn.MouseButton1Click:Connect(toggleFWF)
+
+-- ⭐ AUTO-START FWF YANG BENAR
+task.delay(3, function()
+    if _G.AoneHub_Config and _G.AoneHub_Config.fwfEnabled and not FWF_State.isRunning and not isGuiDestroyed then
+        print("[AoneHub] Auto-starting FWF...")
+        toggleFWF() -- Panggil fungsi, bukan :Fire()
+    end
+end)
 end -- BLOCK 14C
 -- ==================================================================
 -- BLOCK 15A: AUTO CRAFTING — HELPERS (isolated)
