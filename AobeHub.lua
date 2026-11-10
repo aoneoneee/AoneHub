@@ -11944,6 +11944,8 @@ do -- BLOCK 13: TAB EKSTRA, WEBHOOK SETTINGS, INIT, ANTI-AFK
     WebhookUrlInput.TextSize = 8
     WebhookUrlInput.ClearTextOnFocus = false
     WebhookUrlInput.TextXAlignment = Enum.TextXAlignment.Left
+    WebhookUrlInput.TextTruncate = Enum.TextTruncate.AtEnd
+    WebhookUrlInput.ClipsDescendants = true
     WebhookUrlInput.Parent = webhookContainer
     Instance.new("UICorner", WebhookUrlInput).CornerRadius = UDim.new(0, 4)
 
@@ -13272,26 +13274,39 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
     end
 
     AutoCollectBtn.MouseButton1Click:Connect(function()
-        if isAutoCollectRunning then
-            stopAutoCollect()
-            AutoCollectBtn.Text = "▶️ START AUTO COLLECT"
-            AutoCollectBtn.BackgroundColor3 = C.success
-        else
-            AutoCollectBtn.Text = "⏹️ STOP"
-            AutoCollectBtn.BackgroundColor3 = C.danger
-            task.spawn(function()
-                startAutoCollect()
-                local waitStart = os.clock()
-                while isAutoCollectRunning and (os.clock() - waitStart) < 3600 do
-                    task.wait(0.5)
-                end
-                if AutoCollectBtn and AutoCollectBtn.Parent then
-                    AutoCollectBtn.Text = "▶️ START AUTO COLLECT"
-                    AutoCollectBtn.BackgroundColor3 = C.success
-                end
-            end)
+    if isAutoCollectRunning then
+        stopAutoCollect()
+        AutoCollectBtn.Text = "▶️ START AUTO COLLECT"
+        AutoCollectBtn.BackgroundColor3 = C.success
+        
+        -- ⭐ Simpan OFF ke config
+        if _G.AoneHub_Config then
+            _G.AoneHub_Config.autoCollectEnabled = false
+            if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
         end
-    end)
+    else
+        AutoCollectBtn.Text = "⏹️ STOP"
+        AutoCollectBtn.BackgroundColor3 = C.danger
+        
+        -- ⭐ Simpan ON ke config
+        if _G.AoneHub_Config then
+            _G.AoneHub_Config.autoCollectEnabled = true
+            if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
+        end
+        
+        task.spawn(function()
+            startAutoCollect()
+            local waitStart = os.clock()
+            while isAutoCollectRunning and (os.clock() - waitStart) < 3600 do
+                task.wait(0.5)
+            end
+            if AutoCollectBtn and AutoCollectBtn.Parent then
+                AutoCollectBtn.Text = "▶️ START AUTO COLLECT"
+                AutoCollectBtn.BackgroundColor3 = C.success
+            end
+        end)
+    end
+end)
 
     -- ============================================================
     -- POPUP: Pilih Buah
@@ -13829,6 +13844,14 @@ end)
     end
     if config.autoCollectSelectedMutations then
         autoCollectSelectedMutations = config.autoCollectSelectedMutations
+    end
+end)
+
+    -- ⭐ TAMBAHKAN INI DI PALING BAWAH BLOK 14 (Di luar fungsi tombol)
+task.delay(3, function()
+    if _G.AoneHub_Config and _G.AoneHub_Config.autoCollectEnabled and not isAutoCollectRunning then
+        print("[AoneHub] Auto-starting Auto Collect...")
+        AutoCollectBtn.MouseButton1Click:Fire() -- Simulasi klik
     end
 end)
 end -- BLOCK 14
@@ -14604,14 +14627,34 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
             if FWF_State.isRunning then
                 FWF_State.isRunning = false
                 FWF_SetStatus("⏹️ Stopping...", C.warning)
+        
+                -- ⭐ Simpan OFF ke config
+                if _G.AoneHub_Config then
+                    _G.AoneHub_Config.fwfEnabled = false
+                    if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
+                end
             else
                 if next(FWF_Config.selectedFruits) == nil then
                     FWF_SetStatus("ℹ️ Tidak ada filter, akan scan SEMUA", C.accent)
                 end
+        
+                -- ⭐ Simpan ON ke config
+                if _G.AoneHub_Config then
+                    _G.AoneHub_Config.fwfEnabled = true
+                    if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
+                end
+        
                 FWF_StartLoop()
             end
         end)
     end
+    -- ⭐ TAMBAHKAN INI DI PALING BAWAH BLOK 14C (Di luar fungsi tombol)
+task.delay(3, function()
+    if _G.AoneHub_Config and _G.AoneHub_Config.fwfEnabled and not FWF_State.isRunning then
+        print("[AoneHub] Auto-starting FWF...")
+        fwfStartBtn.MouseButton1Click:Fire() -- Simulasi klik
+    end
+end)
 end -- BLOCK 14C
 -- ==================================================================
 -- BLOCK 15A: AUTO CRAFTING — HELPERS (isolated)
