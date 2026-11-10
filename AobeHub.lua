@@ -7286,6 +7286,8 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
         isAutoShovelRunning = false
         isAutoCollectRunning = false
 
+        if FWF_State then FWF_State.isRunning = false end
+                
         if AutoMutation_Shared and AutoMutation_Shared.state then
             AutoMutation_Shared.state.isRunning = false
         end
@@ -7439,6 +7441,17 @@ do -- BLOCK 6: GUI SKELETON, MINIMIZE/DRAG, WEIGHT TAB
         isAutoShovelRunning = false
         isAutoCollectRunning = false
 
+        if FWF_State then FWF_State.isRunning = false end
+        if acState then
+            if acState.gear then acState.gear.running = false end
+            if acState.seed then acState.seed.running = false end
+        end
+                
+        if _G.AoneHub_Event_Cleanup then
+            pcall(_G.AoneHub_Event_Cleanup)
+            _G.AoneHub_Event_Cleanup = nil
+        end
+                
         if AutoMutation_Shared and AutoMutation_Shared.state then
             AutoMutation_Shared.state.isRunning = false
         end
@@ -10663,7 +10676,9 @@ task.defer(function()
             pcall(_G.AoneHub_SetFlag, "isAutoCollectRunning", false)
             pcall(_G.AoneHub_SetFlag, "rainbowMode", false)
         end
-        
+
+        if FWF_State then FWF_State.isRunning = false end
+                
         if AutoMutation_Shared and AutoMutation_Shared.state then
             AutoMutation_Shared.state.isRunning = false
         end
@@ -13273,40 +13288,42 @@ do -- BLOCK 14: TAB FARM — AUTO SHOVEL
         print("[Auto Collect]", text)
     end
 
-    AutoCollectBtn.MouseButton1Click:Connect(function()
-    if isAutoCollectRunning then
-        stopAutoCollect()
-        AutoCollectBtn.Text = "▶️ START AUTO COLLECT"
-        AutoCollectBtn.BackgroundColor3 = C.success
+    local function toggleAutoCollect()
+        if isAutoCollectRunning then
+            stopAutoCollect()
+            AutoCollectBtn.Text = "▶️ START AUTO COLLECT"
+            AutoCollectBtn.BackgroundColor3 = C.success
         
-        -- ⭐ Simpan OFF ke config
-        if _G.AoneHub_Config then
-            _G.AoneHub_Config.autoCollectEnabled = false
-            if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
-        end
-    else
-        AutoCollectBtn.Text = "⏹️ STOP"
-        AutoCollectBtn.BackgroundColor3 = C.danger
-        
-        -- ⭐ Simpan ON ke config
-        if _G.AoneHub_Config then
-            _G.AoneHub_Config.autoCollectEnabled = true
-            if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
-        end
-        
-        task.spawn(function()
-            startAutoCollect()
-            local waitStart = os.clock()
-            while isAutoCollectRunning and (os.clock() - waitStart) < 3600 do
-                task.wait(0.5)
+            -- ⭐ Simpan OFF ke config
+            if _G.AoneHub_Config then
+                _G.AoneHub_Config.autoCollectEnabled = false
+                if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
             end
-            if AutoCollectBtn and AutoCollectBtn.Parent then
-                AutoCollectBtn.Text = "▶️ START AUTO COLLECT"
-                AutoCollectBtn.BackgroundColor3 = C.success
+        else
+            AutoCollectBtn.Text = "⏹️ STOP"
+            AutoCollectBtn.BackgroundColor3 = C.danger
+        
+            -- ⭐ Simpan ON ke config
+            if _G.AoneHub_Config then
+                _G.AoneHub_Config.autoCollectEnabled = true
+                if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
             end
-        end)
+        
+            task.spawn(function()
+                startAutoCollect()
+                local waitStart = os.clock()
+                while isAutoCollectRunning and (os.clock() - waitStart) < 3600 do
+                    task.wait(0.5)
+                end
+                if AutoCollectBtn and AutoCollectBtn.Parent then
+                    AutoCollectBtn.Text = "▶️ START AUTO COLLECT"
+                    AutoCollectBtn.BackgroundColor3 = C.success
+                end
+            end)
+        end
     end
-end)
+
+    AutoCollectBtn.MouseButton1Click:Connect(toggleAutoCollect)
 
     -- ============================================================
     -- POPUP: Pilih Buah
@@ -13847,13 +13864,13 @@ end)
     end
 end)
 
-    -- ⭐ TAMBAHKAN INI DI PALING BAWAH BLOK 14 (Di luar fungsi tombol)
-task.delay(3, function()
-    if _G.AoneHub_Config and _G.AoneHub_Config.autoCollectEnabled and not isAutoCollectRunning then
-        print("[AoneHub] Auto-starting Auto Collect...")
-        AutoCollectBtn.MouseButton1Click:Fire() -- Simulasi klik
-    end
-end)
+    -- ⭐ AUTO-START YANG BENAR
+    task.delay(3, function()
+        if _G.AoneHub_Config and _G.AoneHub_Config.autoCollectEnabled and not isAutoCollectRunning then
+            print("[AoneHub] Auto-starting Auto Collect...")
+            toggleAutoCollect() -- Panggil fungsinya langsung
+        end
+    end)
 end -- BLOCK 14
 
 do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
@@ -14549,12 +14566,13 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
             FWF_State.isRunning = true
             FWF_State.currentCycle = 0
             FWF_State.totalShoveled = 0
-            
+    
             FWF_UIRefs.startBtn.Text = "⏹️ STOP"
             FWF_UIRefs.startBtn.BackgroundColor3 = C.danger
-            
+    
             task.spawn(function()
-                while FWF_State.isRunning do
+                -- ⭐ TAMBAHKAN `and not isGuiDestroyed` DI SINI
+                while FWF_State.isRunning and not isGuiDestroyed do
                     FWF_State.currentCycle = FWF_State.currentCycle + 1
                     
                     if not FWF_FindShovelTool() then
@@ -14623,11 +14641,11 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
         -- ============================================================
         -- HOOK BUTTON
         -- ============================================================
-        fwfStartBtn.MouseButton1Click:Connect(function()
+        local function toggleFWF()
             if FWF_State.isRunning then
                 FWF_State.isRunning = false
                 FWF_SetStatus("⏹️ Stopping...", C.warning)
-        
+    
                 -- ⭐ Simpan OFF ke config
                 if _G.AoneHub_Config then
                     _G.AoneHub_Config.fwfEnabled = false
@@ -14637,24 +14655,27 @@ do -- BLOCK 14C: FRUIT WEIGHT FARM (isolated)
                 if next(FWF_Config.selectedFruits) == nil then
                     FWF_SetStatus("ℹ️ Tidak ada filter, akan scan SEMUA", C.accent)
                 end
-        
+    
                 -- ⭐ Simpan ON ke config
                 if _G.AoneHub_Config then
                     _G.AoneHub_Config.fwfEnabled = true
                     if _G.AoneHub_SaveConfig then _G.AoneHub_SaveConfig() end
                 end
-        
+    
                 FWF_StartLoop()
             end
-        end)
+        end
+
+        fwfStartBtn.MouseButton1Click:Connect(toggleFWF)
     end
-    -- ⭐ TAMBAHKAN INI DI PALING BAWAH BLOK 14C (Di luar fungsi tombol)
-task.delay(3, function()
-    if _G.AoneHub_Config and _G.AoneHub_Config.fwfEnabled and not FWF_State.isRunning then
-        print("[AoneHub] Auto-starting FWF...")
-        fwfStartBtn.MouseButton1Click:Fire() -- Simulasi klik
-    end
-end)
+
+    -- ⭐ AUTO-START YANG BENAR
+    task.delay(3, function()
+        if _G.AoneHub_Config and _G.AoneHub_Config.fwfEnabled and not FWF_State.isRunning then
+            print("[AoneHub] Auto-starting FWF...")
+            toggleFWF() -- Panggil fungsinya langsung
+        end
+    end)
 end -- BLOCK 14C
 -- ==================================================================
 -- BLOCK 15A: AUTO CRAFTING — HELPERS (isolated)
@@ -15264,7 +15285,8 @@ do
         if not ref then return end
 
         task.spawn(function()
-            while st.running do
+            -- ⭐ TAMBAHKAN `and not isGuiDestroyed`
+            while st.running and not isGuiDestroyed do
                 st.workbench = H.findWB(ref.cfg.machineType)
 
                 if not st.workbench or not st.workbench.Parent then
