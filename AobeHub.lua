@@ -8,6 +8,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+_G.print = function() end
+
 -- Deteksi World
 local TradeWorldData = require(ReplicatedStorage.Data.TradeWorldData)
 local TRADE_WORLD_PLACE_ID = TradeWorldData.PlaceId
